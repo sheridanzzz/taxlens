@@ -39,7 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTax } from "@/context/tax-context";
-import { scanReceipt, type ScanInput } from "@/lib/receipt-ai";
+import { scanReceipt, scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
 import { getApiKey } from "@/lib/storage";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { calculateDiminishingValue, calculatePrimeCost } from "@/lib/depreciation";
@@ -165,15 +165,19 @@ export const ReceiptScanner = ({
     async (input: ScanInput) => {
       setStep("scanning");
 
-      const apiKey = getApiKey();
-      if (!apiKey) {
-        setErrorMessage("No Gemini API key set. Add your key in Settings → AI Receipt Scanning.");
-        setStep("error");
-        return;
-      }
-
       try {
-        const result = await scanReceipt(input, apiKey, state.settings.occupation);
+        let result;
+        try {
+          result = await scanReceiptViaServer(input, state.settings.occupation);
+        } catch {
+          const apiKey = getApiKey();
+          if (!apiKey) {
+            setErrorMessage("AI scanning unavailable. Add a Gemini API key in Settings as a fallback.");
+            setStep("error");
+            return;
+          }
+          result = await scanReceipt(input, apiKey, state.settings.occupation);
+        }
         setScanResult(result);
         setEditName(result.itemName);
         setEditAmount(result.amount.toString());
@@ -334,16 +338,16 @@ export const ReceiptScanner = ({
             />
 
             {!getApiKey() && (
-              <div className="flex items-start gap-2 rounded-lg bg-amber-500/10 p-3">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" />
+              <div className="flex items-start gap-2 rounded-lg bg-primary/10 p-3">
+                <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <div>
-                  <p className="text-xs font-medium text-amber-500">API key required</p>
+                  <p className="text-xs font-medium">AI-powered scanning</p>
                   <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Add your Gemini API key in{" "}
+                    Uses free AI models. Optionally add your own Gemini key in{" "}
                     <Link href="/settings" className="text-primary underline underline-offset-2" onClick={() => onOpenChange(false)}>
                       Settings
                     </Link>{" "}
-                    to enable receipt scanning.
+                    as a fallback.
                   </p>
                 </div>
               </div>

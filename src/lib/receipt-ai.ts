@@ -6,6 +6,32 @@ const VALID_ASSET_TYPES = Object.keys(ASSET_EFFECTIVE_LIVES) as AssetType[];
 
 const GEMINI_MODEL = "gemini-2.5-flash";
 
+// ── Server-side scan via OpenRouter (no API key needed from user) ────
+
+export const scanReceiptViaServer = async (
+  input: ScanInput,
+  occupation: string
+): Promise<ReceiptScanResult> => {
+  const response = await fetch("/api/ai/scan-receipt", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      base64: input.base64,
+      mimeType: input.mimeType,
+      occupation,
+    }),
+  });
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({ error: "Server error" }));
+    throw new Error(data.error || `Server error (${response.status})`);
+  }
+
+  return response.json();
+};
+
+// ── Client-side scan via Gemini (user provides their own key) ────────
+
 const buildPrompt = (occupation: string): string => `You are an Australian tax deduction assistant. Analyze this receipt/invoice and extract purchase details.
 
 The user's occupation is: "${occupation}"
