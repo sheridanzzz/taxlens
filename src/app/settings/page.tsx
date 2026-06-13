@@ -8,9 +8,6 @@ import {
   Save,
   CheckCircle,
   Info,
-  Eye,
-  EyeOff,
-  Camera,
   LogOut,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -45,8 +42,6 @@ import {
   exportAllData,
   importAllData,
   clearAllData,
-  getApiKey,
-  saveApiKey,
 } from "@/lib/storage";
 import type {
   FinancialYear,
@@ -92,10 +87,6 @@ const SettingsPage = () => {
   const [saved, setSaved] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [importError, setImportError] = useState("");
-
-  const [apiKey, setApiKey] = useState(() => getApiKey());
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [apiKeySaved, setApiKeySaved] = useState(false);
 
   const [income, setIncome] = useState(state.settings.annualIncome.toString());
   const [occupation, setOccupation] = useState(state.settings.occupation);
@@ -411,80 +402,6 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
       </div>
-
-      <Card className="border-border/50">
-        <CardHeader className="pb-4">
-          <div className="flex items-center gap-2">
-            <Camera className="h-4 w-4 text-primary" />
-            <CardTitle className="text-sm">AI Receipt Scanning</CardTitle>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            Paste your Google Gemini API key to enable receipt scanning. Uses
-            Gemini 2.0 Flash to read receipts, extract details, and assess
-            claimability. Your key is stored locally and only sent to
-            Google&apos;s API.
-          </p>
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-1.5">
-              <Label htmlFor="settings-api-key" className="text-xs">
-                Gemini API Key
-              </Label>
-              <InfoTip content="Get your key from aistudio.google.com/apikey. Gemini Flash has a generous free tier. Your key stays in your browser's local storage." />
-            </div>
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <Input
-                  id="settings-api-key"
-                  type={showApiKey ? "text" : "password"}
-                  placeholder="AIza..."
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  className="pr-10 font-mono text-xs"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground/50 hover:text-muted-foreground"
-                  aria-label={showApiKey ? "Hide API key" : "Show API key"}
-                  tabIndex={0}
-                >
-                  {showApiKey ? (
-                    <EyeOff className="h-3.5 w-3.5" />
-                  ) : (
-                    <Eye className="h-3.5 w-3.5" />
-                  )}
-                </button>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => {
-                  saveApiKey(apiKey.trim());
-                  setApiKeySaved(true);
-                  setTimeout(() => setApiKeySaved(false), 2000);
-                }}
-              >
-                {apiKeySaved ? (
-                  <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
-                ) : (
-                  <Save className="mr-1.5 h-3.5 w-3.5" />
-                )}
-                {apiKeySaved ? "Saved" : "Save"}
-              </Button>
-            </div>
-          </div>
-          {apiKey && (
-            <div className="flex items-center gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <p className="text-[11px] text-emerald-500">
-                Key configured — receipt scanning enabled
-              </p>
-            </div>
-          )}
-        </CardContent>
-      </Card>
 
       <Card className="border-border/50">
         <CardHeader className="pb-4">

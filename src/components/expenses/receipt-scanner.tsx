@@ -39,8 +39,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTax } from "@/context/tax-context";
-import { scanReceipt, scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
-import { getApiKey } from "@/lib/storage";
+import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { calculateDiminishingValue, calculatePrimeCost } from "@/lib/depreciation";
 import { EXPENSE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD, ASSET_EFFECTIVE_LIVES } from "@/lib/constants";
@@ -166,18 +165,7 @@ export const ReceiptScanner = ({
       setStep("scanning");
 
       try {
-        let result;
-        try {
-          result = await scanReceiptViaServer(input, state.settings.occupation);
-        } catch {
-          const apiKey = getApiKey();
-          if (!apiKey) {
-            setErrorMessage("AI scanning unavailable. Add a Gemini API key in Settings as a fallback.");
-            setStep("error");
-            return;
-          }
-          result = await scanReceipt(input, apiKey, state.settings.occupation);
-        }
+        const result = await scanReceiptViaServer(input, state.settings.occupation);
         setScanResult(result);
         setEditName(result.itemName);
         setEditAmount(result.amount.toString());
@@ -337,21 +325,12 @@ export const ReceiptScanner = ({
               className="hidden"
             />
 
-            {!getApiKey() && (
-              <div className="flex items-start gap-2 rounded-lg bg-primary/10 p-3">
-                <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-                <div>
-                  <p className="text-xs font-medium">AI-powered scanning</p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Uses free AI models. Optionally add your own Gemini key in{" "}
-                    <Link href="/settings" className="text-primary underline underline-offset-2" onClick={() => onOpenChange(false)}>
-                      Settings
-                    </Link>{" "}
-                    as a fallback.
-                  </p>
-                </div>
-              </div>
-            )}
+            <div className="flex items-start gap-2 rounded-lg bg-primary/10 p-3">
+              <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+              <p className="text-xs text-muted-foreground">
+                AI-powered scanning — receipts are analysed server-side, no API key needed.
+              </p>
+            </div>
           </div>
         )}
 

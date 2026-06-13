@@ -344,20 +344,3 @@ export const clearAllData = async (): Promise<void> => {
   ]);
 };
 
-// ── API Key (kept in localStorage — never sent to our DB) ───────────
-
-const API_KEY_KEY = "taxlens_gemini_key";
-
-export const getApiKey = (): string => {
-  if (typeof window === "undefined") return "";
-  return localStorage.getItem(API_KEY_KEY) ?? "";
-};
-
-export const saveApiKey = (key: string): void => {
-  if (typeof window === "undefined") return;
-  if (key) {
-    localStorage.setItem(API_KEY_KEY, key);
-  } else {
-    localStorage.removeItem(API_KEY_KEY);
-  }
-};
