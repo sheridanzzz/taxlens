@@ -5,14 +5,14 @@ import { useTax } from "@/context/tax-context";
 import { getCategoryBreakdown, formatCurrency } from "@/lib/tax-calculator";
 import { cardHover } from "@/lib/animations";
 
-const GREEN_SHADES = [
-  "#9fe870",
-  "#8DD85F",
-  "#7BC84E",
-  "#639922",
-  "#3B6D11",
-  "#27500A",
-  "#163300",
+const NAVY_SHADES = [
+  "#0f1b3d",
+  "#1e3a5f",
+  "#3b4660",
+  "#5b6478",
+  "#9aa5bd",
+  "#b6becf",
+  "#e7ecf5",
 ];
 
 export const DeductionChart = () => {
@@ -27,13 +27,13 @@ export const DeductionChart = () => {
   if (breakdown.length === 0) {
     return (
       <motion.div
-        className="rounded-xl border border-[rgba(14,15,12,0.08)] bg-white p-5 dark:border-[rgba(159,232,112,0.08)] dark:bg-[#1a1b18]"
+        className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card"
         {...(prefersReduced ? {} : cardHover)}
       >
-        <p className="text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+        <p className="text-sm font-medium text-foreground dark:text-foreground">
           By category
         </p>
-        <p className="mt-4 text-[13px] text-[#868685]">
+        <p className="mt-4 text-[13px] text-muted-foreground">
           Add expenses to see categories
         </p>
       </motion.div>
@@ -44,10 +44,10 @@ export const DeductionChart = () => {
 
   return (
     <motion.div
-      className="rounded-xl border border-[rgba(14,15,12,0.08)] bg-white p-5 dark:border-[rgba(159,232,112,0.08)] dark:bg-[#1a1b18]"
+      className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card"
       {...(prefersReduced ? {} : cardHover)}
     >
-      <p className="mb-4 text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+      <p className="mb-4 text-sm font-medium text-foreground dark:text-foreground">
         By category
       </p>
 
@@ -56,19 +56,19 @@ export const DeductionChart = () => {
           const pct = total > 0 ? Math.round((b.amount / total) * 100) : 0;
           const label =
             b.label.length > 28 ? `${b.label.slice(0, 26)}…` : b.label;
-          const color = GREEN_SHADES[index % GREEN_SHADES.length];
+          const color = NAVY_SHADES[index % NAVY_SHADES.length];
 
           return (
             <li key={b.category}>
               <div className="flex items-baseline justify-between gap-2 text-sm">
-                <span className="min-w-0 truncate font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+                <span className="min-w-0 truncate font-medium text-foreground dark:text-foreground">
                   {label}
                 </span>
-                <span className="stat-number shrink-0 text-sm font-medium tabular-nums text-[#163300] dark:text-[#9fe870]">
+                <span className="stat-number shrink-0 text-sm font-medium tabular-nums text-foreground dark:text-primary">
                   {formatCurrency(b.amount)}
                 </span>
               </div>
-              <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-[#f4f5f2] dark:bg-white/5">
+              <div className="mt-1.5 h-[5px] overflow-hidden rounded-full bg-secondary dark:bg-white/5">
                 <motion.div
                   initial={prefersReduced ? false : { width: 0 }}
                   animate={{ width: `${pct}%` }}
@@ -81,7 +81,7 @@ export const DeductionChart = () => {
                   style={{ backgroundColor: color }}
                 />
               </div>
-              <div className="mt-1 flex justify-between text-[11px] text-[#868685]">
+              <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
                 <span>
                   {b.count} item{b.count === 1 ? "" : "s"}
                 </span>

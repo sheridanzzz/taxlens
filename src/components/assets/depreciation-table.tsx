@@ -66,7 +66,7 @@ export const DepreciationTable = ({ onEdit }: DepreciationTableProps) => {
   if (state.assets.length === 0) {
     return (
       <div className="py-12 text-center">
-        <p className="text-[13px] text-[#868685]">
+        <p className="text-[13px] text-muted-foreground">
           No depreciating assets recorded yet
         </p>
       </div>
@@ -75,7 +75,7 @@ export const DepreciationTable = ({ onEdit }: DepreciationTableProps) => {
 
   return (
     <>
-      <div className="overflow-x-auto rounded-xl border border-[rgba(14,15,12,0.08)] bg-white dark:border-[rgba(159,232,112,0.08)] dark:bg-[#1a1b18]">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card dark:border-border dark:bg-card">
         <Table>
           <TableHeader>
             <TableRow className="hover:bg-transparent">
@@ -104,7 +104,7 @@ export const DepreciationTable = ({ onEdit }: DepreciationTableProps) => {
                 <Fragment key={asset.id}>
                   <motion.tr
                     variants={staggerItem}
-                    className="border-b border-[rgba(14,15,12,0.06)] transition-colors hover:bg-[#f9faf7] dark:border-[rgba(255,255,255,0.04)] dark:hover:bg-white/[0.02]"
+                    className="border-b border-border transition-colors hover:bg-background dark:border-[rgba(255,255,255,0.04)] dark:hover:bg-secondary"
                   >
                     <TableCell>
                       <Button
@@ -123,28 +123,28 @@ export const DepreciationTable = ({ onEdit }: DepreciationTableProps) => {
                         )}
                       </Button>
                     </TableCell>
-                    <TableCell className="text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+                    <TableCell className="text-sm font-medium text-foreground dark:text-foreground">
                       {asset.name}
                     </TableCell>
                     <TableCell>
                       <Badge
                         variant="secondary"
-                        className="rounded-full bg-[rgba(22,51,0,0.06)] text-xs text-[#454745] dark:bg-white/5 dark:text-[#868685]"
+                        className="rounded-full bg-[rgba(22,51,0,0.06)] text-xs text-ink-soft dark:bg-white/5 dark:text-muted-foreground"
                       >
                         {ASSET_EFFECTIVE_LIVES[asset.assetType]?.label ||
                           asset.assetType}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-right text-sm text-[#454745] dark:text-[#868685]">
+                    <TableCell className="text-right text-sm text-ink-soft dark:text-muted-foreground">
                       {formatCurrency(asset.purchasePrice)}
                     </TableCell>
-                    <TableCell className="text-right text-sm font-medium text-[#163300] dark:text-[#9fe870]">
+                    <TableCell className="text-right text-sm font-medium text-foreground dark:text-primary">
                       {formatCurrency(yearDeduction)}
                     </TableCell>
-                    <TableCell className="text-right text-sm text-[#454745] dark:text-[#868685]">
+                    <TableCell className="text-right text-sm text-ink-soft dark:text-muted-foreground">
                       {formatCurrency(remaining)}
                     </TableCell>
-                    <TableCell className="text-sm text-[#454745] dark:text-[#868685]">
+                    <TableCell className="text-sm text-ink-soft dark:text-muted-foreground">
                       {asset.workUsePercent}%
                     </TableCell>
                     <TableCell>
@@ -184,7 +184,7 @@ export const DepreciationTable = ({ onEdit }: DepreciationTableProps) => {
                     <TableRow>
                       <TableCell
                         colSpan={9}
-                        className="bg-[#f4f5f2] p-4 dark:bg-white/[0.02]"
+                        className="bg-secondary p-4 dark:bg-white/[0.02]"
                       >
                         <DepreciationChart asset={asset} currentFy={fy} />
                       </TableCell>

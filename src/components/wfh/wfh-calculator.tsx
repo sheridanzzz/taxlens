@@ -97,7 +97,7 @@ export const WfhCalculator = () => {
             <CardTitle className="text-base">Method comparison</CardTitle>
             <Tooltip>
               <TooltipTrigger className="cursor-help">
-                <Info className="h-4 w-4 text-[#868685]" />
+                <Info className="h-4 w-4 text-muted-foreground" />
               </TooltipTrigger>
               <TooltipContent className="max-w-xs">
                 <p>
@@ -110,7 +110,7 @@ export const WfhCalculator = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <div className="rounded-xl bg-[#f4f5f2] p-1 dark:bg-white/5">
+          <div className="rounded-xl bg-secondary p-1 dark:bg-white/5">
             <div className="relative grid grid-cols-2 gap-1">
               {methods.map((m) => (
                 <button
@@ -123,7 +123,7 @@ export const WfhCalculator = () => {
                   {activeMethod === m.key && (
                     <motion.div
                       layoutId="wfh-method-active"
-                      className="absolute inset-0 rounded-lg bg-white shadow-sm dark:bg-[#1a1b18]"
+                      className="absolute inset-0 rounded-lg bg-card shadow-sm dark:bg-card"
                       transition={{
                         type: "spring",
                         stiffness: 300,
@@ -133,22 +133,22 @@ export const WfhCalculator = () => {
                   )}
                   <div className="relative z-10">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+                      <span className="text-sm font-medium text-foreground dark:text-foreground">
                         {m.label}
                       </span>
                       {m.recommended && (
                         <Badge
                           variant="secondary"
-                          className="rounded-full bg-[#e2f6d5] text-[10px] font-medium text-[#163300]"
+                          className="rounded-full bg-mint text-[10px] font-medium text-foreground"
                         >
                           Better
                         </Badge>
                       )}
                     </div>
-                    <p className="mt-1 text-xl font-semibold text-[#0e0f0c] dark:text-[#f4f5f2]">
+                    <p className="mt-1 text-xl font-semibold text-foreground dark:text-foreground">
                       {formatCurrency(m.value)}
                     </p>
-                    <p className="mt-0.5 text-[11px] text-[#868685]">
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
                       {m.detail}
                     </p>
                   </div>
@@ -162,7 +162,7 @@ export const WfhCalculator = () => {
       <Card>
         <CardHeader>
           <CardTitle className="text-base">Actual costs</CardTitle>
-          <p className="text-xs text-[#868685]">
+          <p className="text-xs text-muted-foreground">
             Enter annual costs and work-use percentage for each item
           </p>
         </CardHeader>
@@ -170,16 +170,16 @@ export const WfhCalculator = () => {
           {state.wfhActualCosts.map((cost) => (
             <div
               key={cost.id}
-              className="flex items-center gap-2 rounded-xl border border-[rgba(14,15,12,0.08)] p-3 dark:border-[rgba(159,232,112,0.08)]"
+              className="flex items-center gap-2 rounded-xl border border-border p-3 dark:border-border"
             >
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+                <p className="truncate text-sm font-medium text-foreground dark:text-foreground">
                   {cost.category}
                 </p>
-                <p className="text-xs text-[#868685]">
+                <p className="text-xs text-muted-foreground">
                   {formatCurrency(cost.annualCost)}/yr × {cost.workUsePercent}%
                   ={" "}
-                  <span className="font-medium text-[#454745] dark:text-[#a3a5a0]">
+                  <span className="font-medium text-ink-soft dark:text-muted-foreground">
                     {formatCurrency(
                       (cost.annualCost * cost.workUsePercent) / 100
                     )}
@@ -198,8 +198,8 @@ export const WfhCalculator = () => {
             </div>
           ))}
 
-          <div className="rounded-xl border border-dashed border-[rgba(14,15,12,0.12)] p-3 dark:border-[rgba(255,255,255,0.08)]">
-            <p className="mb-2 text-xs font-medium text-[#868685]">
+          <div className="rounded-xl border border-dashed border-border p-3 dark:border-[rgba(255,255,255,0.08)]">
+            <p className="mb-2 text-xs font-medium text-muted-foreground">
               Add cost item
             </p>
             <div className="grid gap-2 sm:grid-cols-4">

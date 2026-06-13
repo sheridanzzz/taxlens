@@ -59,19 +59,19 @@ export const SummaryCards = () => {
               : { y: -2, boxShadow: "0 8px 30px rgba(14,15,12,0.06)" }
           }
           transition={{ duration: 0.2 }}
-          className="rounded-xl bg-[#f4f5f2] p-4 dark:bg-[#141512]"
+          className="rounded-xl bg-secondary p-4 dark:bg-[#141512]"
         >
-          <p className="text-[12px] font-medium text-[#868685]">{m.label}</p>
+          <p className="text-[12px] font-medium text-muted-foreground">{m.label}</p>
           <p
             className={`mt-1 text-[26px] font-semibold tracking-[-0.5px] ${
               m.green
-                ? "text-[#163300] dark:text-[#9fe870]"
-                : "text-[#0e0f0c] dark:text-[#f4f5f2]"
+                ? "text-foreground dark:text-primary"
+                : "text-foreground dark:text-foreground"
             }`}
           >
             <AnimatedNumber value={m.value} />
           </p>
-          <p className="mt-1 text-[11px] text-[#868685]">{m.hint}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground">{m.hint}</p>
         </motion.div>
       ))}
     </motion.div>

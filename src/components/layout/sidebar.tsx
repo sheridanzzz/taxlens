@@ -2,24 +2,25 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  LayoutDashboard,
-  Receipt,
-  Home,
-  TrendingDown,
-  FileText,
-  Settings,
-  X,
-} from "lucide-react";
+import { X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { LedgrLogo } from "@/components/LedgrLogo";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  IconGrid,
+  IconReceipt,
+  IconWave,
+  IconHome,
+  IconDoc,
+  IconCog,
+} from "@/components/dashboard/icons";
+import type { ReactNode } from "react";
 
 type NavItem = {
   href: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: ReactNode;
 };
 
 type NavSection = {
@@ -30,21 +31,21 @@ type NavSection = {
 const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
-    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
+    items: [{ href: "/dashboard", label: "Dashboard", icon: <IconGrid /> }],
   },
   {
     label: "Track",
     items: [
-      { href: "/expenses", label: "Expenses", icon: Receipt },
-      { href: "/assets", label: "Depreciation", icon: TrendingDown },
-      { href: "/wfh", label: "Work From Home", icon: Home },
+      { href: "/expenses", label: "Expenses", icon: <IconReceipt /> },
+      { href: "/assets", label: "Depreciation", icon: <IconWave /> },
+      { href: "/wfh", label: "Work From Home", icon: <IconHome /> },
     ],
   },
   {
     label: "Manage",
     items: [
-      { href: "/reports", label: "Reports", icon: FileText },
-      { href: "/settings", label: "Settings", icon: Settings },
+      { href: "/reports", label: "Reports", icon: <IconDoc /> },
+      { href: "/settings", label: "Settings", icon: <IconCog /> },
     ],
   },
 ];
@@ -57,6 +58,9 @@ interface SidebarProps {
 export const Sidebar = ({ open, onClose }: SidebarProps) => {
   const pathname = usePathname();
   const prefersReduced = useReducedMotion();
+
+  const isActive = (href: string) =>
+    href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
 
   let globalIndex = 0;
 
@@ -75,103 +79,85 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[220px] flex-col border-r border-[rgba(14,15,12,0.08)] bg-white transition-transform duration-200 dark:border-[rgba(255,255,255,0.06)] dark:bg-[#0e0f0c] lg:static lg:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 flex w-[260px] shrink-0 flex-col justify-between border-r border-border bg-card px-5 py-6 transition-transform duration-200 lg:static lg:translate-x-0",
           open ? "translate-x-0" : "-translate-x-full"
         )}
       >
-        <div className="flex h-14 items-center justify-between px-4">
-          <LedgrLogo size="md" />
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 lg:hidden"
-            onClick={onClose}
-            aria-label="Close sidebar"
-          >
-            <X className="h-4 w-4" />
-          </Button>
+        <div>
+          <div className="flex items-center justify-between px-2 pb-8">
+            <LedgrLogo size="md" />
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 lg:hidden"
+              onClick={onClose}
+              aria-label="Close sidebar"
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <nav className="flex flex-col gap-7" aria-label="Main navigation">
+            {NAV_SECTIONS.map((section) => (
+              <div key={section.label}>
+                <div className="px-3 pb-2 text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
+                  {section.label}
+                </div>
+                <ul className="space-y-1">
+                  {section.items.map((item) => {
+                    const active = isActive(item.href);
+                    const idx = globalIndex++;
+
+                    return (
+                      <li key={item.href}>
+                        <motion.div
+                          initial={
+                            prefersReduced
+                              ? false
+                              : { x: -20, opacity: 0 }
+                          }
+                          animate={{ x: 0, opacity: 1 }}
+                          transition={{
+                            delay: idx * 0.05,
+                            duration: 0.3,
+                            ease: "easeOut",
+                          }}
+                        >
+                          <Link
+                            href={item.href}
+                            onClick={onClose}
+                            className={cn(
+                              "flex items-center gap-3 rounded-2xl px-3 py-2.5 text-[14px] font-semibold transition-colors",
+                              active
+                                ? "bg-primary text-primary-foreground"
+                                : "text-foreground/85 hover:bg-secondary"
+                            )}
+                            aria-current={active ? "page" : undefined}
+                          >
+                            <span className={active ? "text-primary-foreground" : "text-muted-foreground"}>
+                              {item.icon}
+                            </span>
+                            {item.label}
+                          </Link>
+                        </motion.div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
+          </nav>
         </div>
 
-        <nav
-          className="flex-1 overflow-y-auto px-3 pt-1"
-          aria-label="Main navigation"
-        >
-          {NAV_SECTIONS.map((section, sectionIdx) => (
-            <div key={section.label}>
-              <p
-                className={cn(
-                  "mb-1 px-3 text-[11px] font-medium uppercase tracking-[0.08em] text-[#868685]",
-                  sectionIdx === 0 ? "mt-2" : "mt-5"
-                )}
-              >
-                {section.label}
-              </p>
-              <div className="space-y-0.5">
-                {section.items.map((item) => {
-                  const isActive =
-                    pathname === item.href ||
-                    (item.href !== "/" && pathname.startsWith(item.href));
-                  const Icon = item.icon;
-                  const idx = globalIndex++;
-
-                  return (
-                    <motion.div
-                      key={item.href}
-                      initial={
-                        prefersReduced
-                          ? false
-                          : { x: -20, opacity: 0 }
-                      }
-                      animate={{ x: 0, opacity: 1 }}
-                      transition={{
-                        delay: idx * 0.05,
-                        duration: 0.3,
-                        ease: "easeOut",
-                      }}
-                    >
-                      <Link
-                        href={item.href}
-                        onClick={onClose}
-                        className={cn(
-                          "relative flex items-center gap-2.5 rounded-xl px-3 py-2 text-[14px] transition-colors",
-                          isActive
-                            ? "bg-[#e2f6d5] font-semibold text-[#163300] dark:bg-[#163300]/20 dark:text-[#9fe870]"
-                            : "text-[#454745] hover:bg-[#f4f5f2] dark:text-[#868685] dark:hover:bg-white/5"
-                        )}
-                        aria-current={isActive ? "page" : undefined}
-                      >
-                        {isActive && (
-                          <motion.div
-                            layoutId="sidebar-active"
-                            className="absolute bottom-0 left-0 top-0 w-[3px] rounded-r-full bg-[#9fe870]"
-                            transition={{
-                              type: "spring",
-                              stiffness: 300,
-                              damping: 30,
-                            }}
-                          />
-                        )}
-                        <Icon
-                          className="h-[18px] w-[18px] shrink-0"
-                          strokeWidth={1.75}
-                        />
-                        <span>{item.label}</span>
-                      </Link>
-                    </motion.div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </nav>
-
-        <div className="mt-auto border-t border-[rgba(14,15,12,0.08)] px-4 py-3 dark:border-[rgba(255,255,255,0.06)]">
-          <p className="text-[12px] font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+        <div className="ring-card rounded-2xl bg-background p-4">
+          <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
             FY 2025-26
-          </p>
-          <p className="mt-0.5 text-[11px] text-[#868685]">
-            67c/hr WFH &middot; Instant write-off
-          </p>
+          </div>
+          <div className="mt-1 text-[14px] font-semibold">67c/hr WFH &middot; Instant write-off</div>
+          <div className="mt-3 flex items-center gap-2 text-[12px] font-semibold text-muted-foreground">
+            <span className="h-2 w-2 rounded-full bg-primary" />
+            Local &middot; stays in browser
+          </div>
         </div>
       </aside>
     </>

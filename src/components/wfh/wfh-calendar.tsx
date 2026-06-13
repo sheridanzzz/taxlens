@@ -190,10 +190,10 @@ export const WfhCalendar = () => {
                 disabled={!inFy}
                 className={`
                   relative flex aspect-square flex-col items-center justify-center rounded-md text-xs transition-colors
-                  ${!inFy ? "cursor-not-allowed opacity-30" : "cursor-pointer hover:bg-[#f4f5f2] dark:hover:bg-white/5"}
-                  ${entry ? "bg-[#e2f6d5] font-medium text-[#163300] dark:bg-[#163300]/20 dark:text-[#9fe870]" : ""}
-                  ${isToday ? "ring-1 ring-[#9fe870]" : ""}
-                  ${isWeekend && !entry ? "text-[#868685]" : ""}
+                  ${!inFy ? "cursor-not-allowed opacity-30" : "cursor-pointer hover:bg-secondary dark:hover:bg-secondary"}
+                  ${entry ? "bg-mint font-medium text-foreground dark:bg-primary/20 dark:text-primary" : ""}
+                  ${isToday ? "ring-1 ring-primary" : ""}
+                  ${isWeekend && !entry ? "text-muted-foreground" : ""}
                 `}
                 aria-label={`${dateStr}${entry ? `, ${entry.hours} hours logged` : ""}`}
                 tabIndex={inFy ? 0 : -1}

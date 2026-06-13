@@ -53,9 +53,9 @@ const AssetsPage = () => {
     >
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[13px] text-[#868685]">
+          <p className="text-[13px] text-muted-foreground">
             {state.assets.length} assets &middot;{" "}
-            <span className="stat-number font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+            <span className="stat-number font-medium text-foreground dark:text-foreground">
               {formatCurrency(totalDepreciation)}
             </span>{" "}
             claimable this year

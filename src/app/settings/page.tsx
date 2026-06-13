@@ -174,7 +174,7 @@ const SettingsPage = () => {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div>
-        <p className="text-[13px] text-[#868685]">
+        <p className="text-[13px] text-muted-foreground">
           Tax profile and preferences
         </p>
       </div>

@@ -11,13 +11,13 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          "bg-[#9fe870] text-[#163300] hover:bg-[#8DD85F] hover:shadow-[0_4px_20px_rgba(159,232,112,0.3)]",
+          "bg-primary text-primary-foreground hover:bg-primary/90",
         outline:
-          "border-[rgba(14,15,12,0.12)] bg-white text-[#0e0f0c] hover:bg-[#f4f5f2] dark:border-[rgba(255,255,255,0.1)] dark:bg-[#1a1b18] dark:text-[#f4f5f2] dark:hover:bg-white/5",
+          "border-border bg-card text-foreground hover:bg-secondary dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-secondary",
         secondary:
-          "bg-[rgba(22,51,0,0.08)] text-[#0e0f0c] hover:bg-[rgba(22,51,0,0.12)] dark:bg-white/8 dark:text-[#f4f5f2] dark:hover:bg-white/12",
+          "bg-secondary text-secondary-foreground hover:bg-secondary/80 dark:bg-secondary dark:text-secondary-foreground dark:hover:bg-secondary/60",
         ghost:
-          "text-[#454745] hover:bg-[#f4f5f2] hover:text-[#0e0f0c] aria-expanded:bg-[#f4f5f2] dark:text-[#868685] dark:hover:bg-white/5 dark:hover:text-[#f4f5f2]",
+          "text-muted-foreground hover:bg-secondary hover:text-foreground aria-expanded:bg-secondary dark:text-muted-foreground dark:hover:bg-secondary dark:hover:text-foreground",
         destructive:
           "bg-destructive/10 text-destructive hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
         link: "scale-100 rounded-none text-primary underline-offset-4 hover:scale-100 hover:underline active:scale-100",

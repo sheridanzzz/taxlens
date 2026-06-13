@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Moon, Sun, LogOut, HardDrive, Plus } from "lucide-react";
+import { Menu, LogOut, HardDrive, Plus } from "lucide-react";
 import { motion } from "motion/react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import {
+  IconCalendar,
+  IconChevron,
+  IconMoon,
+  IconPlus,
+  IconLock,
+} from "@/components/dashboard/icons";
 
 import { useTax } from "@/context/tax-context";
 import { useAuth } from "@/context/auth-context";
@@ -36,10 +43,6 @@ const PAGE_TITLES: Record<string, string> = {
   "/settings": "Settings",
 };
 
-const PAGE_SUBTITLES: Record<string, string> = {
-  "/dashboard": "FY snapshot",
-};
-
 interface HeaderProps {
   onMenuClick: () => void;
 }
@@ -51,7 +54,6 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
   const pathname = usePathname();
 
   const pageTitle = PAGE_TITLES[pathname] || "Ledgr";
-  const subtitle = PAGE_SUBTITLES[pathname];
 
   const handleThemeToggle = () => {
     setTheme(theme === "dark" ? "light" : "dark");
@@ -69,43 +71,35 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
     ? user.email.split("@")[0].slice(0, 2).toUpperCase()
     : "?";
 
+  const fyLabel = FINANCIAL_YEARS.find(
+    (f) => f.value === state.settings.financialYear
+  )?.label ?? state.settings.financialYear;
+
   return (
-    <header className="sticky top-0 z-30 flex h-14 items-center justify-between border-b border-[rgba(14,15,12,0.08)] bg-white/90 px-4 backdrop-blur-md dark:border-[rgba(255,255,255,0.06)] dark:bg-[#0e0f0c]/90 lg:px-6">
-      <div className="flex items-center gap-3">
+    <header className="sticky top-0 z-30 flex items-center justify-between gap-4 border-b border-border bg-background/85 px-6 py-4 backdrop-blur sm:px-10">
+      <div className="flex items-center gap-3 lg:hidden">
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 lg:hidden"
+          className="h-8 w-8"
           onClick={onMenuClick}
           aria-label="Open sidebar"
         >
           <Menu className="h-4 w-4" />
         </Button>
-        <div className="flex items-baseline gap-2">
-          <h2 className="text-xl font-medium tracking-tight text-[#0e0f0c] dark:text-[#f4f5f2]">
-            {pageTitle}
-          </h2>
-          {subtitle && (
-            <span className="text-[14px] text-[#868685]">
-              {state.settings.financialYear} {subtitle}
-            </span>
-          )}
-        </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2">
         <Select
           value={state.settings.financialYear}
           onValueChange={handleFinancialYearChange}
         >
           <SelectTrigger
-            className="h-9 w-auto min-w-[170px] rounded-xl border-[rgba(14,15,12,0.12)] bg-white px-3 text-[13px] dark:border-[rgba(255,255,255,0.1)] dark:bg-[#1a1b18]"
+            className="btn-press h-10 w-auto min-w-[170px] rounded-full border-0 bg-secondary px-4 text-[13px] font-semibold text-secondary-foreground"
             aria-label="Select financial year"
           >
-            <span>
-              {FINANCIAL_YEARS.find(
-                (f) => f.value === state.settings.financialYear
-              )?.label ?? state.settings.financialYear}
+            <span className="flex items-center gap-2">
+              <IconCalendar /> {fyLabel}
             </span>
           </SelectTrigger>
           <SelectContent>
@@ -117,49 +111,34 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
           </SelectContent>
         </Select>
 
-        <motion.button
-          whileTap={{ rotate: 180, scale: 0.9 }}
-          transition={{ duration: 0.3 }}
+        <button
           onClick={handleThemeToggle}
-          className="relative inline-flex h-8 w-8 items-center justify-center rounded-xl text-[#454745] transition-colors hover:bg-[#f4f5f2] dark:text-[#868685] dark:hover:bg-white/5"
+          className="btn-press grid h-10 w-10 place-items-center rounded-full bg-secondary text-secondary-foreground"
           aria-label="Toggle theme"
         >
-          <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-          <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-        </motion.button>
+          <IconMoon />
+        </button>
 
-        <motion.div
-          whileHover={{ scale: 1.05 }}
-          whileTap={{ scale: 0.95 }}
-          className="hidden sm:block"
+        <Link
+          href="/expenses"
+          className="btn-press hidden items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[14px] font-bold text-primary-foreground sm:inline-flex"
+          aria-label="Add expense"
         >
-          <Link
-            href="/expenses"
-            className="inline-flex items-center gap-1.5 rounded-full bg-[#9fe870] px-4 py-2 text-[14px] font-semibold text-[#163300] transition-shadow hover:shadow-[0_4px_20px_rgba(159,232,112,0.3)]"
-            aria-label="Add expense"
-          >
-            <Plus className="h-4 w-4" />
-            Add expense
-          </Link>
-        </motion.div>
+          <IconPlus /> Add expense
+        </Link>
 
         {!supabaseEnabled ? (
-          <Badge
-            variant="secondary"
-            className="h-8 gap-1.5 px-2.5 text-[10px] font-normal"
-            title="Data stored in this browser only."
-          >
-            <HardDrive className="h-3 w-3" aria-hidden />
-            Local
-          </Badge>
+          <span className="ring-card hidden items-center gap-2 rounded-full bg-background px-3 py-1.5 text-[12px] font-semibold text-muted-foreground sm:inline-flex">
+            <IconLock /> Local
+          </span>
         ) : (
           <DropdownMenu>
             <DropdownMenuTrigger
-              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-[#f4f5f2] dark:hover:bg-white/5"
+              className="flex h-8 w-8 items-center justify-center rounded-full hover:bg-secondary"
               aria-label="User menu"
             >
               <Avatar className="h-7 w-7">
-                <AvatarFallback className="bg-[#e2f6d5] text-[10px] font-medium text-[#163300] dark:bg-[#163300]/20 dark:text-[#9fe870]">
+                <AvatarFallback className="bg-mint text-[10px] font-medium text-mint-foreground">
                   {userInitials}
                 </AvatarFallback>
               </Avatar>

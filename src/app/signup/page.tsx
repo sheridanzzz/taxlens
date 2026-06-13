@@ -107,9 +107,8 @@ const SignupPage = () => {
         <div className="flex flex-col items-center gap-3">
           <LedgrLogo size="lg" />
           <div className="flex items-baseline gap-0.5">
-            <span className="text-xl font-medium tracking-tight" style={{ letterSpacing: "-0.5px" }}>Tax</span>
-            <span className="text-xl font-medium tracking-tight text-[#163300] dark:text-[#9fe870]" style={{ letterSpacing: "-0.5px" }}>
-              Lens
+            <span className="text-xl font-medium tracking-tight text-foreground" style={{ letterSpacing: "-0.5px" }}>
+              Ledgr
             </span>
           </div>
           <p className="text-sm text-muted-foreground">Create your account</p>

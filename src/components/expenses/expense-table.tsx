@@ -72,7 +72,7 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#868685]" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             placeholder="Search expenses..."
             value={search}
@@ -86,8 +86,8 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
             onClick={() => setCategoryFilter("all")}
             className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
               categoryFilter === "all"
-                ? "bg-[#e2f6d5] text-[#163300]"
-                : "bg-[rgba(22,51,0,0.06)] text-[#454745] hover:bg-[rgba(22,51,0,0.1)] dark:bg-white/5 dark:text-[#868685]"
+                ? "bg-mint text-foreground"
+                : "bg-[rgba(22,51,0,0.06)] text-ink-soft hover:bg-[rgba(22,51,0,0.1)] dark:bg-white/5 dark:text-muted-foreground"
             }`}
             aria-label="Show all categories"
             tabIndex={0}
@@ -100,8 +100,8 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
               onClick={() => setCategoryFilter(key)}
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 categoryFilter === key
-                  ? "bg-[#e2f6d5] text-[#163300]"
-                  : "bg-[rgba(22,51,0,0.06)] text-[#454745] hover:bg-[rgba(22,51,0,0.1)] dark:bg-white/5 dark:text-[#868685]"
+                  ? "bg-mint text-foreground"
+                  : "bg-[rgba(22,51,0,0.06)] text-ink-soft hover:bg-[rgba(22,51,0,0.1)] dark:bg-white/5 dark:text-muted-foreground"
               }`}
               aria-label={`Filter by ${cat.label}`}
               tabIndex={0}
@@ -114,14 +114,14 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
 
       {filtered.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-[13px] text-[#868685]">
+          <p className="text-[13px] text-muted-foreground">
             {state.expenses.length === 0
               ? "No expenses recorded yet"
               : "No expenses match your filters"}
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-[rgba(14,15,12,0.08)] bg-white dark:border-[rgba(159,232,112,0.08)] dark:bg-[#1a1b18]">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card dark:border-border dark:bg-card">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -143,14 +143,14 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
                 <motion.tr
                   key={expense.id}
                   variants={staggerItem}
-                  className="border-b border-[rgba(14,15,12,0.06)] transition-colors hover:bg-[#f9faf7] dark:border-[rgba(255,255,255,0.04)] dark:hover:bg-white/[0.02]"
+                  className="border-b border-border transition-colors hover:bg-background dark:border-[rgba(255,255,255,0.04)] dark:hover:bg-secondary"
                 >
-                  <TableCell className="whitespace-nowrap text-sm text-[#454745] dark:text-[#868685]">
+                  <TableCell className="whitespace-nowrap text-sm text-ink-soft dark:text-muted-foreground">
                     {new Date(expense.date).toLocaleDateString("en-AU")}
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-2">
-                      <span className="max-w-[200px] truncate text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+                      <span className="max-w-[200px] truncate text-sm font-medium text-foreground dark:text-foreground">
                         {expense.description}
                       </span>
                       {expense.receiptDataUrl && (
@@ -171,7 +171,7 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
                   <TableCell>
                     <Badge
                       variant="secondary"
-                      className="rounded-full bg-[rgba(22,51,0,0.06)] text-xs text-[#454745] dark:bg-white/5 dark:text-[#868685]"
+                      className="rounded-full bg-[rgba(22,51,0,0.06)] text-xs text-ink-soft dark:bg-white/5 dark:text-muted-foreground"
                     >
                       {EXPENSE_CATEGORIES[expense.category]?.label
                         .split(" ")
@@ -179,10 +179,10 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
                         .join(" ")}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right text-sm text-[#454745] dark:text-[#868685]">
+                  <TableCell className="text-right text-sm text-ink-soft dark:text-muted-foreground">
                     {formatCurrency(expense.amount)}
                   </TableCell>
-                  <TableCell className="text-right text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+                  <TableCell className="text-right text-sm font-medium text-foreground dark:text-foreground">
                     {formatCurrency(expense.claimableAmount)}
                   </TableCell>
                   <TableCell>
@@ -190,8 +190,8 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
                       variant="secondary"
                       className={`rounded-full text-xs ${
                         expense.claimType === "full"
-                          ? "bg-[#e2f6d5] text-[#163300]"
-                          : "bg-[rgba(22,51,0,0.06)] text-[#454745] dark:bg-white/5 dark:text-[#868685]"
+                          ? "bg-mint text-foreground"
+                          : "bg-[rgba(22,51,0,0.06)] text-ink-soft dark:bg-white/5 dark:text-muted-foreground"
                       }`}
                     >
                       {expense.claimType === "full" ? "Full" : "Deprec."}

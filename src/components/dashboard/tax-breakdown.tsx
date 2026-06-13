@@ -58,16 +58,16 @@ export const TaxBreakdown = () => {
   if (state.settings.annualIncome === 0) {
     return (
       <motion.div
-        className="rounded-xl border border-[rgba(14,15,12,0.08)] bg-white p-5 dark:border-[rgba(159,232,112,0.08)] dark:bg-[#1a1b18]"
+        className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card"
         {...(prefersReduced ? {} : cardHover)}
       >
-        <p className="text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+        <p className="text-sm font-medium text-foreground dark:text-foreground">
           Tax impact
         </p>
-        <p className="mt-4 text-[13px] text-[#868685]">
+        <p className="mt-4 text-[13px] text-muted-foreground">
           <Link
             href="/settings"
-            className="text-[#163300] underline underline-offset-2 dark:text-[#9fe870]"
+            className="text-foreground underline underline-offset-2 dark:text-primary"
           >
             Set your income
           </Link>{" "}
@@ -89,43 +89,43 @@ export const TaxBreakdown = () => {
 
   return (
     <motion.div
-      className="rounded-xl border border-[rgba(14,15,12,0.08)] bg-white p-5 dark:border-[rgba(159,232,112,0.08)] dark:bg-[#1a1b18]"
+      className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card"
       {...(prefersReduced ? {} : cardHover)}
     >
-      <p className="text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+      <p className="text-sm font-medium text-foreground dark:text-foreground">
         Tax impact
       </p>
 
       <div className="mt-4 space-y-3">
         <div className="space-y-2">
           <div className="flex items-baseline justify-between">
-            <span className="text-xs text-[#868685]">Tax without deductions</span>
-            <span className="stat-number text-sm text-[#868685] line-through decoration-[#868685]/30">
+            <span className="text-xs text-muted-foreground">Tax without deductions</span>
+            <span className="stat-number text-sm text-muted-foreground line-through decoration-muted-foreground/30">
               {formatCurrency(summary.taxPayableWithoutDeductions)}
             </span>
           </div>
           <div className="flex items-baseline justify-between">
-            <span className="text-xs text-[#868685]">Tax with deductions</span>
-            <span className="stat-number text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+            <span className="text-xs text-muted-foreground">Tax with deductions</span>
+            <span className="stat-number text-sm font-medium text-foreground dark:text-foreground">
               {formatCurrency(summary.taxPayable)}
             </span>
           </div>
         </div>
 
-        <div className="h-px bg-[rgba(14,15,12,0.06)] dark:bg-[rgba(255,255,255,0.06)]" />
+        <div className="h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
 
         <div className="flex items-baseline justify-between">
-          <span className="text-sm font-medium text-[#0e0f0c] dark:text-[#f4f5f2]">
+          <span className="text-sm font-medium text-foreground dark:text-foreground">
             You save
           </span>
-          <span className="stat-number text-xl font-semibold text-[#163300] dark:text-[#9fe870]">
+          <span className="stat-number text-xl font-semibold text-foreground dark:text-primary">
             <AnimatedNumber value={summary.estimatedTaxSaved} />
           </span>
         </div>
 
         {deductionLines.length > 0 && (
           <details className="group">
-            <summary className="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-[#868685] hover:text-[#454745] dark:hover:text-[#a3a5a0]">
+            <summary className="flex cursor-pointer items-center gap-1 text-[11px] font-medium text-muted-foreground hover:text-ink-soft dark:hover:text-[#a3a5a0]">
               <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
               How your {formatCurrency(summary.estimatedTaxSaved)} saving breaks down
             </summary>
@@ -135,24 +135,24 @@ export const TaxBreakdown = () => {
                 return (
                   <div key={i} className="flex items-start justify-between gap-3">
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[11px] font-medium text-[#454745] dark:text-[#868685]">
+                      <p className="truncate text-[11px] font-medium text-ink-soft dark:text-muted-foreground">
                         {line.label}
                       </p>
-                      <p className="text-[9px] text-[#868685]">{line.detail}</p>
+                      <p className="text-[9px] text-muted-foreground">{line.detail}</p>
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="stat-number text-[11px] font-medium text-[#163300] dark:text-[#9fe870]">
+                      <p className="stat-number text-[11px] font-medium text-foreground dark:text-primary">
                         −{formatCurrency(taxSaved)}
                       </p>
-                      <p className="text-[9px] text-[#868685]">
+                      <p className="text-[9px] text-muted-foreground">
                         on {formatCurrency(line.amount)}
                       </p>
                     </div>
                   </div>
                 );
               })}
-              <div className="mt-1 rounded-lg bg-[#f4f5f2] px-2 py-1.5 dark:bg-white/5">
-                <p className="text-[10px] text-[#868685]">
+              <div className="mt-1 rounded-lg bg-secondary px-2 py-1.5 dark:bg-white/5">
+                <p className="text-[10px] text-muted-foreground">
                   Your marginal rate is ~{marginalRate}% (bracket + Medicare levy). Every $1 you deduct saves you ~${(marginalRate / 100).toFixed(2)} in tax.
                 </p>
               </div>
@@ -161,16 +161,16 @@ export const TaxBreakdown = () => {
         )}
 
         <div className="space-y-1.5">
-          <div className="flex justify-between text-[11px] text-[#868685]">
+          <div className="flex justify-between text-[11px] text-muted-foreground">
             <span>Savings ratio</span>
             <span className="stat-number">{savingsPercent.toFixed(1)}%</span>
           </div>
-          <div className="h-[5px] overflow-hidden rounded-full bg-[#f4f5f2] dark:bg-white/5">
+          <div className="h-[5px] overflow-hidden rounded-full bg-secondary dark:bg-white/5">
             <motion.div
               initial={prefersReduced ? false : { width: 0 }}
               animate={{ width: `${Math.min(savingsPercent, 100)}%` }}
               transition={{ delay: 0.6, duration: 0.8, ease: "easeOut" }}
-              className="h-full rounded-full bg-[#9fe870]"
+              className="h-full rounded-full bg-primary"
             />
           </div>
         </div>

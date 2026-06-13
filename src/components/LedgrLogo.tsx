@@ -19,7 +19,7 @@ export function LedgrLogo({ className = "", size = "md" }: LogoProps) {
       style={{ fontFeatureSettings: '"calt" 1, "ss01" 1' }}
     >
       <span>ledgr</span>
-      <span className="text-primary">.</span>
+      <span style={{ color: "var(--highlight)" }}>.</span>
     </Link>
   );
 }

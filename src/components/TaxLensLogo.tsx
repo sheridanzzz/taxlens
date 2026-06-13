@@ -9,7 +9,7 @@ export const TaxLensLogo = ({ size = 32, className = "" }: { size?: number; clas
       className={className}
       aria-hidden="true"
     >
-      <path d="M32 4L58 18V46L32 60L6 46V18L32 4Z" fill="#163300" />
+      <path d="M32 4L58 18V46L32 60L6 46V18L32 4Z" fill="currentColor" />
       <path d="M32 14L48 23V41L32 50L16 41V23L32 14Z" stroke="#9FE870" strokeWidth="1.5" fill="none" />
       <path d="M32 24L40 29V39L32 44L24 39V29L32 24Z" fill="#9FE870" />
     </svg>
@@ -27,7 +27,7 @@ export const TaxLensWordmark = ({ className = "" }: { className?: string }) => {
       aria-label="TaxLens"
       role="img"
     >
-      <path d="M32 4L58 18V46L32 60L6 46V18L32 4Z" fill="#163300" />
+      <path d="M32 4L58 18V46L32 60L6 46V18L32 4Z" fill="currentColor" />
       <path d="M32 14L48 23V41L32 50L16 41V23L32 14Z" stroke="#9FE870" strokeWidth="1.5" fill="none" />
       <path d="M32 24L40 29V39L32 44L24 39V29L32 24Z" fill="#9FE870" />
       <text

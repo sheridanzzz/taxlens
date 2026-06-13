@@ -5,11 +5,11 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 30px;
-  --radius-xl: 40px;
-  --radius-2xl: 48px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 16px;
+  --radius-2xl: 22px;
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -30,10 +30,13 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+
   --color-mint: var(--mint);
   --color-mint-foreground: var(--mint-foreground);
   --color-ink: var(--ink);
   --color-ink-soft: var(--ink-soft);
+  --color-surface: var(--surface);
+
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);
@@ -48,152 +51,203 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
 
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono);
-
-  --shadow-ring: 0 0 0 1px rgba(14, 15, 12, 0.12);
-  --shadow-ring-strong: 0 0 0 1px rgba(14, 15, 12, 0.2);
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
 }
 
+/* Navy Trust — professional finance, calm authority */
 :root {
-  --background: #f9faf7;
-  --foreground: #0e0f0c;
+  --background: #f7f8fa;
+  --surface: #ffffff;
+  --foreground: #0a1733;
   --card: #ffffff;
-  --card-foreground: #0e0f0c;
+  --card-foreground: #0a1733;
   --popover: #ffffff;
-  --popover-foreground: #0e0f0c;
+  --popover-foreground: #0a1733;
 
-  --primary: #9fe870;
-  --primary-foreground: #163300;
+  --primary: #0f1b3d;
+  --primary-foreground: #f7f8fa;
 
-  --secondary: rgba(22, 51, 0, 0.08);
-  --secondary-foreground: #163300;
+  --secondary: #eef1f7;
+  --secondary-foreground: #0f1b3d;
 
-  --muted: #f1f3ee;
-  --muted-foreground: #868685;
+  --muted: #eef1f7;
+  --muted-foreground: #5b6478;
 
-  --accent: #e2f6d5;
-  --accent-foreground: #163300;
+  --accent: #e7ecf5;
+  --accent-foreground: #0f1b3d;
 
-  --destructive: #d03238;
+  --destructive: #b3261e;
   --destructive-foreground: #ffffff;
 
-  --border: rgba(14, 15, 12, 0.12);
-  --input: rgba(14, 15, 12, 0.12);
-  --ring: #9fe870;
+  --border: rgba(10, 23, 51, 0.10);
+  --input: rgba(10, 23, 51, 0.14);
+  --ring: #1e3a5f;
 
-  --mint: #e2f6d5;
-  --mint-foreground: #163300;
-  --ink: #0e0f0c;
-  --ink-soft: #454745;
+  --mint: #e7ecf5;
+  --mint-foreground: #0f1b3d;
+  --ink: #0a1733;
+  --ink-soft: #3b4660;
 
-  --chart-1: #9fe870;
-  --chart-2: #054d28;
-  --chart-3: #163300;
-  --chart-4: #cdffad;
-  --chart-5: #868685;
+  /* signature single accent — used sparingly */
+  --highlight: #f0c14b;
+
+  --chart-1: #0f1b3d;
+  --chart-2: #1e3a5f;
+  --chart-3: #3b4660;
+  --chart-4: #e7ecf5;
+  --chart-5: #5b6478;
 
   --sidebar: #ffffff;
-  --sidebar-foreground: #163300;
-  --sidebar-primary: #9fe870;
-  --sidebar-primary-foreground: #163300;
-  --sidebar-accent: rgba(211, 242, 192, 0.4);
-  --sidebar-accent-foreground: #163300;
-  --sidebar-border: rgba(14, 15, 12, 0.08);
-  --sidebar-ring: #9fe870;
+  --sidebar-foreground: #0f1b3d;
+  --sidebar-primary: #0f1b3d;
+  --sidebar-primary-foreground: #f7f8fa;
+  --sidebar-accent: #e7ecf5;
+  --sidebar-accent-foreground: #0f1b3d;
+  --sidebar-border: rgba(10, 23, 51, 0.08);
+  --sidebar-ring: #1e3a5f;
 }
 
 .dark {
-  --background: #0e0f0c;
-  --foreground: #f4f5f2;
-  --card: #1a1b18;
-  --card-foreground: #f4f5f2;
-  --popover: #1a1b18;
-  --popover-foreground: #f4f5f2;
+  --background: #07101f;
+  --surface: #0c1828;
+  --foreground: #e6ecf5;
+  --card: #0c1828;
+  --card-foreground: #e6ecf5;
+  --popover: #0c1828;
+  --popover-foreground: #e6ecf5;
 
-  --primary: #9fe870;
-  --primary-foreground: #163300;
+  --primary: #e6ecf5;
+  --primary-foreground: #0a1733;
 
-  --secondary: rgba(159, 232, 112, 0.12);
-  --secondary-foreground: #e2f6d5;
+  --secondary: rgba(230, 236, 245, 0.08);
+  --secondary-foreground: #e6ecf5;
 
-  --muted: #1f201d;
-  --muted-foreground: #a0a29d;
+  --muted: rgba(230, 236, 245, 0.06);
+  --muted-foreground: #9aa5bd;
 
-  --accent: rgba(159, 232, 112, 0.16);
-  --accent-foreground: #e2f6d5;
+  --accent: rgba(230, 236, 245, 0.10);
+  --accent-foreground: #e6ecf5;
 
-  --destructive: #d03238;
+  --destructive: #d04a44;
   --destructive-foreground: #ffffff;
 
-  --border: rgba(244, 245, 242, 0.12);
-  --input: rgba(244, 245, 242, 0.12);
-  --ring: #9fe870;
+  --border: rgba(230, 236, 245, 0.12);
+  --input: rgba(230, 236, 245, 0.16);
+  --ring: #9aa5bd;
 
-  --mint: rgba(159, 232, 112, 0.16);
-  --mint-foreground: #e2f6d5;
-  --ink: #f4f5f2;
-  --ink-soft: #c8cac4;
+  --mint: rgba(230, 236, 245, 0.08);
+  --mint-foreground: #e6ecf5;
+  --ink: #e6ecf5;
+  --ink-soft: #b6becf;
 
-  --chart-1: #9fe870;
-  --chart-2: #cdffad;
-  --chart-3: #e2f6d5;
-  --chart-4: #054d28;
-  --chart-5: #868685;
+  --highlight: #f0c14b;
 
-  --sidebar: #0e0f0c;
-  --sidebar-foreground: #f4f5f2;
-  --sidebar-primary: #9fe870;
-  --sidebar-primary-foreground: #163300;
-  --sidebar-accent: rgba(159, 232, 112, 0.12);
-  --sidebar-accent-foreground: #f4f5f2;
-  --sidebar-border: rgba(255, 255, 255, 0.06);
-  --sidebar-ring: #9fe870;
+  --chart-1: #e6ecf5;
+  --chart-2: #b6becf;
+  --chart-3: #e7ecf5;
+  --chart-4: #1e3a5f;
+  --chart-5: #9aa5bd;
+
+  --sidebar: #07101f;
+  --sidebar-foreground: #e6ecf5;
+  --sidebar-primary: #e6ecf5;
+  --sidebar-primary-foreground: #0a1733;
+  --sidebar-accent: rgba(230, 236, 245, 0.08);
+  --sidebar-accent-foreground: #e6ecf5;
+  --sidebar-border: rgba(230, 236, 245, 0.06);
+  --sidebar-ring: #9aa5bd;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   html {
     font-family: var(--font-sans);
-    font-feature-settings: "calt" 1, "ss01" 1;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
   body {
     @apply bg-background text-foreground;
     font-weight: 400;
+    font-feature-settings: "ss01" 1, "cv11" 1;
   }
+
   ::selection {
-    background: #9fe870;
-    color: #163300;
+    background: #0f1b3d;
+    color: #f7f8fa;
   }
 }
 
+/* Editorial display — IBM Plex Serif, tight and confident */
 @utility headline {
-  font-weight: 900;
-  line-height: 0.85;
-  letter-spacing: -0.035em;
-  font-feature-settings: "calt" 1, "ss01" 1;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  line-height: 0.96;
+  letter-spacing: -0.025em;
+}
+
+@utility eyebrow {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+@utility num {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
 }
 
 @utility btn-press {
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, color 180ms ease;
   &:hover {
-    transform: scale(1.05);
+    transform: translateY(-1px);
   }
   &:active {
-    transform: scale(0.95);
+    transform: translateY(0);
   }
 }
 
 @utility ring-card {
-  box-shadow: 0 0 0 1px rgba(14, 15, 12, 0.12);
+  box-shadow: 0 0 0 1px rgba(10, 23, 51, 0.08);
+}
+.dark .ring-card {
+  box-shadow: 0 0 0 1px rgba(230, 236, 245, 0.10);
 }
 
-.dark .ring-card {
-  box-shadow: 0 0 0 1px rgba(244, 245, 242, 0.12);
+@utility rule-soft {
+  border-top: 1px solid rgba(10, 23, 51, 0.10);
+}
+.dark .rule-soft {
+  border-top: 1px solid rgba(230, 236, 245, 0.12);
+}
+
+/* Band — full-width section with vertical rhythm */
+@utility band {
+  padding-top: 96px;
+  padding-bottom: 96px;
+  border-top: 1px solid var(--color-border);
+}
+
+@utility band-tight {
+  padding-top: 56px;
+  padding-bottom: 56px;
+  border-top: 1px solid var(--color-border);
+}
+
+@utility container-x {
+  width: 100%;
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-inline: 24px;
 }
 
 @layer utilities {
@@ -209,12 +263,12 @@
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #f1f3ee 25%, #e8ebe6 50%, #f1f3ee 75%);
+  background: linear-gradient(90deg, #eef1f7 25%, #e7ecf5 50%, #eef1f7 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
 }
 
 .dark .skeleton {
-  background: linear-gradient(90deg, #1a1b18 25%, #2a2c28 50%, #1a1b18 75%);
+  background: linear-gradient(90deg, #0c1828 25%, #1a2a44 50%, #0c1828 75%);
   background-size: 200% 100%;
 }
