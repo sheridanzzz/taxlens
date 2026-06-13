@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { chatViaOpenRouter, isOpenRouterConfigured } from "@/lib/openrouter";
+import { chatViaGemini, isGeminiConfigured } from "@/lib/gemini";
 import {
   EXPENSE_CATEGORIES,
   INSTANT_DEDUCTION_THRESHOLD,
@@ -59,7 +60,7 @@ Rules:
 - Return ONLY valid JSON, no markdown fences or extra text`;
 
 export async function POST(request: NextRequest) {
-  if (!isOpenRouterConfigured()) {
+  if (!isOpenRouterConfigured() && !isGeminiConfigured()) {
     return NextResponse.json(
       { error: "AI receipt scanning is not configured on the server." },
       { status: 503 }
@@ -84,20 +85,31 @@ export async function POST(request: NextRequest) {
   try {
     const prompt = buildPrompt(occupation);
 
-    const messages = [
-      {
-        role: "user" as const,
-        content: [
-          { type: "text", text: prompt },
-          {
-            type: "image_url",
-            image_url: { url: `data:${mimeType};base64,${base64}` },
-          },
-        ],
-      },
-    ];
+    let text: string;
 
-    const text = await chatViaOpenRouter(messages);
+    if (isOpenRouterConfigured()) {
+      try {
+        const messages = [
+          {
+            role: "user" as const,
+            content: [
+              { type: "text", text: prompt },
+              {
+                type: "image_url",
+                image_url: { url: `data:${mimeType};base64,${base64}` },
+              },
+            ],
+          },
+        ];
+        text = await chatViaOpenRouter(messages);
+      } catch (openRouterError) {
+        console.warn("OpenRouter failed, trying Gemini fallback:", openRouterError);
+        if (!isGeminiConfigured()) throw openRouterError;
+        text = await chatViaGemini(prompt, base64, mimeType);
+      }
+    } else {
+      text = await chatViaGemini(prompt, base64, mimeType);
+    }
 
     const stripped = text
       .replace(/```(?:json)?\s*/gi, "")
