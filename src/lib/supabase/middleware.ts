@@ -34,9 +34,9 @@ export const updateSession = async (request: NextRequest) => {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const isPublicPath = PUBLIC_PATHS.some((p) =>
-    request.nextUrl.pathname.startsWith(p)
-  );
+  const { pathname } = request.nextUrl;
+  const isPublicPath =
+    pathname === "/" || PUBLIC_PATHS.some((p) => p !== "/" && pathname.startsWith(p));
 
   if (!user && !isPublicPath) {
     const redirectUrl = request.nextUrl.clone();
@@ -44,9 +44,9 @@ export const updateSession = async (request: NextRequest) => {
     return NextResponse.redirect(redirectUrl);
   }
 
-  if (user && isPublicPath) {
+  if (user && (pathname === "/login" || pathname === "/signup")) {
     const redirectUrl = request.nextUrl.clone();
-    redirectUrl.pathname = "/";
+    redirectUrl.pathname = "/dashboard";
     return NextResponse.redirect(redirectUrl);
   }
 
