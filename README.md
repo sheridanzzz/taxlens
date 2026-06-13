@@ -1,36 +1,42 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# TaxLens
+
+Australian tax deduction tracker built for software engineers and IT professionals.
+
+## Features
+
+- **Dashboard** -- overview of total deductions, estimated tax savings, category breakdown
+- **Expense Tracker** -- full CRUD with ATO categories for IT professionals, smart $300 threshold logic (full claim vs depreciation), receipt upload
+- **Work From Home** -- calendar-based WFH hour logging with ATO fixed rate (67c/hr) and actual cost method comparison
+- **Depreciation Schedule** -- asset tracking with ATO effective lives, diminishing value and prime cost methods, work-use percentage split
+- **Reports** -- exportable tax summary, expenses, WFH log, and depreciation schedule as CSV
+- **Settings** -- income details, financial year, data export/import backup
+
+## ATO Rules Built In
+
+- $300 instant deduction threshold for individuals
+- Fixed rate method: 67c per WFH hour
+- Depreciation: diminishing value (200% / effective life) and prime cost (100% / effective life)
+- 2024-25 and 2025-26 Australian tax brackets with Medicare levy
+- Pre-loaded effective lives for common IT assets (laptops, monitors, desks, etc.)
+
+## Tech Stack
+
+- Next.js 16 (App Router)
+- TypeScript
+- Tailwind CSS 4
+- Shadcn/UI (base-ui)
+- Recharts
+- localStorage (no backend required)
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Data Storage
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+All data is stored in browser localStorage. Use Settings > Export Backup to save your data as JSON, and Import Backup to restore it.
