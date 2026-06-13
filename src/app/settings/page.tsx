@@ -131,7 +131,7 @@ const SettingsPage = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `taxlens-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `ledgr-backup-${new Date().toISOString().split("T")[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -346,7 +346,7 @@ const SettingsPage = () => {
                 <Label htmlFor="settings-wfh-method" className="text-xs">
                   WFH Method
                 </Label>
-                <InfoTip content="Fixed Rate is simpler -- claim 67c for every hour worked from home (covers electricity, phone, internet, stationery). Actual Cost lets you claim the real work-portion of each bill, which can be higher if your bills are large. TaxLens compares both so you can pick whichever saves more." />
+                <InfoTip content="Fixed Rate is simpler -- claim 67c for every hour worked from home (covers electricity, phone, internet, stationery). Actual Cost lets you claim the real work-portion of each bill, which can be higher if your bills are large. Ledgr compares both so you can pick whichever saves more." />
               </div>
               <Select
                 value={wfhMethod}

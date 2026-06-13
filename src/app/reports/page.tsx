@@ -49,25 +49,25 @@ const ReportsPage = () => {
 
   const handleExportTaxSummary = () => {
     const lines = [
-      "TaxLens Tax Summary Report", `Financial Year: FY ${fy}`, `Generated: ${new Date().toLocaleDateString("en-AU")}`, `Occupation: ${state.settings.occupation}`, "",
+      "Ledgr Tax Summary Report", `Financial Year: FY ${fy}`, `Generated: ${new Date().toLocaleDateString("en-AU")}`, `Occupation: ${state.settings.occupation}`, "",
       "SECTION,ITEM,AMOUNT", `Income,Annual Income,${state.settings.annualIncome}`, "",
       `Deductions,Total Full Claims,${summary.totalFullClaims}`, `Deductions,Total Depreciation Claims,${summary.totalDepreciationClaims}`, `Deductions,Total WFH Deduction,${summary.totalWfhDeduction}`, `Deductions,TOTAL DEDUCTIONS,${summary.totalDeductions}`, "",
       `Tax,Taxable Income,${summary.taxableIncome}`, `Tax,Tax Payable (with deductions),${summary.taxPayable}`, `Tax,Tax Payable (without deductions),${summary.taxPayableWithoutDeductions}`, `Tax,ESTIMATED TAX SAVED,${summary.estimatedTaxSaved}`,
     ];
-    downloadCsv(`taxlens-summary-FY${fy}.csv`, lines.join("\n"));
+    downloadCsv(`ledgr-summary-FY${fy}.csv`, lines.join("\n"));
   };
 
   const handleExportExpenses = () => {
     const header = "Date,Description,Category,Amount,Claim Type,Work Use %,Claimable Amount";
     const rows = state.expenses.map((e) => `${e.date},"${e.description}",${EXPENSE_CATEGORIES[e.category]?.label || e.category},${e.amount},${e.claimType},${e.workUsePercent},${e.claimableAmount}`);
-    downloadCsv(`taxlens-expenses-FY${fy}.csv`, [header, ...rows].join("\n"));
+    downloadCsv(`ledgr-expenses-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
 
   const handleExportWfh = () => {
     const header = "Date,Hours";
     const rows = state.wfhEntries.sort((a, b) => a.date.localeCompare(b.date)).map((e) => `${e.date},${e.hours}`);
     const footer = ["", `Total Hours,${totalHours}`, `Fixed Rate Deduction (${WFH_FIXED_RATE_PER_HOUR * 100}c/hr),${wfhFixedTotal}`, `Actual Cost Deduction,${wfhActualTotal}`, `Active Method,${state.settings.wfhMethod === "fixed_rate" ? "Fixed Rate" : "Actual Cost"}`];
-    downloadCsv(`taxlens-wfh-FY${fy}.csv`, [header, ...rows, ...footer].join("\n"));
+    downloadCsv(`ledgr-wfh-FY${fy}.csv`, [header, ...rows, ...footer].join("\n"));
   };
 
   const handleExportDepreciation = () => {
@@ -77,7 +77,7 @@ const ReportsPage = () => {
       const remaining = calculateRemainingValue(a, fy);
       return `"${a.name}",${ASSET_EFFECTIVE_LIVES[a.assetType]?.label || a.assetType},${a.purchaseDate},${a.purchasePrice},${a.effectiveLifeYears},${a.depreciationMethod},${a.workUsePercent},${deduction},${remaining}`;
     });
-    downloadCsv(`taxlens-depreciation-FY${fy}.csv`, [header, ...rows].join("\n"));
+    downloadCsv(`ledgr-depreciation-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
 
   const EXPORTS = [

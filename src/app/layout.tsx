@@ -20,9 +20,9 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TaxLens — Australian Tax Deduction Tracker",
+  title: "Ledgr — Every Aussie tax deduction, tracked.",
   description:
-    "Smart tax deduction tracker for Australian IT professionals. Track expenses, WFH hours, depreciation, and maximize your ATO refund.",
+    "Ledgr is the tax deduction tracker built for Australian software engineers and remote workers. ATO-aware, $300 threshold logic, WFH at 67c/hr, depreciation, and a live refund estimate.",
 };
 
 const RootLayout = ({

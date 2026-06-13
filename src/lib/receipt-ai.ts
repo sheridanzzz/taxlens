@@ -126,7 +126,7 @@ export const scanReceipt = async (
   /* eslint-disable @typescript-eslint/no-explicit-any */
   const candidate = data.candidates?.[0];
   if (!candidate?.content?.parts) {
-    console.error("[TaxLens] Gemini response has no candidate parts:", JSON.stringify(data).slice(0, 500));
+    console.error("[Ledgr] Gemini response has no candidate parts:", JSON.stringify(data).slice(0, 500));
     const blockReason = candidate?.finishReason ?? data.promptFeedback?.blockReason;
     throw new Error(
       blockReason
@@ -139,10 +139,10 @@ export const scanReceipt = async (
   const textParts = parts.filter((p) => typeof p.text === "string" && !p.thought);
   const content = textParts.map((p) => p.text).join("");
 
-  console.debug("[TaxLens] Gemini raw text:", content.slice(0, 500));
+  console.debug("[Ledgr] Gemini raw text:", content.slice(0, 500));
 
   if (!content) {
-    console.error("[TaxLens] No text in response parts:", JSON.stringify(parts.map((p: any) => ({ thought: p.thought, hasText: !!p.text, textLen: p.text?.length }))));
+    console.error("[Ledgr] No text in response parts:", JSON.stringify(parts.map((p: any) => ({ thought: p.thought, hasText: !!p.text, textLen: p.text?.length }))));
     throw new Error("Empty response from Gemini. The receipt may be unreadable — try a clearer photo.");
   }
 
@@ -153,7 +153,7 @@ export const scanReceipt = async (
 
   const jsonMatch = stripped.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
-    console.error("[TaxLens] No JSON found in stripped content:", stripped.slice(0, 300));
+    console.error("[Ledgr] No JSON found in stripped content:", stripped.slice(0, 300));
     throw new Error("Could not parse AI response. Please try again.");
   }
 
@@ -161,7 +161,7 @@ export const scanReceipt = async (
   try {
     parsed = JSON.parse(jsonMatch[0]);
   } catch (e) {
-    console.error("[TaxLens] JSON parse failed:", (e as Error).message, jsonMatch[0].slice(0, 200));
+    console.error("[Ledgr] JSON parse failed:", (e as Error).message, jsonMatch[0].slice(0, 200));
     throw new Error("AI returned malformed data. Please try again.");
   }
   /* eslint-enable @typescript-eslint/no-explicit-any */

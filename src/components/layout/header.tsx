@@ -28,7 +28,7 @@ import { FINANCIAL_YEARS } from "@/lib/constants";
 import type { FinancialYear } from "@/lib/types";
 
 const PAGE_TITLES: Record<string, string> = {
-  "/": "Dashboard",
+  "/dashboard": "Dashboard",
   "/expenses": "Expenses",
   "/wfh": "Work From Home",
   "/assets": "Depreciation",
@@ -37,7 +37,7 @@ const PAGE_TITLES: Record<string, string> = {
 };
 
 const PAGE_SUBTITLES: Record<string, string> = {
-  "/": "FY snapshot",
+  "/dashboard": "FY snapshot",
 };
 
 interface HeaderProps {
@@ -50,7 +50,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
   const { user, signOut, supabaseEnabled } = useAuth();
   const pathname = usePathname();
 
-  const pageTitle = PAGE_TITLES[pathname] || "TaxLens";
+  const pageTitle = PAGE_TITLES[pathname] || "Ledgr";
   const subtitle = PAGE_SUBTITLES[pathname];
 
   const handleThemeToggle = () => {

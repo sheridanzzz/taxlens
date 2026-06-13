@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
-import { TaxLensLogo } from "@/components/TaxLensLogo";
+import { LedgrLogo } from "@/components/LedgrLogo";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -30,7 +30,7 @@ type NavSection = {
 const NAV_SECTIONS: NavSection[] = [
   {
     label: "Overview",
-    items: [{ href: "/", label: "Dashboard", icon: LayoutDashboard }],
+    items: [{ href: "/dashboard", label: "Dashboard", icon: LayoutDashboard }],
   },
   {
     label: "Track",
@@ -80,23 +80,7 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
         )}
       >
         <div className="flex h-14 items-center justify-between px-4">
-          <Link
-            href="/"
-            className="flex items-center gap-2.5"
-            aria-label="TaxLens home"
-          >
-            <TaxLensLogo size={28} className="dark:hidden" />
-            <TaxLensLogo
-              size={28}
-              className="hidden dark:block [&_path:first-child]:fill-[#9FE870] [&_path:first-child]:opacity-15"
-            />
-            <span
-              className="text-[15px] font-medium text-[#163300] dark:text-[#f4f5f2]"
-              style={{ letterSpacing: "-0.4px" }}
-            >
-              TaxLens
-            </span>
-          </Link>
+          <LedgrLogo size="md" />
           <Button
             variant="ghost"
             size="icon"

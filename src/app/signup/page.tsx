@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, CheckCircle } from "lucide-react";
-import { TaxLensLogo } from "@/components/TaxLensLogo";
+import { LedgrLogo } from "@/components/LedgrLogo";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/env";
 import { Button } from "@/components/ui/button";
@@ -105,7 +105,7 @@ const SignupPage = () => {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm space-y-6">
         <div className="flex flex-col items-center gap-3">
-          <TaxLensLogo size={40} />
+          <LedgrLogo size="lg" />
           <div className="flex items-baseline gap-0.5">
             <span className="text-xl font-medium tracking-tight" style={{ letterSpacing: "-0.5px" }}>Tax</span>
             <span className="text-xl font-medium tracking-tight text-[#163300] dark:text-[#9fe870]" style={{ letterSpacing: "-0.5px" }}>

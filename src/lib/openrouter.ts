@@ -20,8 +20,8 @@ const callOpenRouter = async (
     headers: {
       Authorization: `Bearer ${OPENROUTER_API_KEY}`,
       "Content-Type": "application/json",
-      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://taxlens-alpha.vercel.app",
-      "X-Title": "TaxLens",
+      "HTTP-Referer": process.env.NEXT_PUBLIC_APP_URL || "https://ledgr.app",
+      "X-Title": "Ledgr",
     },
     body: JSON.stringify({ model, temperature, messages }),
   });
