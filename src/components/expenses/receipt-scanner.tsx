@@ -53,22 +53,37 @@ interface ReceiptScannerProps {
   onExpenseCreated: () => void;
 }
 
-const MAX_IMAGE_DIMENSION = 1024;
-const JPEG_QUALITY = 0.8;
+const MAX_IMAGE_DIMENSION = 1536;
+const JPEG_QUALITY = 0.85;
 
-const compressImage = (file: File): Promise<{ base64: string; mimeType: string }> =>
-  new Promise((resolve, reject) => {
-    if (file.type === "application/pdf") {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const result = reader.result as string;
-        resolve({ base64: result.split(",")[1], mimeType: "application/pdf" });
-      };
-      reader.onerror = reject;
-      reader.readAsDataURL(file);
-      return;
-    }
+const renderPdfToImage = async (file: File): Promise<{ base64: string; mimeType: string }> => {
+  const pdfjsLib = await import("pdfjs-dist");
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
+  const arrayBuffer = await file.arrayBuffer();
+  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const page = await pdf.getPage(1);
+
+  const scale = MAX_IMAGE_DIMENSION / Math.max(page.view[2], page.view[3]);
+  const viewport = page.getViewport({ scale: Math.min(scale, 2) });
+
+  const canvas = document.createElement("canvas");
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  const ctx = canvas.getContext("2d")!;
+
+  await page.render({ canvas, canvasContext: ctx, viewport }).promise;
+
+  const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+  return { base64: dataUrl.split(",")[1], mimeType: "image/jpeg" };
+};
+
+const compressImage = async (file: File): Promise<{ base64: string; mimeType: string }> => {
+  if (file.type === "application/pdf") {
+    return renderPdfToImage(file);
+  }
+
+  return new Promise((resolve, reject) => {
     const img = new Image();
     const url = URL.createObjectURL(file);
     img.onload = () => {
@@ -93,6 +108,7 @@ const compressImage = (file: File): Promise<{ base64: string; mimeType: string }
     };
     img.src = url;
   });
+};
 
 const calcFirstYearDepreciation = (
   cost: number,
