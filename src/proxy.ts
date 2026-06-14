@@ -18,7 +18,9 @@ export const proxy = async (request: NextRequest) => {
       pathname === "/" ||
       PUBLIC_PATHS.some((p) => p !== "/" && pathname.startsWith(p));
 
-    const token = await getToken({ req: request, secret: process.env.AUTH_SECRET });
+    const isSecure = request.nextUrl.protocol === "https:";
+    const cookieName = isSecure ? "__Secure-authjs.session-token" : "authjs.session-token";
+    const token = await getToken({ req: request, secret: process.env.AUTH_SECRET, salt: cookieName, secureCookie: isSecure });
 
     if (!token && !isPublicPath) {
       const redirectUrl = request.nextUrl.clone();
