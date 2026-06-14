@@ -47,21 +47,26 @@ const SignupPage = () => {
     setLoading(true);
 
     if (isNeonConfigured()) {
-      const result = await nextAuthSignIn("credentials", {
-        email,
-        password,
-        action: "signup",
-        redirect: false,
-      });
+      try {
+        const result = await nextAuthSignIn("credentials", {
+          email,
+          password,
+          action: "signup",
+          redirect: false,
+        });
 
-      if (result?.error) {
-        setError("Account already exists or signup failed");
+        if (result?.error) {
+          setError("Account already exists or signup failed");
+          setLoading(false);
+          return;
+        }
+
+        router.push("/dashboard");
+        router.refresh();
+      } catch {
+        setError("Sign up failed. Please try again.");
         setLoading(false);
-        return;
       }
-
-      router.push("/dashboard");
-      router.refresh();
       return;
     }
 

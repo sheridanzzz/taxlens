@@ -42,20 +42,25 @@ const LoginPage = () => {
     setLoading(true);
 
     if (isNeonConfigured()) {
-      const result = await nextAuthSignIn("credentials", {
-        email,
-        password,
-        redirect: false,
-      });
+      try {
+        const result = await nextAuthSignIn("credentials", {
+          email,
+          password,
+          redirect: false,
+        });
 
-      if (result?.error) {
-        setError("Invalid email or password");
+        if (result?.error) {
+          setError("Invalid email or password");
+          setLoading(false);
+          return;
+        }
+
+        router.push("/dashboard");
+        router.refresh();
+      } catch {
+        setError("Sign in failed. Please try again.");
         setLoading(false);
-        return;
       }
-
-      router.push("/dashboard");
-      router.refresh();
       return;
     }
 
