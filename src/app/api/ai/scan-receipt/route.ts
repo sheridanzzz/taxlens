@@ -19,7 +19,7 @@ const VALID_CATEGORIES = Object.keys(EXPENSE_CATEGORIES) as ExpenseCategory[];
 const VALID_ASSET_TYPES = Object.keys(ASSET_EFFECTIVE_LIVES) as AssetType[];
 
 const buildPrompt = (occupation: string): string =>
-  `You are an Australian tax deduction assistant. Analyze this receipt/invoice and extract purchase details.
+  `You are an expert Australian tax deduction advisor. Analyze this receipt/invoice and extract purchase details, then recommend the OPTIMAL claiming strategy that maximizes the user's tax savings.
 
 The user's occupation is: "${occupation}"
 
@@ -36,15 +36,17 @@ Return a JSON object with EXACTLY these fields:
   "rawItems": ["list", "of", "individual", "line", "items", "from", "receipt"],
   "suggestedAssetType": "one of: ${VALID_ASSET_TYPES.join(", ")}",
   "suggestedEffectiveLife": 10,
-  "suggestedDepreciationMethod": "diminishing or prime_cost",
-  "claimAdvice": "Detailed advice including: (1) whether this is an instant claim or must be depreciated, (2) if depreciated, calculate the FIRST YEAR deduction for BOTH methods and state which saves more, (3) mention any tips for maximizing the claim"
+  "suggestedDepreciationMethod": "diminishing or prime_cost — PICK THE ONE THAT SAVES THE MOST over the lifetime",
+  "depreciationExplanation": "If depreciated: explain why you chose this method. Compare total lifetime deductions for both methods. State first-year and total savings. If the item will likely be replaced before its effective life ends, factor that into the recommendation.",
+  "claimAdvice": "Concise strategy: (1) instant or depreciated, (2) first-year deduction amount for the recommended method, (3) total lifetime claimable amount, (4) one key tip to maximize the claim"
 }
 
 ATO depreciation rules:
 - Items costing $${INSTANT_DEDUCTION_THRESHOLD} or LESS: instant full deduction (no depreciation needed)
 - Items costing MORE than $${INSTANT_DEDUCTION_THRESHOLD}: MUST be depreciated over the effective life
-- Diminishing Value method: deduction = base_value × (200% ÷ effective_life) — higher deductions in early years
-- Prime Cost method: deduction = cost × (100% ÷ effective_life) — equal deductions each year
+- Diminishing Value method: deduction = base_value × (200% ÷ effective_life) — higher deductions in early years, better if item is replaced early
+- Prime Cost method: deduction = cost × (100% ÷ effective_life) — equal deductions each year, better for long-held items
+- IMPORTANT: Diminishing Value gives higher FIRST YEAR deductions but the same TOTAL over the full life. Choose based on whether the user benefits more from front-loaded deductions (usually yes).
 
 ATO effective lives: ${VALID_ASSET_TYPES.map((t) => `${t}=${ASSET_EFFECTIVE_LIVES[t].years}yr`).join(", ")}
 
@@ -52,11 +54,11 @@ Rules:
 - amount should be the TOTAL paid (including GST)
 - date should be extracted from the receipt, or "unknown" if not visible
 - suggestedCategory must be one of the listed values
-- suggestedAssetType: pick the closest match from the list, use "other" if none fit
-- suggestedEffectiveLife: use the ATO effective life for the asset type
-- suggestedDepreciationMethod: recommend "diminishing" for tech items, "prime_cost" for furniture
+- suggestedAssetType: pick the CLOSEST match from the list — consider the actual product, not just the store. Use "other" only if nothing fits
+- suggestedEffectiveLife: use the ATO effective life for the matched asset type. If the product's real-world lifespan differs significantly, note this
+- suggestedDepreciationMethod: ALWAYS recommend the method that gives the user the best outcome. For most items, "diminishing" gives higher first-year savings
 - isRelevantToOccupation: consider if a "${occupation}" would reasonably use this for work
-- suggestedWorkUsePercent: 100 if clearly work-only, lower if likely mixed personal/work use
+- suggestedWorkUsePercent: 100 if clearly work-only, lower if likely mixed personal/work use. Be realistic — an office chair used at a home office might be 80-90% work
 - Return ONLY valid JSON, no markdown fences or extra text`;
 
 export async function POST(request: NextRequest) {
@@ -178,6 +180,7 @@ export async function POST(request: NextRequest) {
       suggestedAssetType: isDepreciation ? assetType : undefined,
       suggestedEffectiveLife: isDepreciation ? effectiveLife : undefined,
       suggestedDepreciationMethod: isDepreciation ? depMethod : undefined,
+      depreciationExplanation: isDepreciation ? (parsed.depreciationExplanation || "") : undefined,
     };
 
     return NextResponse.json(result);

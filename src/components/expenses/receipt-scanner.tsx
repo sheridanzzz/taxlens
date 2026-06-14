@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo } from "react";
+import { useState, useRef, useCallback, useMemo, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   Upload,
@@ -16,6 +16,10 @@ import {
   FileText,
   TrendingDown,
   Lightbulb,
+  Sparkles,
+  ScanLine,
+  Receipt,
+  Calculator,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -108,6 +112,86 @@ const compressImage = async (file: File): Promise<{ base64: string; mimeType: st
     };
     img.src = url;
   });
+};
+
+const SCAN_STAGES = [
+  { icon: ScanLine, text: "Reading receipt", detail: "Extracting text and numbers" },
+  { icon: Receipt, text: "Identifying items", detail: "Matching line items and totals" },
+  { icon: Sparkles, text: "Analysing claimability", detail: "Checking ATO rules for your occupation" },
+  { icon: Calculator, text: "Calculating deductions", detail: "Finding the best tax savings strategy" },
+];
+
+const ScanningAnimation = ({ previewUrl, isPdf }: { previewUrl: string | null; isPdf: boolean }) => {
+  const [stageIndex, setStageIndex] = useState(0);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setStageIndex((i) => (i + 1) % SCAN_STAGES.length);
+    }, 2200);
+    return () => clearInterval(interval);
+  }, []);
+
+  const stage = SCAN_STAGES[stageIndex];
+  const Icon = stage.icon;
+
+  return (
+    <div className="flex flex-col items-center gap-5 py-8">
+      <div className="relative">
+        {previewUrl ? (
+          <img
+            src={previewUrl}
+            alt="Receipt being scanned"
+            className="h-32 w-auto rounded-xl border border-border/50 object-cover"
+          />
+        ) : (
+          <div className="flex h-32 w-24 items-center justify-center rounded-xl border border-border/50 bg-muted/20">
+            <FileText className="h-10 w-10 text-muted-foreground/30" />
+            {isPdf && <span className="absolute bottom-2 text-[9px] font-medium text-muted-foreground/40">PDF</span>}
+          </div>
+        )}
+        <div className="absolute inset-0 rounded-xl overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-primary/10 to-primary/5 animate-pulse" />
+          <div
+            className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent"
+            style={{ animation: "scanline 2s ease-in-out infinite", top: "0%" }}
+          />
+        </div>
+        <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/30">
+          <Sparkles className="h-4 w-4 text-primary-foreground animate-pulse" />
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-2">
+        <div className="flex items-center gap-2">
+          <Icon className="h-4 w-4 text-primary animate-pulse" />
+          <p className="text-sm font-medium">{stage.text}</p>
+        </div>
+        <p className="text-[11px] text-muted-foreground transition-opacity duration-300">
+          {stage.detail}
+        </p>
+      </div>
+
+      <div className="flex gap-1.5">
+        {SCAN_STAGES.map((_, i) => (
+          <div
+            key={i}
+            className={`h-1 rounded-full transition-all duration-500 ${
+              i === stageIndex ? "w-6 bg-primary" : i < stageIndex ? "w-1.5 bg-primary/40" : "w-1.5 bg-muted-foreground/20"
+            }`}
+          />
+        ))}
+      </div>
+
+      <style jsx>{`
+        @keyframes scanline {
+          0%, 100% { top: 10%; opacity: 0; }
+          10% { opacity: 1; }
+          50% { top: 85%; opacity: 1; }
+          60% { opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
 };
 
 const calcFirstYearDepreciation = (
@@ -379,34 +463,7 @@ export const ReceiptScanner = ({
           </div>
         )}
 
-        {step === "scanning" && (
-          <div className="flex flex-col items-center gap-4 py-10">
-            <div className="relative">
-              {previewUrl ? (
-                <img
-                  src={previewUrl}
-                  alt="Receipt being scanned"
-                  className="h-28 w-auto rounded-lg border border-border/50 object-cover opacity-60"
-                />
-              ) : (
-                <div className="flex h-28 w-20 items-center justify-center rounded-lg border border-border/50 bg-muted/20 opacity-60">
-                  <FileText className="h-8 w-8 text-muted-foreground/40" />
-                </div>
-              )}
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="rounded-full bg-background/80 p-3 backdrop-blur-sm">
-                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                </div>
-              </div>
-            </div>
-            <div className="text-center">
-              <p className="text-sm font-medium">Reading receipt...</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">
-                AI is extracting item details and checking claimability
-              </p>
-            </div>
-          </div>
-        )}
+        {step === "scanning" && <ScanningAnimation previewUrl={previewUrl} isPdf={isPdf} />}
 
         {step === "error" && (
           <div className="space-y-4">
@@ -469,12 +526,17 @@ export const ReceiptScanner = ({
 
             <div className="rounded-lg bg-muted/40 p-3">
               <div className="flex items-center gap-1.5">
-                <Info className="h-3.5 w-3.5 text-muted-foreground" />
-                <p className="text-[11px] font-medium text-muted-foreground">Claim advice</p>
+                <Sparkles className="h-3.5 w-3.5 text-primary" />
+                <p className="text-[11px] font-medium text-foreground">AI tax strategy</p>
               </div>
               <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
                 {scanResult.claimAdvice}
               </p>
+              {scanResult.depreciationExplanation && (
+                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground border-t border-border/30 pt-2">
+                  {scanResult.depreciationExplanation}
+                </p>
+              )}
             </div>
 
             {savingsTips.length > 0 && (
