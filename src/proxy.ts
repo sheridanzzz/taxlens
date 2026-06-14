@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { auth } from "@/lib/auth";
+import { getToken } from "next-auth/jwt";
 
 const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth/callback", "/api/auth"];
 
@@ -18,15 +18,15 @@ export const proxy = async (request: NextRequest) => {
       pathname === "/" ||
       PUBLIC_PATHS.some((p) => p !== "/" && pathname.startsWith(p));
 
-    const session = await auth();
+    const token = await getToken({ req: request, secret: process.env.AUTH_SECRET });
 
-    if (!session?.user && !isPublicPath) {
+    if (!token && !isPublicPath) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/login";
       return NextResponse.redirect(redirectUrl);
     }
 
-    if (session?.user && (pathname === "/login" || pathname === "/signup")) {
+    if (token && (pathname === "/login" || pathname === "/signup")) {
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/dashboard";
       return NextResponse.redirect(redirectUrl);
