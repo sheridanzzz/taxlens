@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn as nextAuthSignIn } from "next-auth/react";
 import { Eye, EyeOff, CheckCircle } from "lucide-react";
 import { LedgrLogo } from "@/components/LedgrLogo";
-import { createClient } from "@/lib/supabase/client";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured, isNeonConfigured } from "@/lib/env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,11 +14,14 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 const SignupPage = () => {
   const router = useRouter();
+  const cloudEnabled = isSupabaseConfigured() || isNeonConfigured();
+
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
+    if (!cloudEnabled) {
       router.replace("/");
     }
-  }, [router]);
+  }, [router, cloudEnabled]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -43,6 +46,26 @@ const SignupPage = () => {
 
     setLoading(true);
 
+    if (isNeonConfigured()) {
+      const result = await nextAuthSignIn("credentials", {
+        email,
+        password,
+        action: "signup",
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Account already exists or signup failed");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { error, data } = await supabase.auth.signUp({
       email,
@@ -61,11 +84,11 @@ const SignupPage = () => {
       return;
     }
 
-    router.push("/");
+    router.push("/dashboard");
     router.refresh();
   };
 
-  if (!isSupabaseConfigured()) {
+  if (!cloudEnabled) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -78,8 +101,8 @@ const SignupPage = () => {
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <div className="w-full max-w-sm space-y-6">
           <div className="flex flex-col items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-500/10">
-              <CheckCircle className="h-5 w-5 text-emerald-500" />
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <CheckCircle className="h-5 w-5 text-primary" />
             </div>
             <h1 className="text-lg font-semibold">Check your email</h1>
             <p className="text-center text-sm text-muted-foreground">

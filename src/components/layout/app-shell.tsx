@@ -11,11 +11,11 @@ const SHELL_BYPASS_PATHS = ["/login", "/signup", "/"];
 export const AppShell = ({ children }: { children: ReactNode }) => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const pathname = usePathname();
-  const { user, loading, supabaseEnabled } = useAuth();
+  const { user, loading, cloudEnabled } = useAuth();
 
   const isAuthPage = SHELL_BYPASS_PATHS.includes(pathname);
 
-  if (!supabaseEnabled) {
+  if (!cloudEnabled) {
     if (isAuthPage) {
       return <>{children}</>;
     }

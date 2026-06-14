@@ -1,6 +1,6 @@
-import { isSupabaseConfigured } from "./env";
+import { isSupabaseConfigured, isNeonConfigured } from "./env";
 import * as local from "./storage-local";
-import { createClient } from "@/lib/supabase/client";
+import * as neonActions from "./storage-actions";
 import type {
   Expense,
   DepreciatingAsset,
@@ -11,11 +11,21 @@ import type {
 } from "./types";
 import { DEFAULT_SETTINGS } from "./constants";
 
-const supabase = () => createClient();
+const useNeon = () => isNeonConfigured() && !isSupabaseConfigured();
 
-// ── Helpers for snake_case ↔ camelCase mapping (Supabase) ───────────
+// ── Lazy Supabase import (only when configured) ───────────────────
 
-const toExpense = (row: Record<string, unknown>): Expense => ({
+const supabase = () => {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { createClient } = require("@/lib/supabase/client");
+  return createClient();
+};
+
+// ── Supabase row mappers ──────────────────────────────────────────
+
+type Row = Record<string, unknown>;
+
+const toExpense = (row: Row): Expense => ({
   id: row.id as string,
   date: row.date as string,
   description: row.description as string,
@@ -46,7 +56,7 @@ const fromExpense = (e: Expense, userId: string) => ({
   created_at: e.createdAt,
 });
 
-const toAsset = (row: Record<string, unknown>): DepreciatingAsset => ({
+const toAsset = (row: Row): DepreciatingAsset => ({
   id: row.id as string,
   name: row.name as string,
   assetType: row.asset_type as DepreciatingAsset["assetType"],
@@ -73,7 +83,7 @@ const fromAsset = (a: DepreciatingAsset, userId: string) => ({
   created_at: a.createdAt,
 });
 
-const toWfhEntry = (row: Record<string, unknown>): WfhEntry => ({
+const toWfhEntry = (row: Row): WfhEntry => ({
   id: row.id as string,
   date: row.date as string,
   hours: Number(row.hours),
@@ -88,7 +98,7 @@ const fromWfhEntry = (e: WfhEntry, userId: string) => ({
   financial_year: e.financialYear,
 });
 
-const toWfhActualCost = (row: Record<string, unknown>): WfhActualCost => ({
+const toWfhActualCost = (row: Row): WfhActualCost => ({
   id: row.id as string,
   category: row.category as string,
   annualCost: Number(row.annual_cost),
@@ -105,7 +115,7 @@ const fromWfhActualCost = (c: WfhActualCost, userId: string) => ({
   financial_year: c.financialYear,
 });
 
-const toSettings = (row: Record<string, unknown>): UserSettings => ({
+const toSettings = (row: Row): UserSettings => ({
   financialYear: row.financial_year as FinancialYear,
   annualIncome: Number(row.annual_income),
   occupation: row.occupation as string,
@@ -126,7 +136,7 @@ const fromSettings = (s: UserSettings, userId: string) => ({
   depreciation_method: s.depreciationMethod,
 });
 
-const getUserId = async (): Promise<string> => {
+const getSupabaseUserId = async (): Promise<string> => {
   const { data } = await supabase().auth.getUser();
   if (!data.user) throw new Error("Not authenticated");
   return data.user.id;
@@ -135,9 +145,8 @@ const getUserId = async (): Promise<string> => {
 // ── Expenses ────────────────────────────────────────────────────────
 
 export const getExpenses = async (fy?: FinancialYear): Promise<Expense[]> => {
-  if (!isSupabaseConfigured()) {
-    return Promise.resolve(local.getExpenses(fy));
-  }
+  if (useNeon()) return neonActions.neonGetExpenses(fy);
+  if (!isSupabaseConfigured()) return Promise.resolve(local.getExpenses(fy));
   let query = supabase().from("expenses").select("*").order("date", { ascending: false });
   if (fy) query = query.eq("financial_year", fy);
   const { data } = await query;
@@ -145,30 +154,23 @@ export const getExpenses = async (fy?: FinancialYear): Promise<Expense[]> => {
 };
 
 export const saveExpense = async (expense: Expense): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.saveExpense(expense);
-    return;
-  }
-  const userId = await getUserId();
-  await supabase()
-    .from("expenses")
-    .upsert(fromExpense(expense, userId), { onConflict: "id" });
+  if (useNeon()) return neonActions.neonSaveExpense(expense);
+  if (!isSupabaseConfigured()) { local.saveExpense(expense); return; }
+  const userId = await getSupabaseUserId();
+  await supabase().from("expenses").upsert(fromExpense(expense, userId), { onConflict: "id" });
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.deleteExpense(id);
-    return;
-  }
+  if (useNeon()) return neonActions.neonDeleteExpense(id);
+  if (!isSupabaseConfigured()) { local.deleteExpense(id); return; }
   await supabase().from("expenses").delete().eq("id", id);
 };
 
 // ── Assets ──────────────────────────────────────────────────────────
 
 export const getAssets = async (fy?: FinancialYear): Promise<DepreciatingAsset[]> => {
-  if (!isSupabaseConfigured()) {
-    return Promise.resolve(local.getAssets(fy));
-  }
+  if (useNeon()) return neonActions.neonGetAssets(fy);
+  if (!isSupabaseConfigured()) return Promise.resolve(local.getAssets(fy));
   let query = supabase().from("assets").select("*").order("purchase_date", { ascending: false });
   if (fy) query = query.eq("financial_year", fy);
   const { data } = await query;
@@ -176,30 +178,23 @@ export const getAssets = async (fy?: FinancialYear): Promise<DepreciatingAsset[]
 };
 
 export const saveAsset = async (asset: DepreciatingAsset): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.saveAsset(asset);
-    return;
-  }
-  const userId = await getUserId();
-  await supabase()
-    .from("assets")
-    .upsert(fromAsset(asset, userId), { onConflict: "id" });
+  if (useNeon()) return neonActions.neonSaveAsset(asset);
+  if (!isSupabaseConfigured()) { local.saveAsset(asset); return; }
+  const userId = await getSupabaseUserId();
+  await supabase().from("assets").upsert(fromAsset(asset, userId), { onConflict: "id" });
 };
 
 export const deleteAsset = async (id: string): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.deleteAsset(id);
-    return;
-  }
+  if (useNeon()) return neonActions.neonDeleteAsset(id);
+  if (!isSupabaseConfigured()) { local.deleteAsset(id); return; }
   await supabase().from("assets").delete().eq("id", id);
 };
 
 // ── WFH Entries ─────────────────────────────────────────────────────
 
 export const getWfhEntries = async (fy?: FinancialYear): Promise<WfhEntry[]> => {
-  if (!isSupabaseConfigured()) {
-    return Promise.resolve(local.getWfhEntries(fy));
-  }
+  if (useNeon()) return neonActions.neonGetWfhEntries(fy);
+  if (!isSupabaseConfigured()) return Promise.resolve(local.getWfhEntries(fy));
   let query = supabase().from("wfh_entries").select("*").order("date", { ascending: false });
   if (fy) query = query.eq("financial_year", fy);
   const { data } = await query;
@@ -207,30 +202,23 @@ export const getWfhEntries = async (fy?: FinancialYear): Promise<WfhEntry[]> => 
 };
 
 export const saveWfhEntry = async (entry: WfhEntry): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.saveWfhEntry(entry);
-    return;
-  }
-  const userId = await getUserId();
-  await supabase()
-    .from("wfh_entries")
-    .upsert(fromWfhEntry(entry, userId), { onConflict: "id" });
+  if (useNeon()) return neonActions.neonSaveWfhEntry(entry);
+  if (!isSupabaseConfigured()) { local.saveWfhEntry(entry); return; }
+  const userId = await getSupabaseUserId();
+  await supabase().from("wfh_entries").upsert(fromWfhEntry(entry, userId), { onConflict: "id" });
 };
 
 export const deleteWfhEntry = async (id: string): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.deleteWfhEntry(id);
-    return;
-  }
+  if (useNeon()) return neonActions.neonDeleteWfhEntry(id);
+  if (!isSupabaseConfigured()) { local.deleteWfhEntry(id); return; }
   await supabase().from("wfh_entries").delete().eq("id", id);
 };
 
 // ── WFH Actual Costs ────────────────────────────────────────────────
 
 export const getWfhActualCosts = async (fy?: FinancialYear): Promise<WfhActualCost[]> => {
-  if (!isSupabaseConfigured()) {
-    return Promise.resolve(local.getWfhActualCosts(fy));
-  }
+  if (useNeon()) return neonActions.neonGetWfhActualCosts(fy);
+  if (!isSupabaseConfigured()) return Promise.resolve(local.getWfhActualCosts(fy));
   let query = supabase().from("wfh_actual_costs").select("*");
   if (fy) query = query.eq("financial_year", fy);
   const { data } = await query;
@@ -238,55 +226,38 @@ export const getWfhActualCosts = async (fy?: FinancialYear): Promise<WfhActualCo
 };
 
 export const saveWfhActualCost = async (cost: WfhActualCost): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.saveWfhActualCost(cost);
-    return;
-  }
-  const userId = await getUserId();
-  await supabase()
-    .from("wfh_actual_costs")
-    .upsert(fromWfhActualCost(cost, userId), { onConflict: "id" });
+  if (useNeon()) return neonActions.neonSaveWfhActualCost(cost);
+  if (!isSupabaseConfigured()) { local.saveWfhActualCost(cost); return; }
+  const userId = await getSupabaseUserId();
+  await supabase().from("wfh_actual_costs").upsert(fromWfhActualCost(cost, userId), { onConflict: "id" });
 };
 
 export const deleteWfhActualCost = async (id: string): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.deleteWfhActualCost(id);
-    return;
-  }
+  if (useNeon()) return neonActions.neonDeleteWfhActualCost(id);
+  if (!isSupabaseConfigured()) { local.deleteWfhActualCost(id); return; }
   await supabase().from("wfh_actual_costs").delete().eq("id", id);
 };
 
 // ── Settings ────────────────────────────────────────────────────────
 
 export const getSettings = async (): Promise<UserSettings> => {
-  if (!isSupabaseConfigured()) {
-    return Promise.resolve(local.getSettings());
-  }
-  const { data } = await supabase()
-    .from("user_settings")
-    .select("*")
-    .maybeSingle();
+  if (useNeon()) return neonActions.neonGetSettings();
+  if (!isSupabaseConfigured()) return Promise.resolve(local.getSettings());
+  const { data } = await supabase().from("user_settings").select("*").maybeSingle();
   if (!data) return DEFAULT_SETTINGS;
   return toSettings(data);
 };
 
 export const saveSettings = async (settings: UserSettings): Promise<void> => {
-  if (!isSupabaseConfigured()) {
-    local.saveSettings(settings);
-    return;
-  }
-  const userId = await getUserId();
-  await supabase()
-    .from("user_settings")
-    .upsert(fromSettings(settings, userId), { onConflict: "user_id" });
+  if (useNeon()) return neonActions.neonSaveSettings(settings);
+  if (!isSupabaseConfigured()) { local.saveSettings(settings); return; }
+  const userId = await getSupabaseUserId();
+  await supabase().from("user_settings").upsert(fromSettings(settings, userId), { onConflict: "user_id" });
 };
 
 // ── Export / Import / Clear ─────────────────────────────────────────
 
 export const exportAllData = async (): Promise<string> => {
-  if (!isSupabaseConfigured()) {
-    return Promise.resolve(local.exportAllData());
-  }
   const [expenses, assets, wfhEntries, wfhActualCosts, settings] =
     await Promise.all([
       getExpenses(),
@@ -303,26 +274,16 @@ export const exportAllData = async (): Promise<string> => {
 };
 
 export const importAllData = async (json: string): Promise<boolean> => {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() && !useNeon()) {
     return Promise.resolve(local.importAllData(json));
   }
   try {
     const data = JSON.parse(json);
-    if (data.expenses) {
-      for (const e of data.expenses) await saveExpense(e);
-    }
-    if (data.assets) {
-      for (const a of data.assets) await saveAsset(a);
-    }
-    if (data.wfhEntries) {
-      for (const e of data.wfhEntries) await saveWfhEntry(e);
-    }
-    if (data.wfhActualCosts) {
-      for (const c of data.wfhActualCosts) await saveWfhActualCost(c);
-    }
-    if (data.settings) {
-      await saveSettings(data.settings);
-    }
+    if (data.expenses) for (const e of data.expenses) await saveExpense(e);
+    if (data.assets) for (const a of data.assets) await saveAsset(a);
+    if (data.wfhEntries) for (const e of data.wfhEntries) await saveWfhEntry(e);
+    if (data.wfhActualCosts) for (const c of data.wfhActualCosts) await saveWfhActualCost(c);
+    if (data.settings) await saveSettings(data.settings);
     return true;
   } catch {
     return false;
@@ -330,17 +291,21 @@ export const importAllData = async (json: string): Promise<boolean> => {
 };
 
 export const clearAllData = async (): Promise<void> => {
-  if (!isSupabaseConfigured()) {
+  if (!isSupabaseConfigured() && !useNeon()) {
     local.clearAllData();
     return;
   }
-  const userId = await getUserId();
+  // For cloud backends, delete all user data by clearing each table
+  const [expenses, assets, wfhEntries, wfhActualCosts] = await Promise.all([
+    getExpenses(),
+    getAssets(),
+    getWfhEntries(),
+    getWfhActualCosts(),
+  ]);
   await Promise.all([
-    supabase().from("expenses").delete().eq("user_id", userId),
-    supabase().from("assets").delete().eq("user_id", userId),
-    supabase().from("wfh_entries").delete().eq("user_id", userId),
-    supabase().from("wfh_actual_costs").delete().eq("user_id", userId),
-    supabase().from("user_settings").delete().eq("user_id", userId),
+    ...expenses.map((e) => deleteExpense(e.id)),
+    ...assets.map((a) => deleteAsset(a.id)),
+    ...wfhEntries.map((e) => deleteWfhEntry(e.id)),
+    ...wfhActualCosts.map((c) => deleteWfhActualCost(c.id)),
   ]);
 };
-

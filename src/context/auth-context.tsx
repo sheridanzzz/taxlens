@@ -8,29 +8,24 @@ import {
   useCallback,
   type ReactNode,
 } from "react";
+import { useSession, signOut as nextAuthSignOut } from "next-auth/react";
 import type { User } from "@supabase/supabase-js";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured, isNeonConfigured } from "@/lib/env";
 
 interface AuthContextValue {
-  user: User | null;
+  user: { id: string; email: string } | null;
   loading: boolean;
-  /** When false, app uses localStorage only; no login required. */
-  supabaseEnabled: boolean;
+  cloudEnabled: boolean;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-export const AuthProvider = ({ children }: { children: ReactNode }) => {
+const SupabaseAuthInner = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
-      setLoading(false);
-      return;
-    }
-
     const init = async () => {
       const { createClient } = await import("@/lib/supabase/client");
       const supabase = createClient();
@@ -55,7 +50,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const signOut = useCallback(async () => {
-    if (!isSupabaseConfigured()) return;
     const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     await supabase.auth.signOut();
@@ -63,18 +57,55 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     window.location.href = "/login";
   }, []);
 
+  const mapped = user ? { id: user.id, email: user.email ?? "" } : null;
+
   return (
     <AuthContext.Provider
-      value={{
-        user,
-        loading,
-        supabaseEnabled: isSupabaseConfigured(),
-        signOut,
-      }}
+      value={{ user: mapped, loading, cloudEnabled: true, signOut }}
     >
       {children}
     </AuthContext.Provider>
   );
+};
+
+const NeonAuthInner = ({ children }: { children: ReactNode }) => {
+  const { data: session, status } = useSession();
+  const loading = status === "loading";
+  const user = session?.user
+    ? { id: session.user.id ?? "", email: session.user.email ?? "" }
+    : null;
+
+  const signOut = useCallback(async () => {
+    await nextAuthSignOut({ redirectTo: "/login" });
+  }, []);
+
+  return (
+    <AuthContext.Provider value={{ user, loading, cloudEnabled: true, signOut }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+const LocalAuthInner = ({ children }: { children: ReactNode }) => {
+  const signOut = useCallback(async () => {}, []);
+
+  return (
+    <AuthContext.Provider
+      value={{ user: null, loading: false, cloudEnabled: false, signOut }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  if (isSupabaseConfigured()) {
+    return <SupabaseAuthInner>{children}</SupabaseAuthInner>;
+  }
+  if (isNeonConfigured()) {
+    return <NeonAuthInner>{children}</NeonAuthInner>;
+  }
+  return <LocalAuthInner>{children}</LocalAuthInner>;
 };
 
 export const useAuth = (): AuthContextValue => {

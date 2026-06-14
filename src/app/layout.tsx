@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans, IBM_Plex_Serif, IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/theme-provider";
+import { AuthSessionProvider } from "@/components/providers/session-provider";
 import { AuthProvider } from "@/context/auth-context";
 import { TaxProvider } from "@/context/tax-context";
 import { AppShell } from "@/components/layout/app-shell";
@@ -45,15 +46,17 @@ const RootLayout = ({
         className={`${ibmPlexSans.variable} ${ibmPlexSerif.variable} ${ibmPlexMono.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
-        <ThemeProvider>
-          <TooltipProvider>
-            <AuthProvider>
-              <TaxProvider>
-                <AppShell>{children}</AppShell>
-              </TaxProvider>
-            </AuthProvider>
-          </TooltipProvider>
-        </ThemeProvider>
+        <AuthSessionProvider>
+          <ThemeProvider>
+            <TooltipProvider>
+              <AuthProvider>
+                <TaxProvider>
+                  <AppShell>{children}</AppShell>
+                </TaxProvider>
+              </AuthProvider>
+            </TooltipProvider>
+          </ThemeProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

@@ -82,7 +82,7 @@ const InfoTip = ({ content }: InfoTipProps) => (
 
 const SettingsPage = () => {
   const { state, updateSettings, refreshData } = useTax();
-  const { user, signOut, supabaseEnabled } = useAuth();
+  const { user, signOut, cloudEnabled } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -170,7 +170,7 @@ const SettingsPage = () => {
         </p>
       </div>
 
-      {supabaseEnabled ? (
+      {cloudEnabled ? (
         <Card className="border-border/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-sm">Account</CardTitle>

@@ -3,10 +3,10 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { signIn as nextAuthSignIn } from "next-auth/react";
 import { Eye, EyeOff } from "lucide-react";
 import { LedgrLogo } from "@/components/LedgrLogo";
-import { createClient } from "@/lib/supabase/client";
-import { isSupabaseConfigured } from "@/lib/env";
+import { isSupabaseConfigured, isNeonConfigured } from "@/lib/env";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,18 +14,21 @@ import { Card, CardContent, CardHeader } from "@/components/ui/card";
 
 const LoginPage = () => {
   const router = useRouter();
+  const cloudEnabled = isSupabaseConfigured() || isNeonConfigured();
+
   useEffect(() => {
-    if (!isSupabaseConfigured()) {
+    if (!cloudEnabled) {
       router.replace("/");
     }
-  }, [router]);
+  }, [router, cloudEnabled]);
+
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  if (!isSupabaseConfigured()) {
+  if (!cloudEnabled) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
@@ -38,6 +41,25 @@ const LoginPage = () => {
     setError("");
     setLoading(true);
 
+    if (isNeonConfigured()) {
+      const result = await nextAuthSignIn("credentials", {
+        email,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError("Invalid email or password");
+        setLoading(false);
+        return;
+      }
+
+      router.push("/dashboard");
+      router.refresh();
+      return;
+    }
+
+    const { createClient } = await import("@/lib/supabase/client");
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithPassword({
       email,
@@ -50,7 +72,7 @@ const LoginPage = () => {
       return;
     }
 
-    router.push("/");
+    router.push("/dashboard");
     router.refresh();
   };
 

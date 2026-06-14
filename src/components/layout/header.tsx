@@ -50,7 +50,7 @@ interface HeaderProps {
 export const Header = ({ onMenuClick }: HeaderProps) => {
   const { theme, setTheme } = useTheme();
   const { state, updateSettings } = useTax();
-  const { user, signOut, supabaseEnabled } = useAuth();
+  const { user, signOut, cloudEnabled } = useAuth();
   const pathname = usePathname();
 
   const pageTitle = PAGE_TITLES[pathname] || "Ledgr";
@@ -127,7 +127,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
           <IconPlus /> Add expense
         </Link>
 
-        {!supabaseEnabled ? (
+        {!cloudEnabled ? (
           <span className="ring-card hidden items-center gap-2 rounded-full bg-background px-3 py-1.5 text-[12px] font-semibold text-muted-foreground sm:inline-flex">
             <IconLock /> Local
           </span>

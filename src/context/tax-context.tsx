@@ -101,10 +101,10 @@ const emptySummary: TaxSummary = {
 
 export const TaxProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(taxReducer, initialState);
-  const { user, supabaseEnabled } = useAuth();
+  const { user, cloudEnabled } = useAuth();
 
   const loadAll = useCallback(async () => {
-    if (supabaseEnabled && !user) return;
+    if (cloudEnabled && !user) return;
     const settings = await storage.getSettings();
     const fy = settings.financialYear;
     const [expenses, assets, wfhEntries, wfhActualCosts] = await Promise.all([
@@ -117,7 +117,7 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
       type: "LOAD_ALL",
       payload: { settings, expenses, assets, wfhEntries, wfhActualCosts },
     });
-  }, [user, supabaseEnabled]);
+  }, [user, cloudEnabled]);
 
   useEffect(() => {
     loadAll();
