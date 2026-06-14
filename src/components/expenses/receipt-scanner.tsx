@@ -53,15 +53,45 @@ interface ReceiptScannerProps {
   onExpenseCreated: () => void;
 }
 
-const fileToBase64 = (file: File): Promise<string> =>
+const MAX_IMAGE_DIMENSION = 1024;
+const JPEG_QUALITY = 0.8;
+
+const compressImage = (file: File): Promise<{ base64: string; mimeType: string }> =>
   new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      resolve(result.split(",")[1]);
+    if (file.type === "application/pdf") {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        resolve({ base64: result.split(",")[1], mimeType: "application/pdf" });
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let { width, height } = img;
+      if (width > MAX_IMAGE_DIMENSION || height > MAX_IMAGE_DIMENSION) {
+        const scale = MAX_IMAGE_DIMENSION / Math.max(width, height);
+        width = Math.round(width * scale);
+        height = Math.round(height * scale);
+      }
+      const canvas = document.createElement("canvas");
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(img, 0, 0, width, height);
+      const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+      resolve({ base64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
     };
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Failed to load image"));
+    };
+    img.src = url;
   });
 
 const calcFirstYearDepreciation = (
@@ -191,14 +221,13 @@ export const ReceiptScanner = ({
       if (!file) return;
 
       try {
-        const base64 = await fileToBase64(file);
-        const fileMimeType = file.type || "application/octet-stream";
-        const isFilePdf = fileMimeType === "application/pdf";
+        const { base64, mimeType } = await compressImage(file);
+        const isFilePdf = file.type === "application/pdf";
 
         setIsPdf(isFilePdf);
-        setPreviewUrl(isFilePdf ? null : `data:${fileMimeType};base64,${base64}`);
+        setPreviewUrl(isFilePdf ? null : `data:${mimeType};base64,${base64}`);
 
-        handleScan({ base64, mimeType: fileMimeType });
+        handleScan({ base64, mimeType });
       } catch {
         setErrorMessage("Could not read file. Please try a different format.");
         setStep("error");
