@@ -176,6 +176,53 @@ export const getCategoryBreakdown = (
     .sort((a, b) => b.amount - a.amount);
 };
 
+export const MONTH_LABELS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
+
+// Deductions bucketed per FY month (Jul..Jun). Full-claim expenses and WFH
+// at their entry date; asset depreciation at purchase month (prior-year
+// purchases land in Jul, the start of the FY the claim accrues from).
+export const getMonthlyDeductionTotals = (
+  expenses: Expense[],
+  assets: DepreciatingAsset[],
+  wfhEntries: WfhEntry[],
+  wfhMethod: "fixed_rate" | "actual_cost",
+  financialYear: FinancialYear
+): { month: string; key: string; amount: number }[] => {
+  const startYear = Number(financialYear.slice(0, 4));
+  const keys = MONTH_LABELS.map((_, i) => {
+    const m = ((i + 6) % 12) + 1;
+    const y = m >= 7 ? startYear : startYear + 1;
+    return `${y}-${String(m).padStart(2, "0")}`;
+  });
+
+  const totals = new Map(keys.map((k) => [k, 0]));
+  for (const e of expenses) {
+    if (e.claimType !== "full") continue;
+    const k = e.date.slice(0, 7);
+    if (totals.has(k)) totals.set(k, totals.get(k)! + e.claimableAmount);
+  }
+  if (wfhMethod === "fixed_rate") {
+    for (const w of wfhEntries) {
+      const k = w.date.slice(0, 7);
+      if (totals.has(k))
+        totals.set(k, totals.get(k)! + w.hours * WFH_FIXED_RATE_PER_HOUR);
+    }
+  }
+  for (const a of assets) {
+    const yearDeduction = calculateCurrentYearDepreciation(a, financialYear);
+    if (yearDeduction <= 0) continue;
+    const purchaseKey = a.purchaseDate.slice(0, 7);
+    const k = totals.has(purchaseKey) ? purchaseKey : keys[0];
+    totals.set(k, totals.get(k)! + yearDeduction);
+  }
+
+  return keys.map((key, i) => ({
+    month: MONTH_LABELS[i],
+    key,
+    amount: Math.round(totals.get(key)! * 100) / 100,
+  }));
+};
+
 export const formatCurrency = (amount: number): string => {
   return new Intl.NumberFormat("en-AU", {
     style: "currency",
