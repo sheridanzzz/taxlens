@@ -3,6 +3,7 @@
 import { motion, useReducedMotion } from "motion/react";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
+import { calculateCurrentYearDepreciation } from "@/lib/depreciation";
 import { WFH_FIXED_RATE_PER_HOUR } from "@/lib/constants";
 import { cardHover } from "@/lib/animations";
 
@@ -33,6 +34,18 @@ export const MonthlyTrend = () => {
         totals.set(k, totals.get(k)! + w.hours * WFH_FIXED_RATE_PER_HOUR);
     }
   }
+  for (const a of state.assets) {
+    const yearDeduction = calculateCurrentYearDepreciation(
+      a,
+      state.settings.financialYear
+    );
+    if (yearDeduction <= 0) continue;
+    // ponytail: this FY's depreciation shown at purchase month; assets bought
+    // in earlier years land in Jul (start of the FY the claim accrues from)
+    const purchaseKey = a.purchaseDate.slice(0, 7);
+    const k = totals.has(purchaseKey) ? purchaseKey : keys[0];
+    totals.set(k, totals.get(k)! + yearDeduction);
+  }
 
   const values = keys.map((k) => totals.get(k)!);
   const max = Math.max(...values);
@@ -55,7 +68,7 @@ export const MonthlyTrend = () => {
 
       {max === 0 ? (
         <p className="mt-4 text-[13px] text-muted-foreground">
-          Add expenses or WFH hours to see your monthly trend
+          Add expenses, assets or WFH hours to see your monthly trend
         </p>
       ) : (
         <div className="mt-4 grid grid-cols-12 items-end gap-1.5 sm:gap-2">
