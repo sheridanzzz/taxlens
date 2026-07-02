@@ -29,6 +29,22 @@ import { useTax } from "@/context/tax-context";
 import { EXPENSE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD } from "@/lib/constants";
 import type { Expense, ExpenseCategory, ClaimType } from "@/lib/types";
 
+// ponytail: no recurrence engine — monthly subs expand into plain expense
+// rows at save time, one per month until the FY ends (30 Jun)
+const monthlyDates = (startIso: string, fy: string): string[] => {
+  const end = `${Number(fy.slice(0, 4)) + 1}-06-30`;
+  const [y, m, d] = startIso.split("-").map(Number);
+  const dates: string[] = [];
+  for (let i = 0; ; i++) {
+    let dt = new Date(y, m - 1 + i, d);
+    if (dt.getDate() !== d) dt = new Date(y, m + i, 0); // clamp to month end
+    const iso = `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, "0")}-${String(dt.getDate()).padStart(2, "0")}`;
+    if (iso > end) break;
+    dates.push(iso);
+  }
+  return dates;
+};
+
 interface ExpenseFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -51,6 +67,7 @@ export const ExpenseForm = ({
   const [workUsePercent, setWorkUsePercent] = useState("100");
   const [notes, setNotes] = useState("");
   const [receiptDataUrl, setReceiptDataUrl] = useState<string | undefined>();
+  const [monthly, setMonthly] = useState(false);
 
   useEffect(() => {
     if (editingExpense) {
@@ -76,6 +93,7 @@ export const ExpenseForm = ({
     setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
     setNotes("");
     setReceiptDataUrl(undefined);
+    setMonthly(false);
   };
 
   useEffect(() => {
@@ -132,6 +150,17 @@ export const ExpenseForm = ({
 
     if (editingExpense) {
       await updateExpense(expense);
+    } else if (monthly && claimType === "full") {
+      const dates = monthlyDates(date, state.settings.financialYear);
+      for (let i = 0; i < dates.length; i++) {
+        await addExpense({
+          ...expense,
+          id: i === 0 ? expense.id : uuidv4(),
+          date: dates[i],
+          // receipt on the first entry only — one invoice is the evidence
+          receiptDataUrl: i === 0 ? receiptDataUrl : undefined,
+        });
+      }
     } else {
       await addExpense(expense);
     }
@@ -186,6 +215,28 @@ export const ExpenseForm = ({
               />
             </div>
           </div>
+
+          {!editingExpense && claimType === "full" && (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={monthly}
+                onChange={(e) => setMonthly(e.target.checked)}
+                className="h-4 w-4 accent-primary"
+              />
+              <span>
+                Repeats monthly (subscription) — adds an entry each month
+                until 30 Jun
+                {monthly && date && (
+                  <span className="text-foreground">
+                    {" "}
+                    · {monthlyDates(date, state.settings.financialYear).length}{" "}
+                    entries
+                  </span>
+                )}
+              </span>
+            </label>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="expense-category">Category</Label>
