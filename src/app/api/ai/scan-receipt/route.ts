@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { chatViaOpenRouter, isOpenRouterConfigured } from "@/lib/openrouter";
-import { chatViaGemini, isGeminiConfigured } from "@/lib/gemini";
+import { generateText } from "ai";
+import { getModel, type ModelKey } from "@/lib/ai-providers";
 import {
   EXPENSE_CATEGORIES,
   INSTANT_DEDUCTION_THRESHOLD,
@@ -62,13 +62,6 @@ Rules:
 - Return ONLY valid JSON, no markdown fences or extra text`;
 
 export async function POST(request: NextRequest) {
-  if (!isOpenRouterConfigured() && !isGeminiConfigured()) {
-    return NextResponse.json(
-      { error: "AI receipt scanning is not configured on the server." },
-      { status: 503 }
-    );
-  }
-
   let body: { base64: string; mimeType: string; occupation: string };
   try {
     body = await request.json();
@@ -84,109 +77,114 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  try {
-    const prompt = buildPrompt(occupation);
+  const prompt = buildPrompt(occupation);
+  const modelsToTry: ModelKey[] = ["primary", "quality", "fallback", "budget"];
 
-    let text: string;
+  let text: string | undefined;
 
-    if (isOpenRouterConfigured()) {
-      try {
-        const messages = [
+  for (const modelKey of modelsToTry) {
+    try {
+      const result = await generateText({
+        model: getModel(modelKey),
+        messages: [
           {
-            role: "user" as const,
+            role: "user",
             content: [
               { type: "text", text: prompt },
               {
-                type: "image_url",
-                image_url: { url: `data:${mimeType};base64,${base64}` },
+                type: "image",
+                image: `data:${mimeType};base64,${base64}`,
               },
             ],
           },
-        ];
-        text = await chatViaOpenRouter(messages);
-      } catch (openRouterError) {
-        console.warn("OpenRouter failed, trying Gemini fallback:", openRouterError);
-        if (!isGeminiConfigured()) throw openRouterError;
-        text = await chatViaGemini(prompt, base64, mimeType);
-      }
-    } else {
-      text = await chatViaGemini(prompt, base64, mimeType);
+        ],
+        maxOutputTokens: 2000,
+        maxRetries: 1,
+      });
+      text = result.text;
+      break;
+    } catch (error) {
+      console.warn(`AI model "${modelKey}" failed:`, error instanceof Error ? error.message : error);
+      continue;
     }
-
-    const stripped = text
-      .replace(/```(?:json)?\s*/gi, "")
-      .replace(/```/g, "")
-      .trim();
-
-    const jsonMatch = stripped.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      return NextResponse.json(
-        { error: "AI returned unparseable response. Try again." },
-        { status: 502 }
-      );
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let parsed: any;
-    try {
-      parsed = JSON.parse(jsonMatch[0]);
-    } catch {
-      return NextResponse.json(
-        { error: "AI returned malformed JSON. Try again." },
-        { status: 502 }
-      );
-    }
-
-    const category: ExpenseCategory = VALID_CATEGORIES.includes(parsed.suggestedCategory)
-      ? parsed.suggestedCategory
-      : "other";
-
-    const amount =
-      typeof parsed.amount === "number"
-        ? parsed.amount
-        : parseFloat(parsed.amount) || 0;
-    const isDepreciation = amount > INSTANT_DEDUCTION_THRESHOLD;
-
-    const assetType: AssetType = VALID_ASSET_TYPES.includes(parsed.suggestedAssetType)
-      ? parsed.suggestedAssetType
-      : "other";
-
-    const effectiveLife =
-      typeof parsed.suggestedEffectiveLife === "number" && parsed.suggestedEffectiveLife > 0
-        ? parsed.suggestedEffectiveLife
-        : ASSET_EFFECTIVE_LIVES[assetType].years;
-
-    const depMethod: DepreciationMethod =
-      parsed.suggestedDepreciationMethod === "prime_cost" ? "prime_cost" : "diminishing";
-
-    const result: ReceiptScanResult = {
-      itemName: parsed.itemName || "Unknown Item",
-      amount,
-      date:
-        parsed.date && parsed.date !== "unknown"
-          ? parsed.date
-          : new Date().toISOString().split("T")[0],
-      storeName: parsed.storeName || "Unknown",
-      suggestedCategory: category,
-      claimType: isDepreciation ? "depreciation" : "full",
-      isRelevantToOccupation: !!parsed.isRelevantToOccupation,
-      relevanceExplanation: parsed.relevanceExplanation || "",
-      claimAdvice: parsed.claimAdvice || "",
-      suggestedWorkUsePercent:
-        typeof parsed.suggestedWorkUsePercent === "number"
-          ? parsed.suggestedWorkUsePercent
-          : 100,
-      rawItems: Array.isArray(parsed.rawItems) ? parsed.rawItems : [],
-      suggestedAssetType: isDepreciation ? assetType : undefined,
-      suggestedEffectiveLife: isDepreciation ? effectiveLife : undefined,
-      suggestedDepreciationMethod: isDepreciation ? depMethod : undefined,
-      depreciationExplanation: isDepreciation ? (parsed.depreciationExplanation || "") : undefined,
-    };
-
-    return NextResponse.json(result);
-  } catch (error) {
-    console.error("Receipt scan failed:", error);
-    const message = error instanceof Error ? error.message : "Unknown error";
-    return NextResponse.json({ error: message }, { status: 500 });
   }
+
+  if (!text) {
+    return NextResponse.json(
+      { error: "All AI models unavailable. Please try again later." },
+      { status: 503 }
+    );
+  }
+
+  const stripped = text
+    .replace(/```(?:json)?\s*/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  const jsonMatch = stripped.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) {
+    return NextResponse.json(
+      { error: "AI returned unparseable response. Try again." },
+      { status: 502 }
+    );
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let parsed: any;
+  try {
+    parsed = JSON.parse(jsonMatch[0]);
+  } catch {
+    return NextResponse.json(
+      { error: "AI returned malformed JSON. Try again." },
+      { status: 502 }
+    );
+  }
+
+  const category: ExpenseCategory = VALID_CATEGORIES.includes(parsed.suggestedCategory)
+    ? parsed.suggestedCategory
+    : "other";
+
+  const amount =
+    typeof parsed.amount === "number"
+      ? parsed.amount
+      : parseFloat(parsed.amount) || 0;
+  const isDepreciation = amount > INSTANT_DEDUCTION_THRESHOLD;
+
+  const assetType: AssetType = VALID_ASSET_TYPES.includes(parsed.suggestedAssetType)
+    ? parsed.suggestedAssetType
+    : "other";
+
+  const effectiveLife =
+    typeof parsed.suggestedEffectiveLife === "number" && parsed.suggestedEffectiveLife > 0
+      ? parsed.suggestedEffectiveLife
+      : ASSET_EFFECTIVE_LIVES[assetType].years;
+
+  const depMethod: DepreciationMethod =
+    parsed.suggestedDepreciationMethod === "prime_cost" ? "prime_cost" : "diminishing";
+
+  const result: ReceiptScanResult = {
+    itemName: parsed.itemName || "Unknown Item",
+    amount,
+    date:
+      parsed.date && parsed.date !== "unknown"
+        ? parsed.date
+        : new Date().toISOString().split("T")[0],
+    storeName: parsed.storeName || "Unknown",
+    suggestedCategory: category,
+    claimType: isDepreciation ? "depreciation" : "full",
+    isRelevantToOccupation: !!parsed.isRelevantToOccupation,
+    relevanceExplanation: parsed.relevanceExplanation || "",
+    claimAdvice: parsed.claimAdvice || "",
+    suggestedWorkUsePercent:
+      typeof parsed.suggestedWorkUsePercent === "number"
+        ? parsed.suggestedWorkUsePercent
+        : 100,
+    rawItems: Array.isArray(parsed.rawItems) ? parsed.rawItems : [],
+    suggestedAssetType: isDepreciation ? assetType : undefined,
+    suggestedEffectiveLife: isDepreciation ? effectiveLife : undefined,
+    suggestedDepreciationMethod: isDepreciation ? depMethod : undefined,
+    depreciationExplanation: isDepreciation ? (parsed.depreciationExplanation || "") : undefined,
+  };
+
+  return NextResponse.json(result);
 }
