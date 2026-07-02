@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { DeductionChart } from "@/components/dashboard/deduction-chart";
 import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
+import { Onboarding } from "@/components/onboarding";
 import { RecentExpenses } from "@/components/dashboard/recent-expenses";
 import { TaxBreakdown } from "@/components/dashboard/tax-breakdown";
 import { useTax } from "@/context/tax-context";
@@ -27,6 +28,8 @@ const DashboardPage = () => {
       animate={fadeInUp.animate}
       transition={fadeInUp.transition}
     >
+      <Onboarding />
+
       <SummaryCards />
 
       <div className="grid gap-4 lg:grid-cols-2">
