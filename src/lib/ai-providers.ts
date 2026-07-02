@@ -12,7 +12,8 @@ const groq = createGroq({
 
 export const models = {
   primary: google("gemini-3.5-flash"),
-  quality: groq("llama-3.3-70b-versatile"),
+  // ponytail: must be a vision model — receipt scans send images
+  quality: groq("meta-llama/llama-4-scout-17b-16e-instruct"),
   fallback: google("gemini-3.1-flash-lite"),
   budget: google("gemma-4-31b-it"),
 } as const;
