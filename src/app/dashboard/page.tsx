@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import { SummaryCards } from "@/components/dashboard/summary-cards";
 import { DeductionChart } from "@/components/dashboard/deduction-chart";
+import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
 import { RecentExpenses } from "@/components/dashboard/recent-expenses";
 import { TaxBreakdown } from "@/components/dashboard/tax-breakdown";
 import { useTax } from "@/context/tax-context";
@@ -32,6 +33,8 @@ const DashboardPage = () => {
         <DeductionChart />
         <TaxBreakdown />
       </div>
+
+      <MonthlyTrend />
 
       <RecentExpenses />
     </motion.div>

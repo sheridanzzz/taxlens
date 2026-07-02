@@ -7,7 +7,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { calculateCurrentYearDepreciation } from "@/lib/depreciation";
-import { EXPENSE_CATEGORIES, ASSET_EFFECTIVE_LIVES } from "@/lib/constants";
+import { EXPENSE_CATEGORIES, ASSET_EFFECTIVE_LIVES, TAX_BRACKETS } from "@/lib/constants";
 import { AnimatedNumber } from "@/components/AnimatedNumber";
 import { cardHover } from "@/lib/animations";
 
@@ -87,6 +87,16 @@ export const TaxBreakdown = () => {
       ? Math.round((summary.estimatedTaxSaved / summary.totalDeductions) * 100)
       : 0;
 
+  const brackets = TAX_BRACKETS[fy];
+  const bracketIndex = brackets.findIndex(
+    (b) => summary.taxableIncome >= b.min && summary.taxableIncome <= b.max
+  );
+  const bracket = brackets[bracketIndex];
+  // ponytail: linear scale capped for display; income above cap just pins right
+  const scaleCap = Math.max(200000, summary.taxableIncome * 1.05);
+  const dropAmount =
+    bracketIndex > 0 ? summary.taxableIncome - bracket.min + 1 : 0;
+
   return (
     <motion.div
       className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card"
@@ -159,6 +169,36 @@ export const TaxBreakdown = () => {
             </div>
           </details>
         )}
+
+        <div className="space-y-1.5">
+          <div className="flex justify-between text-[11px] text-muted-foreground">
+            <span>Tax bracket</span>
+            <span className="stat-number">{bracket.rate * 100}% marginal</span>
+          </div>
+          <div className="flex h-[5px] gap-px overflow-hidden rounded-full">
+            {brackets.map((b, i) => {
+              const width =
+                ((Math.min(b.max, scaleCap) - b.min) / scaleCap) * 100;
+              if (width <= 0) return null;
+              return (
+                <div
+                  key={b.min}
+                  className={
+                    i === bracketIndex
+                      ? "bg-primary"
+                      : "bg-secondary dark:bg-white/5"
+                  }
+                  style={{ width: `${width}%` }}
+                />
+              );
+            })}
+          </div>
+          <p className="text-[10px] text-muted-foreground">
+            {bracketIndex > 0
+              ? `${formatCurrency(dropAmount)} more in deductions would drop you into the ${brackets[bracketIndex - 1].rate * 100}% bracket`
+              : "You're in the tax-free bracket"}
+          </p>
+        </div>
 
         <div className="space-y-1.5">
           <div className="flex justify-between text-[11px] text-muted-foreground">
