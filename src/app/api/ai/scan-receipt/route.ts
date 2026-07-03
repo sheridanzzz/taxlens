@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
         maxRetries: 1,
       });
       text = result.text;
+      console.log(`receipt scanned by model "${modelKey}"`);
       break;
     } catch (error) {
       console.warn(`AI model "${modelKey}" failed:`, error instanceof Error ? error.message : error);
