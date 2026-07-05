@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion, useReducedMotion } from "motion/react";
 import { useTax } from "@/context/tax-context";
 import { getCategoryBreakdown, formatCurrency } from "@/lib/tax-calculator";
@@ -34,7 +35,10 @@ export const DeductionChart = () => {
           By category
         </p>
         <p className="mt-4 text-[13px] text-muted-foreground">
-          Add expenses to see categories
+          <Link href="/expenses?add=1" className="text-foreground underline underline-offset-2 dark:text-primary">
+            Add expenses
+          </Link>{" "}
+          to see categories
         </p>
       </motion.div>
     );

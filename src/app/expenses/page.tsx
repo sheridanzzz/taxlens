@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Plus, Camera } from "lucide-react";
 import { motion } from "motion/react";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,13 @@ const ExpensesPage = () => {
   const [formOpen, setFormOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
+
+  // ponytail: window.location over useSearchParams — no Suspense boundary needed
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("scan") === "1") setScannerOpen(true);
+    else if (params.get("add") === "1") setFormOpen(true);
+  }, []);
 
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);

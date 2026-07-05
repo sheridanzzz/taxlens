@@ -50,11 +50,7 @@ export const RecentExpenses = () => {
       date: e.date,
       amount: e.amount,
       claimable: e.claimableAmount,
-      badge:
-        EXPENSE_CATEGORIES[e.category]?.label
-          .split(" ")
-          .slice(0, 2)
-          .join(" ") ?? e.category,
+      badge: EXPENSE_CATEGORIES[e.category]?.label ?? e.category,
       category: e.category,
       type: "full",
       href: "/expenses",
@@ -69,11 +65,7 @@ export const RecentExpenses = () => {
       date: a.purchaseDate,
       amount: a.purchasePrice,
       claimable: calculateCurrentYearDepreciation(a, fy),
-      badge:
-        ASSET_EFFECTIVE_LIVES[a.assetType]?.label
-          .split(" ")
-          .slice(0, 2)
-          .join(" ") ?? a.assetType,
+      badge: ASSET_EFFECTIVE_LIVES[a.assetType]?.label ?? a.assetType,
       category: "asset",
       type: "depreciation",
       href: "/assets",
@@ -122,7 +114,14 @@ export const RecentExpenses = () => {
             <ArrowRight className="h-4 w-4 text-muted-foreground" />
           </motion.div>
           <p className="text-[13px] text-muted-foreground">
-            No expenses yet — add one or scan a receipt
+            No expenses yet —{" "}
+            <Link href="/expenses?scan=1" className="text-foreground underline underline-offset-2 dark:text-primary">
+              scan a receipt
+            </Link>{" "}
+            or{" "}
+            <Link href="/expenses?add=1" className="text-foreground underline underline-offset-2 dark:text-primary">
+              add one
+            </Link>
           </p>
         </div>
       ) : (
@@ -150,7 +149,7 @@ export const RecentExpenses = () => {
                     {item.name}
                   </p>
                   <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>{item.badge}</span>
+                    <span className="truncate">{item.badge}</span>
                     <span>·</span>
                     <span>
                       {new Date(item.date).toLocaleDateString("en-AU", {

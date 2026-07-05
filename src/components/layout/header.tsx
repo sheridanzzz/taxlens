@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, LogOut, HardDrive, Plus } from "lucide-react";
+import { Menu, LogOut, HardDrive, Plus, ScanLine } from "lucide-react";
 import { motion } from "motion/react";
 import { useTheme } from "next-themes";
 import { Button } from "@/components/ui/button";
@@ -120,11 +120,19 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         </button>
 
         <Link
-          href="/expenses"
-          className="btn-press hidden items-center gap-2 rounded-full bg-primary px-5 py-2.5 text-[14px] font-bold text-primary-foreground sm:inline-flex"
+          href="/expenses?add=1"
+          className="btn-press hidden items-center gap-2 whitespace-nowrap rounded-full bg-secondary px-5 py-2.5 text-[14px] font-semibold text-secondary-foreground sm:inline-flex"
           aria-label="Add expense"
         >
           <IconPlus /> Add expense
+        </Link>
+
+        <Link
+          href="/expenses?scan=1"
+          className="btn-press hidden items-center gap-2 whitespace-nowrap rounded-full bg-primary px-5 py-2.5 text-[14px] font-bold text-primary-foreground sm:inline-flex"
+          aria-label="Scan receipt with AI"
+        >
+          <ScanLine className="h-4 w-4" /> Scan receipt
         </Link>
 
         {!cloudEnabled ? (

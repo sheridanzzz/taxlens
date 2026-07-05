@@ -24,7 +24,7 @@ export const TaxBreakdown = () => {
         lines.push({
           label: e.description,
           amount: e.claimableAmount,
-          detail: `Full claim · ${EXPENSE_CATEGORIES[e.category]?.label.split(" ").slice(0, 2).join(" ")}`,
+          detail: `Full claim · ${EXPENSE_CATEGORIES[e.category]?.label ?? e.category}`,
         });
       }
     }
@@ -36,7 +36,7 @@ export const TaxBreakdown = () => {
         lines.push({
           label: a.name,
           amount: yearDed,
-          detail: `Depreciation (${method}) · ${ASSET_EFFECTIVE_LIVES[a.assetType]?.label.split(" ").slice(0, 2).join(" ")}`,
+          detail: `Depreciation (${method}) · ${ASSET_EFFECTIVE_LIVES[a.assetType]?.label ?? a.assetType}`,
         });
       }
     }

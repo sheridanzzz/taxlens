@@ -6,6 +6,7 @@ import { DeductionChart } from "@/components/dashboard/deduction-chart";
 import { MonthlyTrend } from "@/components/dashboard/monthly-trend";
 import { DeductionPace } from "@/components/dashboard/deduction-pace";
 import { Onboarding } from "@/components/onboarding";
+import { GettingStarted } from "@/components/dashboard/getting-started";
 import { RecentExpenses } from "@/components/dashboard/recent-expenses";
 import { TaxBreakdown } from "@/components/dashboard/tax-breakdown";
 import { useTax } from "@/context/tax-context";
@@ -30,6 +31,8 @@ const DashboardPage = () => {
       transition={fadeInUp.transition}
     >
       <Onboarding />
+
+      <GettingStarted />
 
       <SummaryCards />
 
