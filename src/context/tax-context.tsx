@@ -69,6 +69,7 @@ interface TaxContextValue {
   updateAsset: (asset: DepreciatingAsset) => Promise<void>;
   removeAsset: (id: string) => Promise<void>;
   addWfhEntry: (entry: WfhEntry) => Promise<void>;
+  addWfhEntries: (entries: WfhEntry[]) => Promise<void>;
   removeWfhEntry: (id: string) => Promise<void>;
   addWfhActualCost: (cost: WfhActualCost) => Promise<void>;
   updateWfhActualCost: (cost: WfhActualCost) => Promise<void>;
@@ -213,6 +214,14 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
     [fy]
   );
 
+  const addWfhEntries = useCallback(
+    async (entries: WfhEntry[]) => {
+      await Promise.all(entries.map((e) => storage.saveWfhEntry(e)));
+      dispatch({ type: "SET_WFH_ENTRIES", payload: await storage.getWfhEntries(fy) });
+    },
+    [fy]
+  );
+
   const removeWfhEntry = useCallback(
     async (id: string) => {
       await storage.deleteWfhEntry(id);
@@ -267,6 +276,7 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         updateAsset,
         removeAsset,
         addWfhEntry,
+        addWfhEntries,
         removeWfhEntry,
         addWfhActualCost,
         updateWfhActualCost,

@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
+  CalendarRange,
   ChevronLeft,
   ChevronRight,
   Plus,
@@ -45,7 +46,7 @@ const toDateString = (d: Date): string => {
 };
 
 export const WfhCalendar = () => {
-  const { state, addWfhEntry, removeWfhEntry } = useTax();
+  const { state, addWfhEntry, addWfhEntries, removeWfhEntry } = useTax();
   const [currentMonth, setCurrentMonth] = useState(() => {
     const now = new Date();
     return { year: now.getFullYear(), month: now.getMonth() };
@@ -53,6 +54,13 @@ export const WfhCalendar = () => {
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [hours, setHours] = useState("8");
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkFrom, setBulkFrom] = useState("");
+  const [bulkTo, setBulkTo] = useState("");
+  const [bulkHours, setBulkHours] = useState("8");
+  // Mon..Sun, weekdays on by default
+  const [bulkDays, setBulkDays] = useState([true, true, true, true, true, false, false]);
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const entryMap = useMemo(() => {
     const map = new Map<string, WfhEntry>();
@@ -126,10 +134,53 @@ export const WfhCalendar = () => {
   };
 
   const fyRange = FY_DATE_RANGES[state.settings.financialYear];
-  const fyStart = new Date(fyRange.start);
-  const fyEnd = new Date(fyRange.end);
+  // parse as local midnight — bare ISO dates parse as UTC and shift the
+  // FY boundary, excluding 1 Jul in any timezone ahead of UTC
+  const fyStart = new Date(fyRange.start + "T00:00:00");
+  const fyEnd = new Date(fyRange.end + "T00:00:00");
 
   const isInFy = (d: Date) => d >= fyStart && d <= fyEnd;
+
+  // dates the bulk dialog would create: in range, in FY, day ticked, not
+  // already logged. Public holidays aren't skipped — delete those days after.
+  const bulkTargets = (): string[] => {
+    if (!bulkFrom || !bulkTo || bulkFrom > bulkTo) return [];
+    const out: string[] = [];
+    const d = new Date(bulkFrom + "T00:00:00");
+    const end = new Date(bulkTo + "T00:00:00");
+    for (; d <= end; d.setDate(d.getDate() + 1)) {
+      if (!isInFy(d)) continue;
+      if (!bulkDays[(d.getDay() + 6) % 7]) continue;
+      const ds = toDateString(d);
+      if (!entryMap.has(ds)) out.push(ds);
+    }
+    return out;
+  };
+
+  const handleOpenBulk = () => {
+    const today = toDateString(new Date());
+    setBulkFrom(fyRange.start);
+    setBulkTo(today > fyRange.end ? fyRange.end : today < fyRange.start ? fyRange.start : today);
+    setBulkOpen(true);
+  };
+
+  const handleBulkSave = async () => {
+    const numHours = parseFloat(bulkHours);
+    if (isNaN(numHours) || numHours <= 0 || numHours > 24) return;
+    const targets = bulkTargets();
+    if (targets.length === 0) return;
+    setBulkSaving(true);
+    await addWfhEntries(
+      targets.map((date) => ({
+        id: uuidv4(),
+        date,
+        hours: numHours,
+        financialYear: state.settings.financialYear,
+      }))
+    );
+    setBulkSaving(false);
+    setBulkOpen(false);
+  };
 
   const totalHours = state.wfhEntries.reduce((sum, e) => sum + e.hours, 0);
   const totalDays = state.wfhEntries.length;
@@ -137,10 +188,18 @@ export const WfhCalendar = () => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">WFH Calendar</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          {totalDays} days logged &middot; {totalHours.toFixed(1)} total hours
-        </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <CardTitle className="text-base">WFH Calendar</CardTitle>
+            <p className="mt-1.5 text-sm text-muted-foreground">
+              {totalDays} days logged &middot; {totalHours.toFixed(1)} total hours
+            </p>
+          </div>
+          <Button variant="outline" size="sm" onClick={handleOpenBulk}>
+            <CalendarRange className="mr-1.5 h-3.5 w-3.5" />
+            Bulk log
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         <div className="flex items-center justify-between mb-4">
@@ -258,6 +317,96 @@ export const WfhCalendar = () => {
                     {entryMap.get(selectedDate || "") ? "Update" : "Log"}
                   </Button>
                 </div>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Bulk log WFH days</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="bulk-from">From</Label>
+                  <Input
+                    id="bulk-from"
+                    type="date"
+                    min={fyRange.start}
+                    max={fyRange.end}
+                    value={bulkFrom}
+                    onChange={(e) => setBulkFrom(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="bulk-to">To</Label>
+                  <Input
+                    id="bulk-to"
+                    type="date"
+                    min={fyRange.start}
+                    max={fyRange.end}
+                    value={bulkTo}
+                    onChange={(e) => setBulkTo(e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Days you work from home</Label>
+                <div className="flex gap-1.5">
+                  {DAYS.map((day, i) => (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() =>
+                        setBulkDays((prev) => prev.map((v, j) => (j === i ? !v : v)))
+                      }
+                      className={`flex-1 rounded-md border px-0 py-1.5 text-xs font-medium transition-colors ${
+                        bulkDays[i]
+                          ? "border-primary bg-primary text-primary-foreground"
+                          : "border-border bg-transparent text-muted-foreground hover:bg-secondary"
+                      }`}
+                      aria-pressed={bulkDays[i]}
+                    >
+                      {day}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="bulk-hours">Hours per day</Label>
+                <Input
+                  id="bulk-hours"
+                  type="number"
+                  min="0.5"
+                  max="24"
+                  step="0.5"
+                  value={bulkHours}
+                  onChange={(e) => setBulkHours(e.target.value)}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Will log <span className="font-medium text-foreground">{bulkTargets().length} days</span>{" "}
+                ({(bulkTargets().length * (parseFloat(bulkHours) || 0)).toFixed(0)} hours).
+                Already-logged days are skipped; remove public holidays and leave
+                afterwards by clicking them on the calendar.
+              </p>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setBulkOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={handleBulkSave}
+                  disabled={bulkSaving || bulkTargets().length === 0}
+                >
+                  {bulkSaving ? "Logging…" : "Log days"}
+                </Button>
               </div>
             </div>
           </DialogContent>

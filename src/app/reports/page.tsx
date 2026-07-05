@@ -1,6 +1,6 @@
 "use client";
 
-import { FileSpreadsheet } from "lucide-react";
+import { FileSpreadsheet, Printer } from "lucide-react";
 import { motion } from "motion/react";
 import { useTax } from "@/context/tax-context";
 import {
@@ -19,6 +19,26 @@ import {
   WFH_FIXED_RATE_PER_HOUR,
 } from "@/lib/constants";
 import { fadeInUp } from "@/lib/animations";
+
+// myTax item each category lands under at lodgment. Depreciation follows its
+// category (equipment/furniture → D5); WFH is its own D5 question.
+const MYTAX_ITEM: Record<string, string> = {
+  travel: "Work-related travel (D2)",
+  clothing: "Clothing & laundry (D3)",
+  professional_development: "Self-education (D4)",
+};
+const MYTAX_OTHER = "Other work-related expenses (D5)";
+const MYTAX_WFH = "Working from home (D5)";
+const MYTAX_ORDER = [
+  "Work-related travel (D2)",
+  "Clothing & laundry (D3)",
+  "Self-education (D4)",
+  MYTAX_WFH,
+  MYTAX_OTHER,
+];
+
+const escapeHtml = (s: string) =>
+  s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const downloadCsv = (filename: string, csvContent: string) => {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -47,12 +67,25 @@ const ReportsPage = () => {
   const wfhActualTotal = calculateWfhDeductionActualCost(state.wfhActualCosts);
   const totalHours = state.wfhEntries.reduce((s, e) => s + e.hours, 0);
 
+  const myTaxGroups = new Map<string, number>();
+  for (const b of breakdown) {
+    const item = MYTAX_ITEM[b.category] ?? MYTAX_OTHER;
+    myTaxGroups.set(item, (myTaxGroups.get(item) ?? 0) + b.amount);
+  }
+  if (summary.totalWfhDeduction > 0) {
+    myTaxGroups.set(MYTAX_WFH, summary.totalWfhDeduction);
+  }
+  const myTaxRows = MYTAX_ORDER.filter((i) => (myTaxGroups.get(i) ?? 0) > 0).map(
+    (i) => ({ item: i, amount: myTaxGroups.get(i)! })
+  );
+
   const handleExportTaxSummary = () => {
     const lines = [
       "Ledgr Tax Summary Report", `Financial Year: FY ${fy}`, `Generated: ${new Date().toLocaleDateString("en-AU")}`, `Occupation: ${state.settings.occupation}`, "",
       "SECTION,ITEM,AMOUNT", `Income,Annual Income,${state.settings.annualIncome}`, "",
       `Deductions,Total Full Claims,${summary.totalFullClaims}`, `Deductions,Total Depreciation Claims,${summary.totalDepreciationClaims}`, `Deductions,Total WFH Deduction,${summary.totalWfhDeduction}`, `Deductions,TOTAL DEDUCTIONS,${summary.totalDeductions}`, "",
-      `Tax,Taxable Income,${summary.taxableIncome}`, `Tax,Tax Payable (with deductions),${summary.taxPayable}`, `Tax,Tax Payable (without deductions),${summary.taxPayableWithoutDeductions}`, `Tax,ESTIMATED TAX SAVED,${summary.estimatedTaxSaved}`,
+      `Tax,Taxable Income,${summary.taxableIncome}`, `Tax,Tax Payable (with deductions),${summary.taxPayable}`, `Tax,Tax Payable (without deductions),${summary.taxPayableWithoutDeductions}`, `Tax,ESTIMATED TAX SAVED,${summary.estimatedTaxSaved}`, "",
+      ...myTaxRows.map((r) => `myTax,"${r.item}",${Math.round(r.amount * 100) / 100}`),
     ];
     downloadCsv(`ledgr-summary-FY${fy}.csv`, lines.join("\n"));
   };
@@ -80,11 +113,53 @@ const ReportsPage = () => {
     downloadCsv(`ledgr-depreciation-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
 
+  const handleReceiptPack = () => {
+    const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-AU");
+    const byDate = [...state.expenses].sort((a, b) => a.date.localeCompare(b.date));
+    const withReceipt = byDate.filter((e) => e.receiptDataUrl);
+    const missing = byDate.filter((e) => !e.receiptDataUrl);
+
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Ledgr receipt pack — FY ${fy}</title>
+<style>
+  body{font-family:-apple-system,system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;color:#111}
+  h1{font-size:1.3rem} h2{font-size:1rem;margin-top:2rem}
+  p.meta{color:#555;font-size:.85rem}
+  figure{margin:0 0 2rem;page-break-inside:avoid;border-top:1px solid #ddd;padding-top:1rem}
+  figcaption{font-size:.85rem;margin-bottom:.5rem}
+  img{max-width:100%;max-height:480px;border:1px solid #ddd;border-radius:6px}
+  table{width:100%;border-collapse:collapse;font-size:.85rem}
+  td,th{text-align:left;padding:.35rem .5rem;border-bottom:1px solid #eee}
+  td:last-child,th:last-child{text-align:right}
+  @media print{button{display:none}}
+</style></head><body>
+<h1>Receipt pack — FY ${fy}</h1>
+<p class="meta">Generated ${new Date().toLocaleDateString("en-AU")} · ${withReceipt.length} receipts on file · ${missing.length} entries without receipts</p>
+<button onclick="window.print()">Print / Save as PDF</button>
+${withReceipt
+  .map(
+    (e) => `<figure><figcaption><strong>${escapeHtml(e.description)}</strong> — ${fmt(e.date)} · $${e.amount.toFixed(2)} · ${escapeHtml(EXPENSE_CATEGORIES[e.category]?.label || e.category)} · ${e.workUsePercent}% work use</figcaption><img src="${e.receiptDataUrl}" alt="Receipt"></figure>`
+  )
+  .join("")}
+${
+  missing.length
+    ? `<h2>Entries without a stored receipt</h2><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr>${missing
+        .map(
+          (e) => `<tr><td>${fmt(e.date)}</td><td>${escapeHtml(e.description)}</td><td>${escapeHtml(EXPENSE_CATEGORIES[e.category]?.label || e.category)}</td><td>$${e.amount.toFixed(2)}</td></tr>`
+        )
+        .join("")}</table>`
+    : ""
+}
+</body></html>`;
+
+    window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
+  };
+
   const EXPORTS = [
     { label: "Tax summary", detail: "Full overview", handler: handleExportTaxSummary, disabled: false },
     { label: "Expenses", detail: `${state.expenses.length} items`, handler: handleExportExpenses, disabled: state.expenses.length === 0 },
     { label: "WFH log", detail: `${state.wfhEntries.length} days`, handler: handleExportWfh, disabled: state.wfhEntries.length === 0 },
     { label: "Depreciation", detail: `${state.assets.length} assets`, handler: handleExportDepreciation, disabled: state.assets.length === 0 },
+    { label: "Receipt pack", detail: "Printable audit file", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
   ];
 
   return (
@@ -138,6 +213,25 @@ const ReportsPage = () => {
           </div>
         </div>
 
+        {myTaxRows.length > 0 && (
+          <>
+            <div className="mt-5 h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
+            <div className="mt-4 space-y-1.5">
+              <p className="text-[11px] font-medium text-muted-foreground">
+                myTax lodgment items — copy these straight in
+              </p>
+              {myTaxRows.map((r) => (
+                <div key={r.item} className="flex justify-between text-[13px]">
+                  <span className="text-muted-foreground">{r.item}</span>
+                  <span className="stat-number font-medium text-foreground dark:text-foreground">
+                    {formatCurrency(r.amount)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
         {breakdown.length > 0 && (
           <>
             <div className="mt-5 h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
@@ -168,7 +262,7 @@ const ReportsPage = () => {
               aria-label={`Export ${exp.label}`}
               tabIndex={0}
             >
-              <FileSpreadsheet className="h-4 w-4 shrink-0 text-muted-foreground" />
+              {(() => { const Icon = exp.icon ?? FileSpreadsheet; return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />; })()}
               <div className="min-w-0">
                 <p className="text-xs font-medium text-foreground dark:text-foreground">{exp.label}</p>
                 <p className="text-[10px] text-muted-foreground">{exp.detail}</p>
