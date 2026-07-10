@@ -41,10 +41,13 @@ export const GettingStarted = () => {
 
   return (
     <motion.div
-      className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card"
+      className="surface p-5"
       {...(prefersReduced ? {} : cardHover)}
     >
-      <p className="text-sm font-medium text-foreground dark:text-foreground">
+      <div className="eyebrow">
+        <span className="text-gold">•</span> Getting started
+      </div>
+      <p className="mt-1 font-serif text-2xl">
         Nothing in FY {state.settings.financialYear} yet
       </p>
       <p className="mt-1 text-[13px] text-muted-foreground">
@@ -56,13 +59,11 @@ export const GettingStarted = () => {
           <Link
             key={a.href}
             href={a.href}
-            className="group flex items-start gap-3 rounded-xl border border-border p-3 transition-colors hover:bg-secondary dark:hover:bg-secondary"
+            className="group flex items-start gap-3 rounded-md border border-border p-3 transition-colors hover:border-gold/60"
           >
-            <a.icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-foreground" />
+            <a.icon className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
             <div>
-              <p className="text-xs font-medium text-foreground dark:text-foreground">
-                {a.title}
-              </p>
+              <p className="text-xs font-medium text-foreground">{a.title}</p>
               <p className="mt-0.5 text-[11px] text-muted-foreground">{a.detail}</p>
             </div>
           </Link>

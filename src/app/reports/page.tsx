@@ -1,7 +1,8 @@
 "use client";
 
-import { FileSpreadsheet, Printer } from "lucide-react";
+import { Download, FileText, Printer } from "lucide-react";
 import { motion } from "motion/react";
+import { Section, Kpi, Card } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
 import {
   formatCurrency,
@@ -37,6 +38,14 @@ const MYTAX_ORDER = [
   MYTAX_OTHER,
 ];
 
+const CHART_COLORS = [
+  "var(--color-chart-1)",
+  "var(--color-chart-2)",
+  "var(--color-chart-3)",
+  "var(--color-chart-4)",
+  "var(--color-chart-5)",
+];
+
 const escapeHtml = (s: string) =>
   s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
@@ -50,6 +59,15 @@ const downloadCsv = (filename: string, csvContent: string) => {
   URL.revokeObjectURL(url);
 };
 
+const Row = ({ label, value, bold }: { label: string; value: string; bold?: boolean }) => (
+  <div className="flex items-baseline justify-between">
+    <span className="text-muted-foreground">{label}</span>
+    <span className={`font-mono tabular ${bold ? "text-foreground" : "text-muted-foreground"}`}>
+      {value}
+    </span>
+  </div>
+);
+
 const ReportsPage = () => {
   const { state, summary } = useTax();
   const fy = state.settings.financialYear;
@@ -57,7 +75,7 @@ const ReportsPage = () => {
   if (!state.loaded) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
       </div>
     );
   }
@@ -66,6 +84,10 @@ const ReportsPage = () => {
   const wfhFixedTotal = calculateWfhDeductionFixedRate(state.wfhEntries);
   const wfhActualTotal = calculateWfhDeductionActualCost(state.wfhActualCosts);
   const totalHours = state.wfhEntries.reduce((s, e) => s + e.hours, 0);
+  const effectiveRate =
+    state.settings.annualIncome > 0
+      ? (summary.taxPayable / state.settings.annualIncome) * 100
+      : 0;
 
   const myTaxGroups = new Map<string, number>();
   for (const b of breakdown) {
@@ -155,122 +177,156 @@ ${
   };
 
   const EXPORTS = [
-    { label: "Tax summary", detail: "Full overview", handler: handleExportTaxSummary, disabled: false },
-    { label: "Expenses", detail: `${state.expenses.length} items`, handler: handleExportExpenses, disabled: state.expenses.length === 0 },
-    { label: "WFH log", detail: `${state.wfhEntries.length} days`, handler: handleExportWfh, disabled: state.wfhEntries.length === 0 },
-    { label: "Depreciation", detail: `${state.assets.length} assets`, handler: handleExportDepreciation, disabled: state.assets.length === 0 },
-    { label: "Receipt pack", detail: "Printable audit file", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
+    { label: "Tax summary (CSV)", detail: "Full overview + myTax items", handler: handleExportTaxSummary, disabled: false, icon: FileText },
+    { label: "Expenses (CSV)", detail: `${state.expenses.length} items`, handler: handleExportExpenses, disabled: state.expenses.length === 0, icon: FileText },
+    { label: "WFH hour log (CSV)", detail: `${state.wfhEntries.length} days`, handler: handleExportWfh, disabled: state.wfhEntries.length === 0, icon: FileText },
+    { label: "Depreciation schedule (CSV)", detail: `${state.assets.length} assets`, handler: handleExportDepreciation, disabled: state.assets.length === 0, icon: FileText },
+    { label: "Receipt pack (print/PDF)", detail: "Audit-ready archive", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
   ];
 
   return (
     <motion.div
-      className="mx-auto max-w-3xl space-y-6"
       initial={fadeInUp.initial}
       animate={fadeInUp.animate}
       transition={fadeInUp.transition}
     >
-      <div>
-        <p className="text-[13px] text-muted-foreground">
-          FY {fy} summary and CSV exports
-        </p>
+      <Section
+        eyebrow="Reports · myTax ready"
+        title="Your return, already written."
+        action={
+          <button
+            onClick={handleExportTaxSummary}
+            className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+            aria-label="Export myTax pack"
+          >
+            <Download className="h-4 w-4" /> Export myTax pack
+          </button>
+        }
+      />
+
+      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        <Kpi label="Annual income" value={formatCurrency(state.settings.annualIncome)} hint="gross salary" />
+        <Kpi
+          label="Total deductions"
+          value={formatCurrency(summary.totalDeductions)}
+          positive={summary.totalDeductions > 0}
+        />
+        <Kpi
+          label="Est. tax saved"
+          value={formatCurrency(summary.estimatedTaxSaved)}
+          positive={summary.estimatedTaxSaved > 0}
+          large
+        />
+        <Kpi label="Effective rate" value={`${effectiveRate.toFixed(1)}%`} hint="of gross income" />
       </div>
 
-      <div className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card">
-        <p className="text-sm font-medium text-foreground dark:text-foreground">Summary</p>
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {[
-            { label: "Income", value: formatCurrency(state.settings.annualIncome) },
-            { label: "Deductions", value: formatCurrency(summary.totalDeductions) },
-            { label: "Taxable", value: formatCurrency(summary.taxableIncome) },
-            { label: "Tax saved", value: formatCurrency(summary.estimatedTaxSaved), accent: true },
-          ].map((item) => (
-            <div key={item.label}>
-              <p className="text-[11px] text-muted-foreground">{item.label}</p>
-              <p className={`stat-number mt-0.5 text-lg font-medium ${item.accent ? "text-foreground dark:text-primary" : "text-foreground dark:text-foreground"}`}>
-                {item.value}
-              </p>
-            </div>
-          ))}
-        </div>
+      <div className="mb-8 grid gap-4 lg:grid-cols-3">
+        <Card className="lg:col-span-2">
+          <div className="eyebrow">FY {fy} · Deductions summary</div>
+          {breakdown.length === 0 && summary.totalWfhDeduction === 0 ? (
+            <p className="mt-4 text-[13px] text-muted-foreground">
+              Nothing to report yet — add expenses, assets or WFH hours first.
+            </p>
+          ) : (
+            <table className="mt-4 w-full text-sm">
+              <tbody>
+                {breakdown.map((c, i) => (
+                  <tr key={c.category} className="border-b border-border">
+                    <td className="py-3">
+                      <span
+                        className="mr-3 inline-block h-2 w-2 rounded-full"
+                        style={{ background: CHART_COLORS[i % CHART_COLORS.length] }}
+                      />
+                      {c.label}
+                    </td>
+                    <td className="py-3 text-right font-mono tabular">
+                      {formatCurrency(c.amount)}
+                    </td>
+                  </tr>
+                ))}
+                {summary.totalWfhDeduction > 0 && (
+                  <tr className="border-b border-border">
+                    <td className="py-3">
+                      <span className="mr-3 inline-block h-2 w-2 rounded-full bg-gold" />
+                      Working from home (
+                      {state.settings.wfhMethod === "fixed_rate" ? "67c fixed rate" : "actual cost"})
+                    </td>
+                    <td className="py-3 text-right font-mono tabular">
+                      {formatCurrency(summary.totalWfhDeduction)}
+                    </td>
+                  </tr>
+                )}
+                <tr>
+                  <td className="py-4 font-serif text-lg">Total</td>
+                  <td className="py-4 text-right font-serif text-lg tabular">
+                    {formatCurrency(summary.totalDeductions)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          )}
 
-        <div className="mt-5 h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
-
-        <div className="mt-4 space-y-2">
-          {[
-            { label: `Full claims (${state.expenses.filter((e) => e.claimType === "full").length})`, value: summary.totalFullClaims },
-            { label: `Depreciation (${state.assets.length})`, value: summary.totalDepreciationClaims },
-            { label: `WFH (${state.settings.wfhMethod === "fixed_rate" ? "Fixed" : "Actual"})`, value: summary.totalWfhDeduction },
-          ].map((row) => (
-            <div key={row.label} className="flex justify-between text-[13px]">
-              <span className="text-muted-foreground">{row.label}</span>
-              <span className="stat-number text-foreground dark:text-foreground">{formatCurrency(row.value)}</span>
-            </div>
-          ))}
-          <div className="h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
-          <div className="flex justify-between text-[13px] font-medium">
-            <span className="text-foreground dark:text-foreground">Total</span>
-            <span className="stat-number text-foreground dark:text-foreground">{formatCurrency(summary.totalDeductions)}</span>
-          </div>
-        </div>
-
-        {myTaxRows.length > 0 && (
-          <>
-            <div className="mt-5 h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
-            <div className="mt-4 space-y-1.5">
-              <p className="text-[11px] font-medium text-muted-foreground">
-                myTax lodgment items — copy these straight in
-              </p>
-              {myTaxRows.map((r) => (
-                <div key={r.item} className="flex justify-between text-[13px]">
-                  <span className="text-muted-foreground">{r.item}</span>
-                  <span className="stat-number font-medium text-foreground dark:text-foreground">
-                    {formatCurrency(r.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-
-        {breakdown.length > 0 && (
-          <>
-            <div className="mt-5 h-px bg-border dark:bg-[rgba(255,255,255,0.06)]" />
-            <div className="mt-4 space-y-1.5">
-              <p className="text-[11px] font-medium text-muted-foreground">By category</p>
-              {breakdown.map((b) => (
-                <div key={b.category} className="flex justify-between text-[13px]">
-                  <span className="text-muted-foreground">{b.label}</span>
-                  <span className="stat-number text-foreground dark:text-foreground">{formatCurrency(b.amount)}</span>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="rounded-xl border border-border bg-card p-5 dark:border-border dark:bg-card">
-        <p className="text-sm font-medium text-foreground dark:text-foreground">Export</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-          {EXPORTS.map((exp) => (
-            <motion.button
-              key={exp.label}
-              onClick={exp.handler}
-              disabled={exp.disabled}
-              whileHover={exp.disabled ? undefined : { y: -2, boxShadow: "0 4px 16px rgba(14,15,12,0.06)" }}
-              whileTap={exp.disabled ? undefined : { scale: 0.97 }}
-              className="flex items-center gap-3 rounded-xl border border-border p-3 text-left transition-colors hover:bg-background disabled:cursor-not-allowed disabled:opacity-40 dark:border-border dark:hover:bg-secondary"
-              aria-label={`Export ${exp.label}`}
-              tabIndex={0}
-            >
-              {(() => { const Icon = exp.icon ?? FileSpreadsheet; return <Icon className="h-4 w-4 shrink-0 text-muted-foreground" />; })()}
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-foreground dark:text-foreground">{exp.label}</p>
-                <p className="text-[10px] text-muted-foreground">{exp.detail}</p>
+          {myTaxRows.length > 0 && (
+            <div className="mt-2 border-t border-border pt-4">
+              <div className="eyebrow">myTax lodgment items — copy straight in</div>
+              <div className="mt-3 space-y-2 text-sm">
+                {myTaxRows.map((r) => (
+                  <Row key={r.item} label={r.item} value={formatCurrency(r.amount)} bold />
+                ))}
               </div>
-            </motion.button>
-          ))}
-        </div>
+            </div>
+          )}
+        </Card>
+
+        <Card>
+          <div className="eyebrow">Refund math</div>
+          <div className="mt-6 space-y-4 text-sm">
+            <Row label="Gross salary" value={formatCurrency(state.settings.annualIncome)} />
+            <Row label="Less: deductions" value={`− ${formatCurrency(summary.totalDeductions)}`} />
+            <Row label="Taxable income" value={formatCurrency(summary.taxableIncome)} bold />
+            <div className="hairline mt-4 pt-4" />
+            <Row
+              label="Tax without deductions"
+              value={formatCurrency(summary.taxPayableWithoutDeductions)}
+            />
+            <Row label="Tax with deductions" value={formatCurrency(summary.taxPayable)} />
+            <div className="hairline mt-4 pt-4" />
+            <div className="flex items-baseline justify-between">
+              <span className="text-sm">Est. tax saved</span>
+              <span className="font-serif text-3xl tabular text-gold">
+                {formatCurrency(summary.estimatedTaxSaved)}
+              </span>
+            </div>
+          </div>
+        </Card>
       </div>
+
+      <Card>
+        <div className="mb-4 eyebrow">Downloads</div>
+        <div className="grid gap-3 md:grid-cols-3">
+          {EXPORTS.map((exp) => {
+            const Icon = exp.icon;
+            return (
+              <button
+                key={exp.label}
+                onClick={exp.handler}
+                disabled={exp.disabled}
+                className="surface flex items-center justify-between p-4 text-left hover:border-gold/60 disabled:cursor-not-allowed disabled:opacity-40"
+                aria-label={`Export ${exp.label}`}
+              >
+                <span className="flex min-w-0 items-center gap-3 text-sm">
+                  <Icon className="h-4 w-4 shrink-0 text-gold" />
+                  <span className="min-w-0">
+                    <span className="block truncate">{exp.label}</span>
+                    <span className="block text-[11px] text-muted-foreground">{exp.detail}</span>
+                  </span>
+                </span>
+                <Download className="h-4 w-4 shrink-0 text-muted-foreground" />
+              </button>
+            );
+          })}
+        </div>
+      </Card>
     </motion.div>
   );
 };

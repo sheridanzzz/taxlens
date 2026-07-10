@@ -6,20 +6,19 @@ type LogoProps = {
 };
 
 const sizeMap = {
-  sm: "text-[20px]",
-  md: "text-[24px]",
-  lg: "text-[32px]",
+  sm: "text-xl",
+  md: "text-2xl",
+  lg: "text-4xl",
 };
 
 export function LedgrLogo({ className = "", size = "md" }: LogoProps) {
   return (
     <Link
       href="/"
-      className={`inline-flex items-baseline font-black tracking-[-0.04em] leading-none text-foreground ${sizeMap[size]} ${className}`}
-      style={{ fontFeatureSettings: '"calt" 1, "ss01" 1' }}
+      className={`inline-flex items-baseline font-serif leading-none tracking-tight text-foreground ${sizeMap[size]} ${className}`}
     >
       <span>ledgr</span>
-      <span style={{ color: "var(--highlight)" }}>.</span>
+      <span className="text-gold">.</span>
     </Link>
   );
 }

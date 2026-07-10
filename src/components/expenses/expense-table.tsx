@@ -1,19 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Pencil, Trash2, Receipt, Search } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Pill } from "@/components/ledgr/primitives";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -33,20 +23,24 @@ import {
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
-import { staggerContainer, staggerItem } from "@/lib/animations";
-import type { Expense, ExpenseCategory } from "@/lib/types";
+import type { Expense } from "@/lib/types";
 
 interface ExpenseTableProps {
   onEdit: (expense: Expense) => void;
+  initialSearch?: string;
 }
 
-export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
+export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) => {
   const { state, removeExpense } = useTax();
-  const prefersReduced = useReducedMotion();
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(initialSearch);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
+
+  // header search lands after mount via ?q= — adopt it when it arrives
+  useEffect(() => {
+    if (initialSearch) setSearch(initialSearch);
+  }, [initialSearch]);
 
   const categories = Object.entries(EXPENSE_CATEGORIES);
 
@@ -68,29 +62,36 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
     }
   };
 
+  const statusFor = (e: Expense) => {
+    if (e.claimType === "depreciation")
+      return { label: "Depreciate", tone: "muted" as const };
+    if (e.workUsePercent < 100)
+      return { label: `Apportioned ${e.workUsePercent}%`, tone: "positive" as const };
+    return { label: "Deductible", tone: "positive" as const };
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1">
+    <div className="surface p-5">
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[200px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search expenses..."
+          <input
+            placeholder="Search expenses…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-9"
+            className="h-9 w-full rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm outline-none focus:border-gold/60"
             aria-label="Search expenses"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
           <button
             onClick={() => setCategoryFilter("all")}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+            className={`h-9 rounded-md border px-3 text-sm ${
               categoryFilter === "all"
-                ? "bg-mint text-foreground"
-                : "bg-[rgba(22,51,0,0.06)] text-ink-soft hover:bg-[rgba(22,51,0,0.1)] dark:bg-white/5 dark:text-muted-foreground"
+                ? "border-gold/60 text-gold"
+                : "border-border text-muted-foreground hover:text-foreground"
             }`}
             aria-label="Show all categories"
-            tabIndex={0}
           >
             All
           </button>
@@ -98,13 +99,12 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
             <button
               key={key}
               onClick={() => setCategoryFilter(key)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`h-9 rounded-md border px-3 text-sm ${
                 categoryFilter === key
-                  ? "bg-mint text-foreground"
-                  : "bg-[rgba(22,51,0,0.06)] text-ink-soft hover:bg-[rgba(22,51,0,0.1)] dark:bg-white/5 dark:text-muted-foreground"
+                  ? "border-gold/60 text-gold"
+                  : "border-border text-muted-foreground hover:text-foreground"
               }`}
               aria-label={`Filter by ${cat.label}`}
-              tabIndex={0}
             >
               {cat.label.split(" ").slice(0, 2).join(" ")}
             </button>
@@ -119,108 +119,95 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border bg-card dark:border-border dark:bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Date</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Amount</TableHead>
-                <TableHead className="text-right">Claimable</TableHead>
-                <TableHead>Type</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <motion.tbody
-              variants={staggerContainer}
-              initial={prefersReduced ? false : "initial"}
-              animate="animate"
-            >
-              {filtered.map((expense) => (
-                <motion.tr
-                  key={expense.id}
-                  variants={staggerItem}
-                  className="border-b border-border transition-colors hover:bg-background dark:border-[rgba(255,255,255,0.04)] dark:hover:bg-secondary"
-                >
-                  <TableCell className="whitespace-nowrap text-sm text-ink-soft dark:text-muted-foreground">
-                    {new Date(expense.date).toLocaleDateString("en-AU")}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <span className="max-w-[200px] truncate text-sm font-medium text-foreground dark:text-foreground">
-                        {expense.description}
-                      </span>
-                      {expense.receiptDataUrl && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-6 w-6"
-                          onClick={() =>
-                            setReceiptUrl(expense.receiptDataUrl || null)
-                          }
-                          aria-label="View receipt"
-                        >
-                          <Receipt className="h-3.5 w-3.5" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className="rounded-full bg-[rgba(22,51,0,0.06)] text-xs text-ink-soft dark:bg-white/5 dark:text-muted-foreground"
-                    >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="eyebrow border-b border-border">
+                <th className="py-3 text-left font-normal">Date</th>
+                <th className="py-3 text-left font-normal">Description</th>
+                <th className="py-3 text-left font-normal">Category</th>
+                <th className="py-3 text-left font-normal">Status</th>
+                <th className="py-3 text-right font-normal">Amount</th>
+                <th className="py-3 text-right font-normal">Claimable</th>
+                <th className="py-3 text-right font-normal">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((expense) => {
+                const status = statusFor(expense);
+                return (
+                  <tr
+                    key={expense.id}
+                    className="border-b border-border hover:bg-surface-2/40"
+                  >
+                    <td className="whitespace-nowrap py-3 tabular text-muted-foreground">
+                      {new Date(expense.date).toLocaleDateString("en-AU", {
+                        day: "2-digit",
+                        month: "short",
+                      })}
+                    </td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="max-w-[220px] truncate">
+                          {expense.description}
+                        </span>
+                        {expense.receiptDataUrl && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() =>
+                              setReceiptUrl(expense.receiptDataUrl || null)
+                            }
+                            aria-label="View receipt"
+                          >
+                            <Receipt className="h-3.5 w-3.5 text-gold" />
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                    <td className="py-3 text-muted-foreground">
                       {EXPENSE_CATEGORIES[expense.category]?.label
                         .split(" ")
                         .slice(0, 2)
                         .join(" ")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right text-sm text-ink-soft dark:text-muted-foreground">
-                    {formatCurrency(expense.amount)}
-                  </TableCell>
-                  <TableCell className="text-right text-sm font-medium text-foreground dark:text-foreground">
-                    {formatCurrency(expense.claimableAmount)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge
-                      variant="secondary"
-                      className={`rounded-full text-xs ${
-                        expense.claimType === "full"
-                          ? "bg-mint text-foreground"
-                          : "bg-[rgba(22,51,0,0.06)] text-ink-soft dark:bg-white/5 dark:text-muted-foreground"
-                      }`}
-                    >
-                      {expense.claimType === "full" ? "Full" : "Deprec."}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={() => onEdit(expense)}
-                        aria-label={`Edit ${expense.description}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-destructive hover:text-destructive"
-                        onClick={() => setDeleteId(expense.id)}
-                        aria-label={`Delete ${expense.description}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
-                </motion.tr>
-              ))}
-            </motion.tbody>
-          </Table>
+                    </td>
+                    <td className="py-3">
+                      <Pill tone={status.tone}>{status.label}</Pill>
+                    </td>
+                    <td className="py-3 text-right font-mono tabular text-muted-foreground">
+                      {formatCurrency(expense.amount)}
+                    </td>
+                    <td className="py-3 text-right font-mono tabular">
+                      {formatCurrency(expense.claimableAmount)}
+                    </td>
+                    <td className="py-3 text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8"
+                          onClick={() => onEdit(expense)}
+                          aria-label={`Edit ${expense.description}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-destructive hover:text-destructive"
+                          onClick={() => setDeleteId(expense.id)}
+                          aria-label={`Delete ${expense.description}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 

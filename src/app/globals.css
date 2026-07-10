@@ -5,11 +5,10 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 10px;
-  --radius-xl: 16px;
-  --radius-2xl: 22px;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -31,11 +30,18 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
-  --color-mint: var(--mint);
-  --color-mint-foreground: var(--mint-foreground);
-  --color-ink: var(--ink);
-  --color-ink-soft: var(--ink-soft);
+  --color-gold: var(--gold);
+  --color-gold-soft: var(--gold-soft);
   --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+
+  /* legacy aliases still referenced by forms/dialogs */
+  --color-mint: var(--gold-soft);
+  --color-mint-foreground: var(--gold);
+  --color-ink: var(--foreground);
+  --color-ink-soft: var(--muted-foreground);
 
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
@@ -51,113 +57,57 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
 
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "IBM Plex Serif", ui-serif, Georgia, serif;
-  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
 }
 
-/* Navy Trust — professional finance, calm authority */
+/* Dark ledger — the app is dark by default (Lovable design) */
 :root {
-  --background: #f7f8fa;
-  --surface: #ffffff;
-  --foreground: #0a1733;
-  --card: #ffffff;
-  --card-foreground: #0a1733;
-  --popover: #ffffff;
-  --popover-foreground: #0a1733;
-
-  --primary: #0f1b3d;
-  --primary-foreground: #f7f8fa;
-
-  --secondary: #eef1f7;
-  --secondary-foreground: #0f1b3d;
-
-  --muted: #eef1f7;
-  --muted-foreground: #5b6478;
-
-  --accent: #e7ecf5;
-  --accent-foreground: #0f1b3d;
-
-  --destructive: #b3261e;
-  --destructive-foreground: #ffffff;
-
-  --border: rgba(10, 23, 51, 0.10);
-  --input: rgba(10, 23, 51, 0.14);
-  --ring: #1e3a5f;
-
-  --mint: #e7ecf5;
-  --mint-foreground: #0f1b3d;
-  --ink: #0a1733;
-  --ink-soft: #3b4660;
-
-  /* signature single accent — used sparingly */
-  --highlight: #f0c14b;
-
-  --chart-1: #0f1b3d;
-  --chart-2: #1e3a5f;
-  --chart-3: #3b4660;
-  --chart-4: #e7ecf5;
-  --chart-5: #5b6478;
-
-  --sidebar: #ffffff;
-  --sidebar-foreground: #0f1b3d;
-  --sidebar-primary: #0f1b3d;
-  --sidebar-primary-foreground: #f7f8fa;
-  --sidebar-accent: #e7ecf5;
-  --sidebar-accent-foreground: #0f1b3d;
-  --sidebar-border: rgba(10, 23, 51, 0.08);
-  --sidebar-ring: #1e3a5f;
+  --radius: 0.5rem;
+  --background: oklch(0.16 0.02 250);
+  --foreground: oklch(0.95 0.01 250);
+  --surface: oklch(0.2 0.02 250);
+  --surface-2: oklch(0.24 0.022 250);
+  --card: oklch(0.2 0.02 250);
+  --card-foreground: oklch(0.95 0.01 250);
+  --popover: oklch(0.22 0.02 250);
+  --popover-foreground: oklch(0.95 0.01 250);
+  --primary: oklch(0.95 0.01 250);
+  --primary-foreground: oklch(0.16 0.02 250);
+  --secondary: oklch(0.28 0.02 250);
+  --secondary-foreground: oklch(0.95 0.01 250);
+  --muted: oklch(0.24 0.02 250);
+  --muted-foreground: oklch(0.7 0.02 250);
+  --accent: oklch(0.28 0.02 250);
+  --accent-foreground: oklch(0.95 0.01 250);
+  --destructive: oklch(0.62 0.19 25);
+  --destructive-foreground: oklch(0.98 0 0);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 12%);
+  --ring: oklch(0.75 0.14 80);
+  --gold: oklch(0.82 0.16 82);
+  --gold-soft: oklch(0.82 0.16 82 / 20%);
+  --positive: oklch(0.78 0.15 155);
+  --negative: oklch(0.68 0.19 25);
+  --chart-1: oklch(0.82 0.16 82);
+  --chart-2: oklch(0.72 0.14 200);
+  --chart-3: oklch(0.78 0.15 155);
+  --chart-4: oklch(0.72 0.15 300);
+  --chart-5: oklch(0.75 0.16 25);
+  --sidebar: oklch(0.14 0.02 250);
+  --sidebar-foreground: oklch(0.85 0.01 250);
+  --sidebar-primary: oklch(0.82 0.16 82);
+  --sidebar-primary-foreground: oklch(0.16 0.02 250);
+  --sidebar-accent: oklch(0.22 0.02 250);
+  --sidebar-accent-foreground: oklch(0.95 0.01 250);
+  --sidebar-border: oklch(1 0 0 / 8%);
+  --sidebar-ring: oklch(0.75 0.14 80);
 }
 
 .dark {
-  --background: #07101f;
-  --surface: #0c1828;
-  --foreground: #e6ecf5;
-  --card: #0c1828;
-  --card-foreground: #e6ecf5;
-  --popover: #0c1828;
-  --popover-foreground: #e6ecf5;
-
-  --primary: #e6ecf5;
-  --primary-foreground: #0a1733;
-
-  --secondary: rgba(230, 236, 245, 0.08);
-  --secondary-foreground: #e6ecf5;
-
-  --muted: rgba(230, 236, 245, 0.06);
-  --muted-foreground: #9aa5bd;
-
-  --accent: rgba(230, 236, 245, 0.10);
-  --accent-foreground: #e6ecf5;
-
-  --destructive: #d04a44;
-  --destructive-foreground: #ffffff;
-
-  --border: rgba(230, 236, 245, 0.12);
-  --input: rgba(230, 236, 245, 0.16);
-  --ring: #9aa5bd;
-
-  --mint: rgba(230, 236, 245, 0.08);
-  --mint-foreground: #e6ecf5;
-  --ink: #e6ecf5;
-  --ink-soft: #b6becf;
-
-  --highlight: #f0c14b;
-
-  --chart-1: #e6ecf5;
-  --chart-2: #b6becf;
-  --chart-3: #e7ecf5;
-  --chart-4: #1e3a5f;
-  --chart-5: #9aa5bd;
-
-  --sidebar: #07101f;
-  --sidebar-foreground: #e6ecf5;
-  --sidebar-primary: #e6ecf5;
-  --sidebar-primary-foreground: #0a1733;
-  --sidebar-accent: rgba(230, 236, 245, 0.08);
-  --sidebar-accent-foreground: #e6ecf5;
-  --sidebar-border: rgba(230, 236, 245, 0.06);
-  --sidebar-ring: #9aa5bd;
+  --background: oklch(0.16 0.02 250);
+  --foreground: oklch(0.95 0.01 250);
 }
 
 @layer base {
@@ -174,40 +124,43 @@
   body {
     @apply bg-background text-foreground;
     font-weight: 400;
-    font-feature-settings: "ss01" 1, "cv11" 1;
+    font-feature-settings: "cv02" 1, "cv11" 1, "ss01" 1;
+  }
+
+  .font-serif {
+    font-feature-settings: "liga" 1, "dlig" 1;
   }
 
   ::selection {
-    background: #0f1b3d;
-    color: #f7f8fa;
+    background: var(--gold);
+    color: var(--primary-foreground);
   }
 }
 
-/* Editorial display — IBM Plex Serif, tight and confident */
-@utility headline {
-  font-family: var(--font-serif);
-  font-weight: 500;
-  line-height: 0.96;
-  letter-spacing: -0.025em;
+@utility surface {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+}
+
+@utility hairline {
+  border-top: 1px solid var(--color-border);
 }
 
 @utility eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  font-weight: 500;
-  letter-spacing: 0.22em;
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--muted-foreground);
 }
 
-@utility num {
-  font-family: var(--font-mono);
+@utility tabular {
   font-variant-numeric: tabular-nums;
-  letter-spacing: -0.01em;
 }
 
 @utility btn-press {
-  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, color 180ms ease;
+  transition: transform 180ms cubic-bezier(0.2, 0.8, 0.2, 1), background-color 180ms ease, color 180ms ease, opacity 180ms ease;
   &:hover {
     transform: translateY(-1px);
   }
@@ -216,44 +169,14 @@
   }
 }
 
-@utility ring-card {
-  box-shadow: 0 0 0 1px rgba(10, 23, 51, 0.08);
-}
-.dark .ring-card {
-  box-shadow: 0 0 0 1px rgba(230, 236, 245, 0.10);
-}
-
-@utility rule-soft {
-  border-top: 1px solid rgba(10, 23, 51, 0.10);
-}
-.dark .rule-soft {
-  border-top: 1px solid rgba(230, 236, 245, 0.12);
-}
-
-/* Band — full-width section with vertical rhythm */
-@utility band {
-  padding-top: 96px;
-  padding-bottom: 96px;
-  border-top: 1px solid var(--color-border);
-}
-
-@utility band-tight {
-  padding-top: 56px;
-  padding-bottom: 56px;
-  border-top: 1px solid var(--color-border);
-}
-
-@utility container-x {
-  width: 100%;
-  max-width: 1240px;
-  margin-inline: auto;
-  padding-inline: 24px;
-}
-
+/* legacy alias used by table numerals */
 @layer utilities {
   .stat-number {
     @apply tabular-nums tracking-tight;
     font-family: var(--font-mono);
+  }
+  .ring-card {
+    box-shadow: 0 0 0 1px oklch(1 0 0 / 8%);
   }
 }
 
@@ -263,12 +186,7 @@
 }
 
 .skeleton {
-  background: linear-gradient(90deg, #eef1f7 25%, #e7ecf5 50%, #eef1f7 75%);
+  background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
-}
-
-.dark .skeleton {
-  background: linear-gradient(90deg, #0c1828 25%, #1a2a44 50%, #0c1828 75%);
-  background-size: 200% 100%;
 }

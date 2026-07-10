@@ -178,11 +178,14 @@ const SettingsPage = () => {
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
-      <div>
-        <p className="text-[13px] text-muted-foreground">
-          Tax profile and preferences
-        </p>
-      </div>
+      <section>
+        <div className="eyebrow mb-1">
+          <span className="text-gold">•</span> Settings
+        </div>
+        <h2 className="font-serif text-3xl leading-tight md:text-4xl">
+          Your book, your rules.
+        </h2>
+      </section>
 
       {cloudEnabled ? (
         <Card className="border-border/50">

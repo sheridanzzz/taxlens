@@ -62,7 +62,12 @@ export const Onboarding = () => {
     <Dialog open={open} onOpenChange={(o) => !o && dismiss()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Set up your tax profile</DialogTitle>
+          <div className="eyebrow">
+            <span className="text-gold">•</span> Welcome to Ledgr
+          </div>
+          <DialogTitle className="font-serif text-2xl font-normal">
+            Set up your tax profile
+          </DialogTitle>
           <DialogDescription>
             Three quick questions. Your occupation helps the AI judge whether
             a receipt is claimable for your line of work, and your income
