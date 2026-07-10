@@ -12,7 +12,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Dialog,
@@ -26,7 +25,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTax } from "@/context/tax-context";
-import { EXPENSE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD } from "@/lib/constants";
+import {
+  EXPENSE_CATEGORIES,
+  FY_DATE_RANGES,
+  getDefaultDateForFinancialYear,
+  INSTANT_DEDUCTION_THRESHOLD,
+} from "@/lib/constants";
 import type { Expense, ExpenseCategory, ClaimType } from "@/lib/types";
 
 // ponytail: no recurrence engine — monthly subs expand into plain expense
@@ -69,6 +73,18 @@ export const ExpenseForm = ({
   const [receiptDataUrl, setReceiptDataUrl] = useState<string | undefined>();
   const [monthly, setMonthly] = useState(false);
 
+  function resetForm() {
+    setDescription("");
+    setAmount("");
+    setCategory("computer_equipment");
+    setDate(getDefaultDateForFinancialYear(state.settings.financialYear));
+    setClaimType("full");
+    setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
+    setNotes("");
+    setReceiptDataUrl(undefined);
+    setMonthly(false);
+  }
+
   useEffect(() => {
     if (editingExpense) {
       setDescription(editingExpense.description);
@@ -83,18 +99,6 @@ export const ExpenseForm = ({
       resetForm();
     }
   }, [editingExpense, open]);
-
-  const resetForm = () => {
-    setDescription("");
-    setAmount("");
-    setCategory("computer_equipment");
-    setDate(new Date().toISOString().split("T")[0]);
-    setClaimType("full");
-    setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
-    setNotes("");
-    setReceiptDataUrl(undefined);
-    setMonthly(false);
-  };
 
   useEffect(() => {
     const numAmount = parseFloat(amount);
@@ -169,6 +173,8 @@ export const ExpenseForm = ({
     resetForm();
   };
 
+  const fyRange = FY_DATE_RANGES[state.settings.financialYear];
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
@@ -209,10 +215,15 @@ export const ExpenseForm = ({
               <Input
                 id="expense-date"
                 type="date"
+                min={fyRange.start}
+                max={fyRange.end}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                {state.settings.financialYear} runs from {fyRange.start} to {fyRange.end}.
+              </p>
             </div>
           </div>
 

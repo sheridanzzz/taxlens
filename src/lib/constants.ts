@@ -130,3 +130,19 @@ export const FY_DATE_RANGES: Record<
   "2024-25": { start: "2024-07-01", end: "2025-06-30" },
   "2025-26": { start: "2025-07-01", end: "2026-06-30" },
 };
+
+/**
+ * Returns today when it falls within the selected FY, otherwise the nearest
+ * date in that FY. This keeps new records in the period the user is viewing.
+ */
+export const getDefaultDateForFinancialYear = (
+  financialYear: FinancialYear
+): string => {
+  const { start, end } = FY_DATE_RANGES[financialYear];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+
+  if (today < start) return start;
+  if (today > end) return end;
+  return today;
+};

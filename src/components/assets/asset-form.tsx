@@ -11,7 +11,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import {
   Dialog,
@@ -25,7 +24,12 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTax } from "@/context/tax-context";
-import { ASSET_EFFECTIVE_LIVES, INSTANT_DEDUCTION_THRESHOLD } from "@/lib/constants";
+import {
+  ASSET_EFFECTIVE_LIVES,
+  FY_DATE_RANGES,
+  getDefaultDateForFinancialYear,
+  INSTANT_DEDUCTION_THRESHOLD,
+} from "@/lib/constants";
 import type { DepreciatingAsset, AssetType, DepreciationMethod } from "@/lib/types";
 
 interface AssetFormProps {
@@ -50,6 +54,16 @@ export const AssetForm = ({
     useState<DepreciationMethod>("diminishing");
   const [workUsePercent, setWorkUsePercent] = useState("100");
 
+  function resetForm() {
+    setName("");
+    setAssetType("laptop");
+    setPurchasePrice("");
+    setPurchaseDate(getDefaultDateForFinancialYear(state.settings.financialYear));
+    setEffectiveLife("4");
+    setDepreciationMethod(state.settings.depreciationMethod);
+    setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
+  }
+
   useEffect(() => {
     if (editingAsset) {
       setName(editingAsset.name);
@@ -64,16 +78,6 @@ export const AssetForm = ({
     }
   }, [editingAsset, open]);
 
-  const resetForm = () => {
-    setName("");
-    setAssetType("laptop");
-    setPurchasePrice("");
-    setPurchaseDate(new Date().toISOString().split("T")[0]);
-    setEffectiveLife("4");
-    setDepreciationMethod(state.settings.depreciationMethod);
-    setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
-  };
-
   useEffect(() => {
     const life = ASSET_EFFECTIVE_LIVES[assetType];
     if (life) {
@@ -86,6 +90,7 @@ export const AssetForm = ({
 
   const price = parseFloat(purchasePrice);
   const showThresholdWarning = !isNaN(price) && price <= INSTANT_DEDUCTION_THRESHOLD;
+  const fyRange = FY_DATE_RANGES[state.settings.financialYear];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -181,10 +186,15 @@ export const AssetForm = ({
               <Input
                 id="asset-date"
                 type="date"
+                min={fyRange.start}
+                max={fyRange.end}
                 value={purchaseDate}
                 onChange={(e) => setPurchaseDate(e.target.value)}
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                {state.settings.financialYear} runs from {fyRange.start} to {fyRange.end}.
+              </p>
             </div>
           </div>
 
