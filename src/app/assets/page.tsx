@@ -71,7 +71,26 @@ const AssetsPage = () => {
         </Button>
       </div>
 
-      <DepreciationTable onEdit={handleEdit} />
+      {state.assets.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card p-8 text-center dark:border-border dark:bg-card">
+          <p className="text-sm font-medium text-foreground dark:text-foreground">
+            No depreciating assets in FY {state.settings.financialYear} yet
+          </p>
+          <p className="mx-auto mt-1 max-w-sm text-[13px] text-muted-foreground">
+            Laptops, monitors and phones over $300 are claimed over their
+            effective life — add one and Ledgr works out each year&apos;s
+            deduction for you.
+          </p>
+          <div className="mt-5 flex justify-center">
+            <Button onClick={() => setFormOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add your first asset
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <DepreciationTable onEdit={handleEdit} />
+      )}
 
       <AssetForm
         open={formOpen}

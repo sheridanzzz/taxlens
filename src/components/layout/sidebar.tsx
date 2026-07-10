@@ -5,6 +5,8 @@ import { usePathname } from "next/navigation";
 import { X } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { LedgrLogo } from "@/components/LedgrLogo";
+import { useTax } from "@/context/tax-context";
+import { useAuth } from "@/context/auth-context";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -58,6 +60,8 @@ interface SidebarProps {
 export const Sidebar = ({ open, onClose }: SidebarProps) => {
   const pathname = usePathname();
   const prefersReduced = useReducedMotion();
+  const { state } = useTax();
+  const { cloudEnabled, user } = useAuth();
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -151,12 +155,14 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
 
         <div className="ring-card rounded-2xl bg-background p-4">
           <div className="text-[11px] font-bold uppercase tracking-[0.16em] text-muted-foreground">
-            FY 2025-26
+            FY {state.settings.financialYear}
           </div>
           <div className="mt-1 text-[14px] font-semibold">67c/hr WFH &middot; Instant write-off</div>
           <div className="mt-3 flex items-center gap-2 text-[12px] font-semibold text-muted-foreground">
             <span className="h-2 w-2 rounded-full bg-primary" />
-            Local &middot; stays in browser
+            {cloudEnabled && user
+              ? "Synced to your account"
+              : "Local · stays in browser"}
           </div>
         </div>
       </aside>

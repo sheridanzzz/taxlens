@@ -115,9 +115,7 @@ export const ExpenseTable = ({ onEdit }: ExpenseTableProps) => {
       {filtered.length === 0 ? (
         <div className="py-12 text-center">
           <p className="text-[13px] text-muted-foreground">
-            {state.expenses.length === 0
-              ? "No expenses recorded yet"
-              : "No expenses match your filters"}
+            No expenses match your filters
           </p>
         </div>
       ) : (

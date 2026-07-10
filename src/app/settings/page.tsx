@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Download,
   Upload,
@@ -101,6 +101,20 @@ const SettingsPage = () => {
   const [depMethod, setDepMethod] = useState<DepreciationMethod>(
     state.settings.depreciationMethod
   );
+
+  // Settings load async — re-seed the form once they arrive, or a hard
+  // reload of this page shows defaults and Save wipes the real values.
+  useEffect(() => {
+    if (!state.loaded) return;
+    setIncome(state.settings.annualIncome.toString());
+    setOccupation(state.settings.occupation);
+    setFy(state.settings.financialYear);
+    setResidency(state.settings.taxResidentStatus);
+    setDefaultWorkUse(state.settings.defaultWorkUsePercent.toString());
+    setWfhMethod(state.settings.wfhMethod);
+    setDepMethod(state.settings.depreciationMethod);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.loaded]);
 
   const handleSave = async () => {
     await updateSettings({

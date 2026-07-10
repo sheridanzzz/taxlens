@@ -63,16 +63,6 @@ export const DepreciationTable = ({ onEdit }: DepreciationTableProps) => {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  if (state.assets.length === 0) {
-    return (
-      <div className="py-12 text-center">
-        <p className="text-[13px] text-muted-foreground">
-          No depreciating assets recorded yet
-        </p>
-      </div>
-    );
-  }
-
   return (
     <>
       <div className="overflow-x-auto rounded-xl border border-border bg-card dark:border-border dark:bg-card">

@@ -81,7 +81,29 @@ const ExpensesPage = () => {
         </div>
       </div>
 
-      <ExpenseTable onEdit={handleEdit} />
+      {state.expenses.length === 0 ? (
+        <div className="rounded-xl border border-border bg-card p-8 text-center dark:border-border dark:bg-card">
+          <p className="text-sm font-medium text-foreground dark:text-foreground">
+            No expenses in FY {state.settings.financialYear} yet
+          </p>
+          <p className="mx-auto mt-1 max-w-sm text-[13px] text-muted-foreground">
+            Snap a receipt and the AI fills in the details, or add one
+            manually. Every expense feeds your refund estimate.
+          </p>
+          <div className="mt-5 flex justify-center gap-2">
+            <Button onClick={() => setScannerOpen(true)}>
+              <Camera className="mr-1.5 h-3.5 w-3.5" />
+              Scan a receipt
+            </Button>
+            <Button variant="outline" onClick={() => setFormOpen(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Add manually
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <ExpenseTable onEdit={handleEdit} />
+      )}
 
       <ExpenseForm
         open={formOpen}

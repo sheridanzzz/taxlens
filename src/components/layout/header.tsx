@@ -95,11 +95,13 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
           onValueChange={handleFinancialYearChange}
         >
           <SelectTrigger
-            className="btn-press h-10 w-auto min-w-[170px] rounded-full border-0 bg-secondary px-4 text-[13px] font-semibold text-secondary-foreground"
+            className="btn-press h-10 w-auto rounded-full border-0 bg-secondary px-4 text-[13px] font-semibold text-secondary-foreground sm:min-w-[170px]"
             aria-label="Select financial year"
           >
             <span className="flex items-center gap-2">
-              <IconCalendar /> {fyLabel}
+              <IconCalendar />
+              <span className="sm:hidden">FY {state.settings.financialYear}</span>
+              <span className="hidden sm:inline">{fyLabel}</span>
             </span>
           </SelectTrigger>
           <SelectContent>
