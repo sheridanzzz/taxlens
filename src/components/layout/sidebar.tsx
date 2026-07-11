@@ -60,7 +60,7 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
         )}
       >
         <div className="flex h-16 items-center justify-between border-b border-border px-6">
-          <LedgrLogo />
+          <LedgrLogo size="lg" />
           <Button
             variant="ghost"
             size="icon"
