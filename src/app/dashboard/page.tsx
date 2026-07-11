@@ -16,7 +16,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ArrowUpRight, Sparkles } from "lucide-react";
+import { ArrowUpRight, ScanLine, Sparkles } from "lucide-react";
 import { Section, Kpi, Card, Pill } from "@/components/ledgr/primitives";
 import { Onboarding } from "@/components/onboarding";
 import { GettingStarted } from "@/components/dashboard/getting-started";
@@ -27,6 +27,7 @@ import {
   getMonthlyDeductionTotals,
 } from "@/lib/tax-calculator";
 import { fadeInUp } from "@/lib/animations";
+import { isAiScanned } from "@/lib/utils";
 
 const CHART_COLORS = [
   "var(--color-chart-1)",
@@ -86,7 +87,7 @@ const DashboardPage = () => {
   }, []);
 
   const wfhHours = state.wfhEntries.reduce((s, e) => s + e.hours, 0);
-  const scannedCount = state.expenses.filter((e) => e.receiptDataUrl).length;
+  const scannedCount = state.expenses.filter(isAiScanned).length;
   const effectiveRate =
     state.settings.annualIncome > 0
       ? (summary.taxPayable / state.settings.annualIncome) * 100
@@ -121,6 +122,12 @@ const DashboardPage = () => {
                 {scannedCount === 1 ? "" : "s"} AI-scanned
               </Pill>
             )}
+            <Link
+              href="/expenses?scan=1"
+              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm text-muted-foreground hover:text-foreground"
+            >
+              <ScanLine className="h-4 w-4 text-gold" /> Scan receipt
+            </Link>
             <Link
               href="/reports"
               className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"

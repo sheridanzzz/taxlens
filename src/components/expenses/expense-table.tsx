@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Pencil, Trash2, Receipt, Search } from "lucide-react";
+import { Pencil, Trash2, Receipt, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ledgr/primitives";
 import {
@@ -23,6 +23,7 @@ import {
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
+import { isAiScanned } from "@/lib/utils";
 import type { Expense } from "@/lib/types";
 
 interface ExpenseTableProps {
@@ -151,6 +152,11 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                         <span className="max-w-[220px] truncate">
                           {expense.description}
                         </span>
+                        {isAiScanned(expense) && (
+                          <span title="AI scanned">
+                            <Sparkles className="h-3 w-3 text-gold" />
+                          </span>
+                        )}
                         {expense.receiptDataUrl && (
                           <Button
                             variant="ghost"

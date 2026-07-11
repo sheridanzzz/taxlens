@@ -8,7 +8,9 @@ import {
   Clock3,
   Package,
   FileBarChart2,
+  ScanLine,
   Settings,
+  Sparkles,
   X,
 } from "lucide-react";
 import { LedgrLogo } from "@/components/LedgrLogo";
@@ -18,12 +20,13 @@ import { formatCurrency } from "@/lib/tax-calculator";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
-const NAV = [
+const NAV: { href: string; label: string; icon: typeof ScanLine; ai?: boolean }[] = [
   { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
   { href: "/expenses", label: "Expenses", icon: Receipt },
   { href: "/wfh", label: "WFH hours", icon: Clock3 },
   { href: "/assets", label: "Assets", icon: Package },
   { href: "/reports", label: "Reports", icon: FileBarChart2 },
+  { href: "/expenses?scan=1", label: "AI scan", icon: ScanLine, ai: true },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 
@@ -93,8 +96,9 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
                 )}
                 aria-current={active ? "page" : undefined}
               >
-                <Icon className="h-4 w-4" strokeWidth={1.5} />
+                <Icon className={cn("h-4 w-4", item.ai && "text-gold")} strokeWidth={1.5} />
                 <span>{item.label}</span>
+                {item.ai && !active && <Sparkles className="ml-auto h-3 w-3 text-gold/70" />}
                 {active && <span className="ml-auto h-1.5 w-1.5 rounded-full bg-gold" />}
               </Link>
             );

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Camera } from "lucide-react";
 import { motion } from "motion/react";
 import { Section, Kpi } from "@/components/ledgr/primitives";
@@ -10,23 +11,31 @@ import { ReceiptScanner } from "@/components/expenses/receipt-scanner";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { fadeInUp } from "@/lib/animations";
+import { isAiScanned } from "@/lib/utils";
 import type { Expense } from "@/lib/types";
 
-const ExpensesPage = () => {
+const ExpensesInner = () => {
   const { state, summary } = useTax();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [formOpen, setFormOpen] = useState(false);
   const [scannerOpen, setScannerOpen] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [initialSearch, setInitialSearch] = useState("");
 
-  // ponytail: window.location over useSearchParams — no Suspense boundary needed
+  // react to ?scan=1 / ?add=1 on every navigation, not just mount, so the
+  // sidebar/header launchers work while already on this page
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get("scan") === "1") setScannerOpen(true);
-    else if (params.get("add") === "1") setFormOpen(true);
-    const q = params.get("q");
+    if (searchParams.get("scan") === "1") setScannerOpen(true);
+    else if (searchParams.get("add") === "1") setFormOpen(true);
+    const q = searchParams.get("q");
     if (q) setInitialSearch(q);
-  }, []);
+  }, [searchParams]);
+
+  // strip launcher params on close so re-clicking the same link re-triggers
+  const clearParams = () => {
+    if (window.location.search) router.replace("/expenses", { scroll: false });
+  };
 
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
@@ -35,7 +44,15 @@ const ExpensesPage = () => {
 
   const handleFormOpenChange = (open: boolean) => {
     setFormOpen(open);
-    if (!open) setEditingExpense(null);
+    if (!open) {
+      setEditingExpense(null);
+      clearParams();
+    }
+  };
+
+  const handleScannerOpenChange = (open: boolean) => {
+    setScannerOpen(open);
+    if (!open) clearParams();
   };
 
   if (!state.loaded) {
@@ -46,7 +63,7 @@ const ExpensesPage = () => {
     );
   }
 
-  const scanned = state.expenses.filter((e) => e.receiptDataUrl).length;
+  const scanned = state.expenses.filter(isAiScanned).length;
   const depreciating = state.expenses.filter((e) => e.claimType === "depreciation").length;
   const avg =
     state.expenses.length > 0
@@ -130,11 +147,18 @@ const ExpensesPage = () => {
 
       <ReceiptScanner
         open={scannerOpen}
-        onOpenChange={setScannerOpen}
+        onOpenChange={handleScannerOpenChange}
         onExpenseCreated={() => {}}
       />
     </motion.div>
   );
 };
+
+// useSearchParams needs a Suspense boundary for static prerender
+const ExpensesPage = () => (
+  <Suspense>
+    <ExpensesInner />
+  </Suspense>
+);
 
 export default ExpensesPage;
