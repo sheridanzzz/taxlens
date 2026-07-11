@@ -120,4 +120,5 @@ export interface ReceiptScanResult {
   suggestedEffectiveLife?: number;
   suggestedDepreciationMethod?: DepreciationMethod;
   depreciationExplanation?: string;
+  modelUsed?: string;
 }

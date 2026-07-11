@@ -23,3 +23,10 @@ export type ModelKey = keyof typeof models;
 export function getModel(key: ModelKey = "primary"): LanguageModel {
   return models[key];
 }
+
+export const MODEL_LABELS: Record<ModelKey, string> = {
+  primary: "Gemini 3.5 Flash",
+  quality: "Llama 4 Scout",
+  fallback: "Gemini 3.1 Flash Lite",
+  budget: "Gemma 4",
+};

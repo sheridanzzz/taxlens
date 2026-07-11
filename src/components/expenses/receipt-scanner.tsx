@@ -1,55 +1,39 @@
 "use client";
 
-import { useState, useRef, useCallback, useMemo, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
+import Link from "next/link";
 import {
+  X,
   Upload,
   Camera,
-  Loader2,
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  ArrowRight,
-  RotateCcw,
-  Settings,
-  Info,
   FileText,
-  TrendingDown,
-  Lightbulb,
   Sparkles,
   ScanLine,
-  Receipt,
-  Calculator,
+  Check,
+  AlertTriangle,
+  RotateCw,
+  ArrowUpRight,
+  Info,
+  Loader2,
+  Receipt as ReceiptIcon,
 } from "lucide-react";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-} from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Pill } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
 import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
-import { formatCurrency } from "@/lib/tax-calculator";
+import { formatCurrency, calculateTaxPayable } from "@/lib/tax-calculator";
 import { calculateDiminishingValue, calculatePrimeCost } from "@/lib/depreciation";
-import { EXPENSE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD, ASSET_EFFECTIVE_LIVES } from "@/lib/constants";
-import type { Expense, ReceiptScanResult, ExpenseCategory, ClaimType, AssetType, DepreciationMethod, DepreciatingAsset } from "@/lib/types";
+import { EXPENSE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD } from "@/lib/constants";
+import type {
+  Expense,
+  ReceiptScanResult,
+  ExpenseCategory,
+  DepreciationMethod,
+  DepreciatingAsset,
+} from "@/lib/types";
 
-type ScanStep = "upload" | "scanning" | "review" | "error" | "saved";
+type ScanStep = "entry" | "scanning" | "review" | "review-notclaimable" | "error" | "saved";
+type FileMeta = { name: string; kind: "image" | "pdf" };
 
 interface ReceiptScannerProps {
   open: boolean;
@@ -59,6 +43,13 @@ interface ReceiptScannerProps {
 
 const MAX_IMAGE_DIMENSION = 1536;
 const JPEG_QUALITY = 0.85;
+
+const STAGES = [
+  { label: "Reading receipt", detail: "Extracting merchant, date, totals" },
+  { label: "Identifying items", detail: "Parsing line items and GST" },
+  { label: "Analysing claimability", detail: "Matching to your occupation" },
+  { label: "Calculating deductions", detail: "Instant write-off vs depreciation" },
+];
 
 const renderPdfToImage = async (file: File): Promise<{ base64: string; mimeType: string }> => {
   const pdfjsLib = await import("pdfjs-dist");
@@ -83,9 +74,7 @@ const renderPdfToImage = async (file: File): Promise<{ base64: string; mimeType:
 };
 
 const compressImage = async (file: File): Promise<{ base64: string; mimeType: string }> => {
-  if (file.type === "application/pdf") {
-    return renderPdfToImage(file);
-  }
+  if (file.type === "application/pdf") return renderPdfToImage(file);
 
   return new Promise((resolve, reject) => {
     const img = new Image();
@@ -114,86 +103,6 @@ const compressImage = async (file: File): Promise<{ base64: string; mimeType: st
   });
 };
 
-const SCAN_STAGES = [
-  { icon: ScanLine, text: "Reading receipt", detail: "Extracting text and numbers" },
-  { icon: Receipt, text: "Identifying items", detail: "Matching line items and totals" },
-  { icon: Sparkles, text: "Analysing claimability", detail: "Checking ATO rules for your occupation" },
-  { icon: Calculator, text: "Calculating deductions", detail: "Finding the best tax savings strategy" },
-];
-
-const ScanningAnimation = ({ previewUrl, isPdf }: { previewUrl: string | null; isPdf: boolean }) => {
-  const [stageIndex, setStageIndex] = useState(0);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setStageIndex((i) => (i + 1) % SCAN_STAGES.length);
-    }, 2200);
-    return () => clearInterval(interval);
-  }, []);
-
-  const stage = SCAN_STAGES[stageIndex];
-  const Icon = stage.icon;
-
-  return (
-    <div className="flex flex-col items-center gap-5 py-8">
-      <div className="relative">
-        {previewUrl ? (
-          <img
-            src={previewUrl}
-            alt="Receipt being scanned"
-            className="h-32 w-auto rounded-xl border border-border/50 object-cover"
-          />
-        ) : (
-          <div className="flex h-32 w-24 items-center justify-center rounded-xl border border-border/50 bg-muted/20">
-            <FileText className="h-10 w-10 text-muted-foreground/30" />
-            {isPdf && <span className="absolute bottom-2 text-[9px] font-medium text-muted-foreground/40">PDF</span>}
-          </div>
-        )}
-        <div className="absolute inset-0 rounded-xl overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/5 via-primary/10 to-primary/5 animate-pulse" />
-          <div
-            className="absolute left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-primary to-transparent"
-            style={{ animation: "scanline 2s ease-in-out infinite", top: "0%" }}
-          />
-        </div>
-        <div className="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary shadow-lg shadow-primary/30">
-          <Sparkles className="h-4 w-4 text-primary-foreground animate-pulse" />
-        </div>
-      </div>
-
-      <div className="flex flex-col items-center gap-2">
-        <div className="flex items-center gap-2">
-          <Icon className="h-4 w-4 text-primary animate-pulse" />
-          <p className="text-sm font-medium">{stage.text}</p>
-        </div>
-        <p className="text-[11px] text-muted-foreground transition-opacity duration-300">
-          {stage.detail}
-        </p>
-      </div>
-
-      <div className="flex gap-1.5">
-        {SCAN_STAGES.map((_, i) => (
-          <div
-            key={i}
-            className={`h-1 rounded-full transition-all duration-500 ${
-              i === stageIndex ? "w-6 bg-primary" : i < stageIndex ? "w-1.5 bg-primary/40" : "w-1.5 bg-muted-foreground/20"
-            }`}
-          />
-        ))}
-      </div>
-
-      <style jsx>{`
-        @keyframes scanline {
-          0%, 100% { top: 10%; opacity: 0; }
-          10% { opacity: 1; }
-          50% { top: 85%; opacity: 1; }
-          60% { opacity: 0; }
-        }
-      `}</style>
-    </div>
-  );
-};
-
 const calcFirstYearDepreciation = (
   cost: number,
   effectiveLife: number,
@@ -208,81 +117,63 @@ const calcFirstYearDepreciation = (
   return Math.round(raw * (workUsePercent / 100) * 100) / 100;
 };
 
-export const ReceiptScanner = ({
-  open,
-  onOpenChange,
-  onExpenseCreated,
-}: ReceiptScannerProps) => {
-  const { state, addExpense, addAsset } = useTax();
-  const fileInputRef = useRef<HTMLInputElement>(null);
+export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: ReceiptScannerProps) => {
+  const { state, summary, addExpense, addAsset } = useTax();
 
-  const [step, setStep] = useState<ScanStep>("upload");
+  const [step, setStep] = useState<ScanStep>("entry");
+  const [stageIndex, setStageIndex] = useState(0);
+  const [dragOver, setDragOver] = useState(false);
+  const [pendingFile, setPendingFile] = useState<FileMeta | null>(null);
+  const [scanInput, setScanInput] = useState<ScanInput | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isPdf, setIsPdf] = useState(false);
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
   const [editName, setEditName] = useState("");
-  const [editAmount, setEditAmount] = useState("");
+  const [editMerchant, setEditMerchant] = useState("");
+  const [editAmount, setEditAmount] = useState(0);
   const [editDate, setEditDate] = useState("");
   const [editCategory, setEditCategory] = useState<ExpenseCategory>("other");
-  const [editClaimType, setEditClaimType] = useState<ClaimType>("full");
-  const [editWorkUse, setEditWorkUse] = useState("100");
-  const [editAssetType, setEditAssetType] = useState<AssetType>("other");
+  const [editWorkUse, setEditWorkUse] = useState(100);
   const [editDepMethod, setEditDepMethod] = useState<DepreciationMethod>("diminishing");
-  const [editEffectiveLife, setEditEffectiveLife] = useState("5");
-  const [savedAsAsset, setSavedAsAsset] = useState(false);
+
+  const [savedDestination, setSavedDestination] = useState<"expenses" | "assets">("expenses");
   const [savedName, setSavedName] = useState("");
+  const [refundImpact, setRefundImpact] = useState(0);
 
-  const isDepreciation = editClaimType === "depreciation";
-  const amount = parseFloat(editAmount) || 0;
-  const workUse = parseFloat(editWorkUse) || 100;
-  const effectiveLife = parseFloat(editEffectiveLife) || 5;
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const depreciationPreview = useMemo(() => {
-    if (!isDepreciation || amount <= 0) return null;
-    const diminishing = calcFirstYearDepreciation(amount, effectiveLife, "diminishing", workUse);
-    const primeCost = calcFirstYearDepreciation(amount, effectiveLife, "prime_cost", workUse);
-    return { diminishing, primeCost };
-  }, [isDepreciation, amount, effectiveLife, workUse]);
+  const isDep = editAmount > INSTANT_DEDUCTION_THRESHOLD;
+  const effectiveLife = scanResult?.suggestedEffectiveLife ?? 5;
+  const claimableAmount = Math.round(editAmount * (editWorkUse / 100) * 100) / 100;
 
-  const savingsTips = useMemo(() => {
-    const tips: string[] = [];
-
-    if (workUse < 100 && workUse > 0) {
-      tips.push(`You're claiming ${workUse}% work use. Keep a diary or log to justify this percentage if audited.`);
-    }
-
-    if (isDepreciation) {
-      if (depreciationPreview && depreciationPreview.diminishing > depreciationPreview.primeCost) {
-        tips.push(`Diminishing Value gives you ${formatCurrency(depreciationPreview.diminishing - depreciationPreview.primeCost)} more this year. Best if you plan to replace this item before its ${effectiveLife}-year life ends.`);
-      }
-      if (amount > 300 && amount <= 330) {
-        tips.push(`This item is just over the $300 threshold. If the receipt includes non-work items, check if the work-related portion is ≤$300 for an instant claim.`);
-      }
-      tips.push(`Buy before June 30 to start claiming depreciation in this financial year — even a few days of ownership counts.`);
-    } else {
-      tips.push(`Items under $300 are fully deductible in the year purchased — no need to track depreciation.`);
-    }
-
-    if (workUse === 100) {
-      tips.push(`Claiming 100% work use means no personal use at all. If you ever use this personally, reduce the percentage to stay ATO-compliant.`);
-    }
-
-    tips.push(`Always keep the receipt/invoice for 5 years from the date you lodge your return.`);
-
-    return tips;
-  }, [isDepreciation, amount, workUse, effectiveLife, depreciationPreview]);
+  // real marginal-rate delta from the current ATO bracket, not a flat guess
+  const estimateRefundImpact = useCallback(
+    (claimable: number) => {
+      if (claimable <= 0) return 0;
+      const isResident = state.settings.taxResidentStatus === "resident";
+      const before = summary.taxableIncome;
+      const after = Math.max(0, before - claimable);
+      const delta =
+        calculateTaxPayable(before, state.settings.financialYear, isResident) -
+        calculateTaxPayable(after, state.settings.financialYear, isResident);
+      return Math.round(delta * 100) / 100;
+    },
+    [state.settings.taxResidentStatus, state.settings.financialYear, summary.taxableIncome]
+  );
 
   const handleReset = useCallback(() => {
-    setStep("upload");
+    setStep("entry");
+    setPendingFile(null);
+    setScanInput(null);
     setPreviewUrl(null);
     setIsPdf(false);
     setScanResult(null);
     setErrorMessage("");
-    setSavedAsAsset(false);
-    setSavedName("");
     if (fileInputRef.current) fileInputRef.current.value = "";
+    if (cameraInputRef.current) cameraInputRef.current.value = "";
   }, []);
 
   const handleClose = useCallback(() => {
@@ -290,560 +181,762 @@ export const ReceiptScanner = ({
     setTimeout(handleReset, 200);
   }, [onOpenChange, handleReset]);
 
-  const handleScan = useCallback(
-    async (input: ScanInput) => {
-      setStep("scanning");
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => e.key === "Escape" && handleClose();
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open, handleClose]);
 
-      try {
-        const result = await scanReceiptViaServer(input, state.settings.occupation);
+  const handleFile = useCallback(async (files: FileList | null) => {
+    const file = files?.[0];
+    if (!file) return;
+
+    const kind: "image" | "pdf" = file.type === "application/pdf" ? "pdf" : "image";
+    try {
+      const { base64, mimeType } = await compressImage(file);
+      setPendingFile({ name: file.name, kind });
+      setIsPdf(kind === "pdf");
+      setPreviewUrl(kind === "pdf" ? null : `data:${mimeType};base64,${base64}`);
+      setScanInput({ base64, mimeType });
+    } catch {
+      setErrorMessage("Could not read file. Please try a different format.");
+      setStep("error");
+    }
+  }, []);
+
+  // scanning stages cycle for as long as the real scan is in flight
+  useEffect(() => {
+    if (step !== "scanning" || !scanInput) return;
+    let cancelled = false;
+    setStageIndex(0);
+    const timer = setInterval(() => setStageIndex((i) => (i + 1) % STAGES.length), 1800);
+
+    scanReceiptViaServer(scanInput, state.settings.occupation)
+      .then((result) => {
+        if (cancelled) return;
         setScanResult(result);
         setEditName(result.itemName);
-        setEditAmount(result.amount.toString());
+        setEditMerchant(result.storeName);
+        setEditAmount(result.amount);
         setEditDate(result.date);
         setEditCategory(result.suggestedCategory);
-        setEditClaimType(result.claimType);
-        setEditWorkUse(result.suggestedWorkUsePercent.toString());
-        setEditAssetType(result.suggestedAssetType ?? "other");
+        setEditWorkUse(result.suggestedWorkUsePercent);
         setEditDepMethod(result.suggestedDepreciationMethod ?? state.settings.depreciationMethod);
-        setEditEffectiveLife((result.suggestedEffectiveLife ?? 5).toString());
-        setStep("review");
-      } catch (err) {
+        setStep(result.isRelevantToOccupation ? "review" : "review-notclaimable");
+      })
+      .catch((err) => {
+        if (cancelled) return;
         setErrorMessage(err instanceof Error ? err.message : "Failed to scan receipt.");
         setStep("error");
-      }
-    },
-    [state.settings.occupation, state.settings.depreciationMethod]
-  );
+      })
+      .finally(() => clearInterval(timer));
 
-  const handleFileChange = useCallback(
-    async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (!file) return;
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [step, scanInput]);
 
-      try {
-        const { base64, mimeType } = await compressImage(file);
-        const isFilePdf = file.type === "application/pdf";
+  const handleManualEntry = useCallback(() => {
+    setScanResult(null);
+    setEditName("");
+    setEditMerchant("");
+    setEditAmount(0);
+    setEditDate(new Date().toISOString().split("T")[0]);
+    setEditCategory("other");
+    setEditWorkUse(100);
+    setStep("review");
+  }, []);
 
-        setIsPdf(isFilePdf);
-        setPreviewUrl(isFilePdf ? null : `data:${mimeType};base64,${base64}`);
-
-        handleScan({ base64, mimeType });
-      } catch {
-        setErrorMessage("Could not read file. Please try a different format.");
-        setStep("error");
-      }
-    },
-    [handleScan]
-  );
+  const handleOverride = useCallback(() => {
+    setEditWorkUse((w) => (w > 0 ? w : 100));
+    setStep("review");
+  }, []);
 
   const handleSaveExpense = useCallback(async () => {
-    if (isNaN(amount) || amount <= 0 || !editName.trim()) return;
+    if (isNaN(editAmount) || editAmount <= 0 || !editName.trim()) return;
 
     const name = editName.trim();
+    const impact = estimateRefundImpact(claimableAmount);
 
-    if (isDepreciation) {
+    if (isDep) {
       const asset: DepreciatingAsset = {
         id: uuidv4(),
         name,
-        assetType: editAssetType,
+        assetType: scanResult?.suggestedAssetType ?? "other",
         purchaseDate: editDate,
-        purchasePrice: amount,
+        purchasePrice: editAmount,
         effectiveLifeYears: effectiveLife,
         depreciationMethod: editDepMethod,
-        workUsePercent: workUse,
+        workUsePercent: editWorkUse,
         financialYear: state.settings.financialYear,
         createdAt: new Date().toISOString(),
       };
       await addAsset(asset);
-      setSavedAsAsset(true);
-      setSavedName(name);
-      setStep("saved");
-      onExpenseCreated();
+      setSavedDestination("assets");
     } else {
-      const claimableAmount = Math.round(amount * (workUse / 100) * 100) / 100;
       const expense: Expense = {
         id: uuidv4(),
         date: editDate,
         description: name,
-        amount,
+        amount: editAmount,
         category: editCategory,
         claimType: "full",
-        workUsePercent: workUse,
+        workUsePercent: editWorkUse,
         claimableAmount,
         receiptDataUrl: previewUrl ?? undefined,
         notes: scanResult
-          ? `AI scan: ${scanResult.storeName}. ${scanResult.relevanceExplanation}`
+          ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}`
           : undefined,
         financialYear: state.settings.financialYear,
         createdAt: new Date().toISOString(),
       };
       await addExpense(expense);
-      setSavedAsAsset(false);
-      setSavedName(name);
-      setStep("saved");
-      onExpenseCreated();
+      setSavedDestination("expenses");
     }
+
+    setSavedName(name);
+    setRefundImpact(impact);
+    setStep("saved");
+    onExpenseCreated();
   }, [
-    editName, amount, editDate, editCategory, editClaimType, workUse,
-    previewUrl, scanResult, state.settings.financialYear,
-    isDepreciation, editAssetType, editDepMethod, effectiveLife,
-    addExpense, addAsset, onExpenseCreated,
+    editAmount, editName, editDate, editCategory, editWorkUse, editMerchant,
+    claimableAmount, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
+    state.settings.financialYear, addExpense, addAsset, onExpenseCreated, estimateRefundImpact,
   ]);
 
-  const ReceiptPreview = () => {
-    if (previewUrl) {
-      return (
-        <img
-          src={previewUrl}
-          alt="Receipt"
-          className="h-20 w-auto shrink-0 rounded-lg border border-border/50 object-cover"
-        />
-      );
-    }
-    if (isPdf) {
-      return (
-        <div className="flex h-20 w-16 shrink-0 flex-col items-center justify-center rounded-lg border border-border/50 bg-muted/30">
-          <FileText className="h-6 w-6 text-muted-foreground/60" />
-          <span className="mt-1 text-[9px] font-medium text-muted-foreground/60">PDF</span>
-        </div>
-      );
-    }
-    return null;
+  const handleSaveAsPersonal = useCallback(async () => {
+    const name = editName.trim() || "Personal expense";
+    const expense: Expense = {
+      id: uuidv4(),
+      date: editDate,
+      description: name,
+      amount: editAmount,
+      category: "other",
+      claimType: "full",
+      workUsePercent: 0,
+      claimableAmount: 0,
+      receiptDataUrl: previewUrl ?? undefined,
+      notes: scanResult
+        ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}`
+        : undefined,
+      financialYear: state.settings.financialYear,
+      createdAt: new Date().toISOString(),
+    };
+    await addExpense(expense);
+    setSavedDestination("expenses");
+    setSavedName(name);
+    setRefundImpact(0);
+    setStep("saved");
+    onExpenseCreated();
+  }, [editName, editDate, editAmount, editMerchant, previewUrl, scanResult, state.settings.financialYear, addExpense, onExpenseCreated]);
+
+  if (!open) return null;
+
+  const titleMap: Record<ScanStep, string> = {
+    entry: "Scan a receipt",
+    scanning: "Scanning",
+    review: "Review deduction",
+    "review-notclaimable": "Review deduction",
+    error: "Something went wrong",
+    saved: "Saved",
   };
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) handleClose(); }}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Camera className="h-4 w-4" />
-            Scan Receipt
-          </DialogTitle>
-        </DialogHeader>
-
-        {step === "upload" && (
-          <div className="space-y-4">
-            <p className="text-[13px] text-muted-foreground">
-              Upload a receipt image or PDF and AI will extract the details, check if it&apos;s claimable for your occupation, and calculate your deduction.
-            </p>
-
-            <div
-              className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border/60 p-10 transition-colors hover:border-primary/30 hover:bg-muted/20"
-              role="button"
-              tabIndex={0}
-              aria-label="Upload receipt"
-              onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(e) => e.key === "Enter" && fileInputRef.current?.click()}
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
+      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={handleClose} />
+      <div className="surface relative max-h-[92vh] w-full max-w-3xl overflow-y-auto p-0 shadow-2xl">
+        <div className="flex h-14 items-center justify-between border-b border-border px-6 md:px-8">
+          <div className="flex items-center gap-3">
+            <span className="grid h-7 w-7 place-items-center rounded-md border border-gold/30 bg-gold-soft text-gold">
+              <ScanLine className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="eyebrow">AI receipt intelligence</div>
+              <div className="mt-0.5 font-serif text-lg leading-none">{titleMap[step]}</div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {(step === "review" || step === "review-notclaimable" || step === "saved") &&
+              scanResult?.modelUsed && (
+                <span className="hidden text-[11px] text-muted-foreground sm:inline">
+                  Read by <span className="text-foreground/80">{scanResult.modelUsed}</span>
+                </span>
+              )}
+            <button
+              onClick={handleClose}
+              className="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground hover:text-foreground"
+              aria-label="Close"
             >
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-                <Upload className="h-5 w-5 text-primary" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium">Click to upload receipt</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  JPG, PNG, WebP, HEIC, PDF supported
-                </p>
-              </div>
-            </div>
-
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*,.pdf,application/pdf"
-              onChange={handleFileChange}
-              className="hidden"
-            />
-
-            <div className="flex items-start gap-2 rounded-lg bg-primary/10 p-3">
-              <Info className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <p className="text-xs text-muted-foreground">
-                AI-powered scanning — receipts are analysed server-side, no API key needed.
-              </p>
-            </div>
+              <X className="h-4 w-4" />
+            </button>
           </div>
-        )}
+        </div>
 
-        {step === "scanning" && <ScanningAnimation previewUrl={previewUrl} isPdf={isPdf} />}
-
-        {step === "error" && (
-          <div className="space-y-4">
-            <div className="flex flex-col items-center gap-3 py-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10">
-                <XCircle className="h-5 w-5 text-destructive" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium">Scan failed</p>
-                <p className="mt-1 max-w-xs text-[12px] text-muted-foreground">
-                  {errorMessage}
-                </p>
-              </div>
-            </div>
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleReset}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Try Again
-              </Button>
-              {errorMessage.includes("Settings") && (
-                <Link href="/settings" onClick={() => onOpenChange(false)}>
-                  <Button size="sm">
-                    <Settings className="mr-1.5 h-3.5 w-3.5" />
-                    Open Settings
-                  </Button>
-                </Link>
-              )}
-            </div>
-          </div>
-        )}
-
-        {step === "review" && scanResult && (
-          <div className="space-y-5">
-            <div className="flex gap-3">
-              <ReceiptPreview />
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-muted-foreground">{scanResult.storeName}</p>
-                <p className="mt-0.5 text-sm font-medium">{scanResult.itemName}</p>
-                <p className="stat-number mt-0.5 text-lg font-bold">
-                  {formatCurrency(scanResult.amount)}
-                </p>
-              </div>
-            </div>
-
-            <div className={`rounded-lg p-3 ${scanResult.isRelevantToOccupation ? "bg-emerald-500/10" : "bg-amber-500/10"}`}>
-              <div className="flex items-center gap-2">
-                {scanResult.isRelevantToOccupation ? (
-                  <CheckCircle className="h-4 w-4 shrink-0 text-emerald-500" />
-                ) : (
-                  <AlertTriangle className="h-4 w-4 shrink-0 text-amber-500" />
-                )}
-                <p className={`text-xs font-medium ${scanResult.isRelevantToOccupation ? "text-emerald-500" : "text-amber-500"}`}>
-                  {scanResult.isRelevantToOccupation ? "Likely claimable" : "May not be claimable"}
-                </p>
-              </div>
-              <p className="mt-1.5 text-[12px] leading-relaxed text-muted-foreground">
-                {scanResult.relevanceExplanation}
-              </p>
-            </div>
-
-            <div className="rounded-lg bg-muted/40 p-3">
-              <div className="flex items-center gap-1.5">
-                <Sparkles className="h-3.5 w-3.5 text-primary" />
-                <p className="text-[11px] font-medium text-foreground">AI tax strategy</p>
-              </div>
-              <p className="mt-1 text-[12px] leading-relaxed text-muted-foreground">
-                {scanResult.claimAdvice}
-              </p>
-              {scanResult.depreciationExplanation && (
-                <p className="mt-2 text-[12px] leading-relaxed text-muted-foreground border-t border-border/30 pt-2">
-                  {scanResult.depreciationExplanation}
-                </p>
-              )}
-            </div>
-
-            {savingsTips.length > 0 && (
-              <details className="group" open>
-                <summary className="flex cursor-pointer items-center gap-1.5 text-[11px] font-medium text-amber-500 hover:text-amber-400">
-                  <Lightbulb className="h-3 w-3" />
-                  {savingsTips.length} tip{savingsTips.length > 1 ? "s" : ""} to maximize savings
-                </summary>
-                <ul className="mt-1.5 space-y-1 pl-[18px]">
-                  {savingsTips.map((tip, i) => (
-                    <li key={i} className="text-[11px] leading-relaxed text-muted-foreground list-disc">
-                      {tip}
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-
-            {scanResult.rawItems && scanResult.rawItems.length > 1 && (
-              <details className="group">
-                <summary className="cursor-pointer text-[11px] font-medium text-muted-foreground hover:text-foreground">
-                  {scanResult.rawItems.length} line items detected
-                </summary>
-                <div className="mt-1.5 space-y-0.5 pl-3">
-                  {scanResult.rawItems.map((item, i) => (
-                    <p key={i} className="text-[11px] text-muted-foreground">{item}</p>
-                  ))}
+        <div className="p-6 md:p-8">
+          {step === "entry" && (
+            <div>
+              <div className="mb-6">
+                <div className="eyebrow mb-1">
+                  <span className="text-gold">•</span> Step 1 of 3
                 </div>
-              </details>
-            )}
-
-            <div className="h-px bg-border/50" />
-
-            <div className="space-y-3">
-              <p className="text-xs font-medium">Review & edit</p>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="scan-name" className="text-xs">Item Name</Label>
-                <Input id="scan-name" value={editName} onChange={(e) => setEditName(e.target.value)} />
+                <h3 className="font-serif text-3xl">Drop a receipt. We&apos;ll do the rest.</h3>
+                <p className="mt-2 max-w-lg text-sm text-muted-foreground">
+                  Photos or PDFs. We extract every field, judge deductibility against your
+                  occupation, and pick the ATO strategy that saves you the most.
+                </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="scan-amount" className="text-xs">Amount ($)</Label>
-                  <Input
-                    id="scan-amount"
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  handleFile(e.dataTransfer.files);
+                }}
+                className={`relative rounded-lg border-2 border-dashed transition-colors ${
+                  dragOver ? "border-gold bg-gold-soft/40" : "border-border bg-surface-2/40"
+                }`}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf,application/pdf"
+                  className="hidden"
+                  onChange={(e) => handleFile(e.target.files)}
+                />
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={(e) => handleFile(e.target.files)}
+                />
+                {!pendingFile ? (
+                  <div className="p-10 text-center md:p-14">
+                    <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full border border-border bg-surface">
+                      <Upload className="h-5 w-5 text-gold" strokeWidth={1.5} />
+                    </div>
+                    <div className="font-serif text-2xl">Drag a receipt here</div>
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      JPG, PNG, HEIC or PDF — resized automatically
+                    </div>
+                    <div className="mt-6 flex items-center justify-center gap-2">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+                      >
+                        <Upload className="h-4 w-4" /> Browse files
+                      </button>
+                      <button
+                        onClick={() => cameraInputRef.current?.click()}
+                        className="inline-flex items-center gap-2 rounded-md border border-border px-4 text-sm md:hidden h-9"
+                      >
+                        <Camera className="h-4 w-4" /> Camera
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-stretch gap-5 p-5 md:flex-row md:p-6">
+                    <div className="grid aspect-[3/4] w-full place-items-center overflow-hidden rounded-md border border-border bg-surface md:w-56">
+                      {previewUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={previewUrl} alt="Receipt" className="h-full w-full object-cover" />
+                      ) : (
+                        <div className="p-4 text-center">
+                          {pendingFile.kind === "pdf" ? (
+                            <FileText className="mx-auto h-10 w-10 text-muted-foreground" strokeWidth={1.2} />
+                          ) : (
+                            <ReceiptIcon className="mx-auto h-10 w-10 text-muted-foreground" strokeWidth={1.2} />
+                          )}
+                          <div className="mt-2 truncate text-[11px] text-muted-foreground">
+                            {pendingFile.name}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex flex-1 flex-col">
+                      <div className="eyebrow">Attached</div>
+                      <div className="mt-1 truncate font-serif text-2xl">{pendingFile.name}</div>
+                      <div className="mt-1 text-xs text-muted-foreground">
+                        Ready to scan. We&apos;ll extract fields and match to your occupation.
+                      </div>
+                      <div className="mt-auto flex items-center gap-2 pt-6">
+                        <button
+                          onClick={() => setStep("scanning")}
+                          className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+                        >
+                          <ScanLine className="h-4 w-4" /> Scan receipt
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPendingFile(null);
+                            setScanInput(null);
+                            setPreviewUrl(null);
+                          }}
+                          className="h-9 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
+                        >
+                          Replace
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
+                {[
+                  { icon: ScanLine, t: "Line-item extraction", d: "Every item and total, read from the receipt" },
+                  { icon: Sparkles, t: "Occupation-aware", d: "Judged against your ATO profile" },
+                  { icon: FileText, t: "myTax ready", d: "Category, method, effective life" },
+                ].map(({ icon: Icon, t, d }) => (
+                  <div key={t} className="flex items-start gap-3 text-sm">
+                    <Icon className="mt-0.5 h-4 w-4 text-gold" strokeWidth={1.5} />
+                    <div>
+                      <div>{t}</div>
+                      <div className="text-xs text-muted-foreground">{d}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {step === "scanning" && (
+            <div className="grid items-start gap-8 md:grid-cols-[220px_1fr]">
+              <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md border border-border bg-surface md:w-[220px]">
+                <div className="absolute inset-0 grid place-items-center">
+                  {previewUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={previewUrl} alt="Receipt being scanned" className="h-full w-full object-cover opacity-60" />
+                  ) : isPdf ? (
+                    <FileText className="h-14 w-14 text-muted-foreground/60" strokeWidth={1} />
+                  ) : (
+                    <ReceiptIcon className="h-14 w-14 text-muted-foreground/60" strokeWidth={1} />
+                  )}
+                </div>
+                <div
+                  className="pointer-events-none absolute inset-x-0 h-14"
+                  style={{
+                    background:
+                      "linear-gradient(180deg, transparent 0%, color-mix(in oklab, var(--color-gold) 40%, transparent) 50%, transparent 100%)",
+                    animation: "ledgr-scan 1.8s linear infinite",
+                  }}
+                />
+                <style>{`@keyframes ledgr-scan {0%{transform:translateY(-20%)}100%{transform:translateY(320%)}}`}</style>
+              </div>
+
+              <div>
+                <div className="eyebrow mb-1">
+                  <span className="text-gold">•</span> Working
+                </div>
+                <h3 className="mb-6 font-serif text-3xl">Reading your receipt.</h3>
+                <ol className="space-y-3">
+                  {STAGES.map((s, i) => {
+                    const doneState = i < stageIndex ? "done" : i === stageIndex ? "active" : "pending";
+                    return (
+                      <li
+                        key={s.label}
+                        className={`flex items-start gap-3 rounded-md border p-3 ${
+                          doneState === "active" ? "border-gold/40 bg-gold-soft/30" : "border-border"
+                        }`}
+                      >
+                        <span
+                          className={`mt-0.5 grid h-5 w-5 place-items-center rounded-full text-[10px] ${
+                            doneState === "done"
+                              ? "bg-positive/20 text-positive"
+                              : doneState === "active"
+                                ? "bg-gold text-primary-foreground"
+                                : "bg-surface-2 text-muted-foreground"
+                          }`}
+                        >
+                          {doneState === "done" ? (
+                            <Check className="h-3 w-3" />
+                          ) : doneState === "active" ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            i + 1
+                          )}
+                        </span>
+                        <div className="flex-1">
+                          <div className={`text-sm ${doneState === "pending" ? "text-muted-foreground" : ""}`}>
+                            {s.label}
+                          </div>
+                          <div className="text-[11px] text-muted-foreground">{s.detail}</div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
+              </div>
+            </div>
+          )}
+
+          {(step === "review") && (
+            <div>
+              <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <div className="mb-1 flex items-center gap-2">
+                    {scanResult && (
+                      <Pill tone="gold">
+                        <Sparkles className="h-3 w-3" /> AI suggested
+                      </Pill>
+                    )}
+                    <Pill tone={isDep ? "muted" : "positive"}>
+                      {isDep ? "Depreciate over time" : "Instant write-off"}
+                    </Pill>
+                  </div>
+                  <h3 className="font-serif text-3xl leading-tight">{editName || "New expense"}</h3>
+                  {(editMerchant || editDate) && (
+                    <div className="mt-1 text-sm text-muted-foreground">
+                      {editMerchant}
+                      {editMerchant && editDate ? " · " : ""}
+                      {editDate}
+                    </div>
+                  )}
+                </div>
+                <div className="text-right">
+                  <div className="eyebrow">Deductible</div>
+                  <div className="font-serif text-4xl tabular text-gold">
+                    {formatCurrency(claimableAmount)}
+                  </div>
+                </div>
+              </div>
+
+              {scanResult?.relevanceExplanation && (
+                <blockquote className="mb-6 border-l-2 border-gold py-1 pl-4 text-sm italic text-foreground/90">
+                  &ldquo;{scanResult.relevanceExplanation}&rdquo;
+                </blockquote>
+              )}
+
+              <div className="mb-6 grid gap-4 md:grid-cols-2">
+                <Field label="Item">
+                  <input value={editName} onChange={(e) => setEditName(e.target.value)} className="scan-input" />
+                </Field>
+                <Field label="Amount (AUD)">
+                  <input
                     type="number"
                     step="0.01"
-                    min="0.01"
-                    value={editAmount}
-                    onChange={(e) => {
-                      setEditAmount(e.target.value);
-                      const n = parseFloat(e.target.value);
-                      if (!isNaN(n) && n > 0) {
-                        setEditClaimType(n <= INSTANT_DEDUCTION_THRESHOLD ? "full" : "depreciation");
-                      }
-                    }}
+                    min="0"
+                    value={editAmount || ""}
+                    onChange={(e) => setEditAmount(parseFloat(e.target.value) || 0)}
+                    className="scan-input font-mono tabular"
                   />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="scan-date" className="text-xs">Date</Label>
-                  <Input id="scan-date" type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
-                </div>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="scan-category" className="text-xs">Category</Label>
-                <Select value={editCategory} onValueChange={(v) => setEditCategory(v as ExpenseCategory)}>
-                  <SelectTrigger id="scan-category">
-                    <span>{EXPENSE_CATEGORIES[editCategory]?.label ?? editCategory}</span>
-                  </SelectTrigger>
-                  <SelectContent>
+                </Field>
+                <Field label="Merchant">
+                  <input value={editMerchant} onChange={(e) => setEditMerchant(e.target.value)} className="scan-input" />
+                </Field>
+                <Field label="Date">
+                  <input
+                    type="date"
+                    value={editDate}
+                    onChange={(e) => setEditDate(e.target.value)}
+                    className="scan-input font-mono"
+                  />
+                </Field>
+                <Field label="Category">
+                  <select
+                    value={editCategory}
+                    onChange={(e) => setEditCategory(e.target.value as ExpenseCategory)}
+                    className="scan-input"
+                  >
                     {Object.entries(EXPENSE_CATEGORIES).map(([key, cat]) => (
-                      <SelectItem key={key} value={key}>{cat.label}</SelectItem>
+                      <option key={key} value={key}>{cat.label}</option>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </select>
+                </Field>
+                <Field label={`Work use · ${editWorkUse}%`}>
+                  <input
+                    type="range"
+                    min={0}
+                    max={100}
+                    value={editWorkUse}
+                    onChange={(e) => setEditWorkUse(Number(e.target.value))}
+                    className="mt-2 w-full accent-[var(--color-gold)]"
+                  />
+                </Field>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="scan-claim" className="text-xs">Claim Type</Label>
-                  {amount > INSTANT_DEDUCTION_THRESHOLD ? (
-                    <div className="flex h-9 items-center rounded-md border border-border/50 bg-muted/30 px-3">
-                      <span className="text-sm text-muted-foreground">Depreciation (required over ${INSTANT_DEDUCTION_THRESHOLD})</span>
-                    </div>
-                  ) : (
-                    <Select value={editClaimType} onValueChange={(v) => setEditClaimType(v as ClaimType)}>
-                      <SelectTrigger id="scan-claim">
-                        <span>{editClaimType === "full" ? "Full Claim (Instant)" : "Depreciation"}</span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="full">Full Claim (Instant)</SelectItem>
-                        <SelectItem value="depreciation">Depreciation</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  )}
-                </div>
-
-                <div className="space-y-1.5">
-                  <div className="flex items-center gap-1.5">
-                    <Label htmlFor="scan-work-use" className="text-xs">Work Use %</Label>
-                    <Tooltip>
-                      <TooltipTrigger className="cursor-help">
-                        <Info className="h-3 w-3 text-muted-foreground/50" />
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-[220px]">
-                        <p>What portion of this item is used for work? 100% if exclusively for work, lower if also used personally.</p>
-                      </TooltipContent>
-                    </Tooltip>
+              {scanResult?.rawItems && scanResult.rawItems.length > 0 && (
+                <div className="mb-6">
+                  <div className="eyebrow mb-2">Line items</div>
+                  <div className="divide-y divide-border rounded-md border border-border">
+                    {scanResult.rawItems.map((label, i) => (
+                      <div key={i} className="px-3 py-2 text-sm">{label}</div>
+                    ))}
                   </div>
-                  <Input id="scan-work-use" type="number" min="1" max="100" value={editWorkUse} onChange={(e) => setEditWorkUse(e.target.value)} />
-                </div>
-              </div>
-
-              {isDepreciation && (
-                <>
-                  <div className="h-px bg-border/50" />
-                  <div className="flex items-center gap-1.5">
-                    <TrendingDown className="h-3.5 w-3.5 text-primary" />
-                    <p className="text-xs font-medium">Depreciation details</p>
-                  </div>
-
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="scan-asset-type" className="text-xs">Asset Type</Label>
-                      <Select
-                        value={editAssetType}
-                        onValueChange={(v) => {
-                          const t = v as AssetType;
-                          setEditAssetType(t);
-                          setEditEffectiveLife(ASSET_EFFECTIVE_LIVES[t].years.toString());
-                        }}
-                      >
-                        <SelectTrigger id="scan-asset-type">
-                          <span>{ASSET_EFFECTIVE_LIVES[editAssetType]?.label ?? editAssetType}</span>
-                        </SelectTrigger>
-                        <SelectContent>
-                          {Object.entries(ASSET_EFFECTIVE_LIVES).map(([key, val]) => (
-                            <SelectItem key={key} value={key}>{val.label}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <div className="flex items-center gap-1.5">
-                        <Label htmlFor="scan-eff-life" className="text-xs">Effective Life (years)</Label>
-                        <Tooltip>
-                          <TooltipTrigger className="cursor-help">
-                            <Info className="h-3 w-3 text-muted-foreground/50" />
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[240px]">
-                            <p>ATO-specified useful life of the asset. This determines how quickly you can claim the cost over time.</p>
-                          </TooltipContent>
-                        </Tooltip>
-                      </div>
-                      <Input id="scan-eff-life" type="number" min="1" max="40" value={editEffectiveLife} onChange={(e) => setEditEffectiveLife(e.target.value)} />
-                    </div>
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <Label htmlFor="scan-dep-method" className="text-xs">Depreciation Method</Label>
-                      <Tooltip>
-                        <TooltipTrigger className="cursor-help">
-                          <Info className="h-3 w-3 text-muted-foreground/50" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-[260px]">
-                          <p>Diminishing Value gives bigger deductions early on — best if you replace items often. Prime Cost spreads it evenly — better for long-held assets.</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </div>
-                    <Select value={editDepMethod} onValueChange={(v) => setEditDepMethod(v as DepreciationMethod)}>
-                      <SelectTrigger id="scan-dep-method">
-                        <span>{editDepMethod === "diminishing" ? "Diminishing Value" : "Prime Cost"}</span>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="diminishing">Diminishing Value</SelectItem>
-                        <SelectItem value="prime_cost">Prime Cost</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {depreciationPreview && (
-                    <div className="rounded-lg bg-primary/5 p-3 space-y-2">
-                      <p className="text-xs font-medium text-foreground">First year claimable deduction</p>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div
-                          className={`rounded-md p-2.5 text-center transition-colors ${editDepMethod === "diminishing" ? "bg-primary/10 ring-1 ring-primary/30" : "bg-muted/40"}`}
-                          role="button"
-                          tabIndex={0}
-                          aria-label="Select diminishing value method"
-                          onClick={() => setEditDepMethod("diminishing")}
-                          onKeyDown={(e) => e.key === "Enter" && setEditDepMethod("diminishing")}
-                        >
-                          <p className="text-[10px] text-muted-foreground">Diminishing Value</p>
-                          <p className={`stat-number mt-0.5 text-base font-bold ${editDepMethod === "diminishing" ? "text-primary" : "text-foreground"}`}>
-                            {formatCurrency(depreciationPreview.diminishing)}
-                          </p>
-                          {depreciationPreview.diminishing >= depreciationPreview.primeCost && (
-                            <p className="mt-0.5 text-[9px] font-medium text-emerald-500">Best first year</p>
-                          )}
-                        </div>
-                        <div
-                          className={`rounded-md p-2.5 text-center transition-colors ${editDepMethod === "prime_cost" ? "bg-primary/10 ring-1 ring-primary/30" : "bg-muted/40"}`}
-                          role="button"
-                          tabIndex={0}
-                          aria-label="Select prime cost method"
-                          onClick={() => setEditDepMethod("prime_cost")}
-                          onKeyDown={(e) => e.key === "Enter" && setEditDepMethod("prime_cost")}
-                        >
-                          <p className="text-[10px] text-muted-foreground">Prime Cost</p>
-                          <p className={`stat-number mt-0.5 text-base font-bold ${editDepMethod === "prime_cost" ? "text-primary" : "text-foreground"}`}>
-                            {formatCurrency(depreciationPreview.primeCost)}
-                          </p>
-                          {depreciationPreview.primeCost > depreciationPreview.diminishing && (
-                            <p className="mt-0.5 text-[9px] font-medium text-emerald-500">Best first year</p>
-                          )}
-                        </div>
-                      </div>
-                      <p className="text-[10px] text-muted-foreground leading-relaxed">
-                        Over {effectiveLife} years at {workUse}% work use.
-                        {editDepMethod === "diminishing"
-                          ? " Diminishing Value front-loads deductions — you claim more in early years."
-                          : " Prime Cost gives equal deductions each year."}
-                      </p>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {!isDepreciation && amount > 0 && (
-                <div className="rounded-lg bg-primary/5 p-3">
-                  <p className="text-xs text-muted-foreground">
-                    Claimable amount:{" "}
-                    <span className="stat-number font-semibold text-primary">
-                      {formatCurrency(Math.round(amount * (workUse / 100) * 100) / 100)}
-                    </span>
-                  </p>
                 </div>
               )}
-            </div>
 
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" className="flex-1" onClick={handleReset}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Scan Another
-              </Button>
-              <Button size="sm" className="flex-1" onClick={handleSaveExpense} disabled={!editName.trim() || amount <= 0}>
-                <ArrowRight className="mr-1.5 h-3.5 w-3.5" />
-                {isDepreciation ? "Add Asset" : "Add Expense"}
-              </Button>
-            </div>
+              <div className="mb-6 rounded-md border border-border bg-surface-2/40 p-4">
+                {scanResult?.claimAdvice && (
+                  <div className="mb-4 flex items-start gap-3">
+                    <Info className="mt-0.5 h-4 w-4 text-gold" />
+                    <div className="text-sm">
+                      <div className="font-medium">Claim strategy</div>
+                      <div className="mt-0.5 text-[13px] text-muted-foreground">{scanResult.claimAdvice}</div>
+                    </div>
+                  </div>
+                )}
 
-            {isDepreciation && (
-              <p className="text-center text-[10px] text-muted-foreground">
-                This will be added to your Depreciating Assets and the yearly deduction will be calculated automatically.
-              </p>
-            )}
-          </div>
-        )}
-
-        {step === "saved" && (
-          <div className="space-y-4">
-            <div className="flex flex-col items-center gap-3 py-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10">
-                <CheckCircle className="h-5 w-5 text-emerald-500" />
-              </div>
-              <div className="text-center">
-                <p className="text-sm font-medium">
-                  {savedAsAsset ? "Asset added" : "Expense added"}
-                </p>
-                <p className="mt-1 text-[12px] text-muted-foreground">
-                  &ldquo;{savedName}&rdquo; has been saved to your{" "}
-                  <span className="font-medium text-foreground">
-                    {savedAsAsset ? "Depreciating Assets" : "Expenses"}
-                  </span>.
-                </p>
-                {savedAsAsset && (
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Yearly depreciation deductions will be calculated automatically.
-                  </p>
+                {isDep ? (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    {(() => {
+                      const dim = calcFirstYearDepreciation(editAmount, effectiveLife, "diminishing", editWorkUse);
+                      const prime = calcFirstYearDepreciation(editAmount, effectiveLife, "prime_cost", editWorkUse);
+                      return (
+                        <>
+                          <StrategyCard
+                            title="Diminishing value"
+                            recommended={editDepMethod === "diminishing"}
+                            onClick={() => setEditDepMethod("diminishing")}
+                            rows={[
+                              ["Year 1", formatCurrency(dim)],
+                              ["Lifetime", formatCurrency(claimableAmount)],
+                              ["Method", "Declining balance"],
+                            ]}
+                          />
+                          <StrategyCard
+                            title="Prime cost"
+                            recommended={editDepMethod === "prime_cost"}
+                            onClick={() => setEditDepMethod("prime_cost")}
+                            rows={[
+                              ["Year 1", formatCurrency(prime)],
+                              ["Lifetime", formatCurrency(claimableAmount)],
+                              ["Method", `Even over ${effectiveLife}yr`],
+                            ]}
+                          />
+                        </>
+                      );
+                    })()}
+                    {scanResult?.depreciationExplanation && (
+                      <div className="text-[12px] text-muted-foreground md:col-span-2">
+                        {scanResult.depreciationExplanation}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <StrategyCard
+                      title="Instant write-off"
+                      recommended
+                      rows={[
+                        ["This FY", formatCurrency(claimableAmount)],
+                        ["Est. refund", `+${formatCurrency(estimateRefundImpact(claimableAmount))}`],
+                        ["Method", "Full deduction"],
+                      ]}
+                    />
+                    <StrategyCard
+                      title="Depreciate (optional)"
+                      rows={[
+                        ["This FY", formatCurrency(claimableAmount / 4)],
+                        ["Lifetime", formatCurrency(claimableAmount)],
+                        ["Method", "Over 4yr"],
+                      ]}
+                    />
+                  </div>
                 )}
               </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  onClick={handleReset}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  <RotateCw className="h-3.5 w-3.5" /> Rescan
+                </button>
+                <button
+                  onClick={handleSaveExpense}
+                  disabled={!editName.trim() || editAmount <= 0}
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  {isDep ? "Save as asset" : "Save expense"}
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
-            <div className="flex justify-center gap-2">
-              <Button variant="outline" size="sm" onClick={handleReset}>
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Scan Another
-              </Button>
-              {savedAsAsset ? (
-                <Link href="/assets" onClick={() => { onOpenChange(false); setTimeout(handleReset, 200); }}>
-                  <Button size="sm">
-                    <ArrowRight className="mr-1.5 h-3.5 w-3.5" />
-                    View Assets
-                  </Button>
+          )}
+
+          {step === "review-notclaimable" && scanResult && (
+            <div>
+              <div className="mb-6">
+                <div className="mb-2 flex items-center gap-2">
+                  <Pill tone="negative"><AlertTriangle className="h-3 w-3" /> Not deductible</Pill>
+                  <Pill tone="muted">AI reviewed</Pill>
+                </div>
+                <h3 className="font-serif text-3xl leading-tight">{scanResult.itemName}</h3>
+                <div className="mt-1 text-sm text-muted-foreground">
+                  {scanResult.storeName} · {scanResult.date} ·{" "}
+                  <span className="font-mono tabular">{formatCurrency(scanResult.amount)}</span>
+                </div>
+              </div>
+
+              <div className="mb-6 rounded-md border border-border bg-surface-2/40 p-4">
+                <div className="eyebrow mb-2">Why this isn&apos;t claimable</div>
+                <p className="text-sm text-foreground/90">{scanResult.relevanceExplanation}</p>
+                {scanResult.claimAdvice && (
+                  <p className="mt-3 text-[12px] text-muted-foreground">{scanResult.claimAdvice}</p>
+                )}
+              </div>
+
+              <div className="mb-6 flex items-start gap-3 rounded-md border border-gold/30 bg-gold-soft/30 p-4">
+                <Info className="mt-0.5 h-4 w-4 text-gold" />
+                <div className="text-[13px]">
+                  <div>Think the AI got this wrong?</div>
+                  <div className="mt-0.5 text-muted-foreground">
+                    You can override and save it as deductible. You&apos;re responsible for the claim.
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <button
+                  onClick={handleClose}
+                  className="h-9 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
+                >
+                  Discard
+                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleOverride}
+                    className="h-9 rounded-md border border-border px-3 text-sm"
+                  >
+                    Override → mark deductible
+                  </button>
+                  <button
+                    onClick={handleSaveAsPersonal}
+                    className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+                  >
+                    Save as personal
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === "error" && (
+            <div className="mx-auto max-w-md py-6 text-center">
+              <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full border border-negative/30 bg-negative/10">
+                <AlertTriangle className="h-5 w-5 text-negative" />
+              </div>
+              <div className="eyebrow mb-1">Scan failed</div>
+              <h3 className="font-serif text-3xl">The scanners are catching their breath.</h3>
+              <p className="mt-2 text-sm text-muted-foreground">{errorMessage}</p>
+              <div className="mt-6 flex items-center justify-center gap-2">
+                <button
+                  onClick={() => setStep("scanning")}
+                  disabled={!scanInput}
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <RotateCw className="h-4 w-4" /> Try again
+                </button>
+                <button
+                  onClick={handleManualEntry}
+                  className="text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                >
+                  Enter it manually instead
+                </button>
+              </div>
+            </div>
+          )}
+
+          {step === "saved" && (
+            <div className="mx-auto max-w-md py-6 text-center">
+              <div className="mx-auto mb-4 grid h-12 w-12 place-items-center rounded-full border border-positive/30 bg-positive/10">
+                <Check className="h-5 w-5 text-positive" />
+              </div>
+              <div className="eyebrow mb-1">Saved to {savedDestination}</div>
+              <h3 className="font-serif text-3xl">Filed. Refund just moved.</h3>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {savedName} was added to your{" "}
+                <span className="text-foreground">{savedDestination}</span> for FY{" "}
+                {state.settings.financialYear}.
+              </p>
+
+              <div className="mt-6 grid grid-cols-2 gap-3 text-left">
+                <div className="surface p-4">
+                  <div className="eyebrow">Deductible added</div>
+                  <div className="mt-1 font-serif text-2xl tabular">{formatCurrency(claimableAmount)}</div>
+                </div>
+                <div className="surface p-4">
+                  <div className="eyebrow">Est. refund impact</div>
+                  <div className="mt-1 font-serif text-2xl tabular text-positive">
+                    +{formatCurrency(refundImpact)}
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-center gap-2">
+                <button
+                  onClick={handleReset}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm"
+                >
+                  Scan another
+                </button>
+                <Link
+                  href={savedDestination === "assets" ? "/assets" : "/expenses"}
+                  onClick={handleClose}
+                  className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+                >
+                  View {savedDestination} <ArrowUpRight className="h-3.5 w-3.5" />
                 </Link>
-              ) : (
-                <Button size="sm" onClick={() => { onOpenChange(false); setTimeout(handleReset, 200); }}>
-                  Done
-                </Button>
-              )}
+              </div>
             </div>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
+          )}
+        </div>
+      </div>
+    </div>
   );
 };
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <label className="block">
+      <div className="eyebrow mb-1.5">{label}</div>
+      {children}
+      <style>{`.scan-input{width:100%;height:36px;padding:0 10px;border-radius:6px;background:var(--color-surface-2);border:1px solid var(--color-border);color:var(--color-foreground);font-size:14px;outline:none} .scan-input:focus{border-color:color-mix(in oklab, var(--color-gold) 60%, transparent)}`}</style>
+    </label>
+  );
+}
+
+function StrategyCard({
+  title,
+  rows,
+  recommended,
+  onClick,
+}: {
+  title: string;
+  rows: [string, string][];
+  recommended?: boolean;
+  onClick?: () => void;
+}) {
+  const Comp = onClick ? "button" : "div";
+  return (
+    <Comp
+      onClick={onClick}
+      className={`rounded-md border p-3 text-left ${
+        recommended ? "border-gold/40 bg-gold-soft/20" : "border-border bg-surface"
+      }`}
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <div className="text-sm">{title}</div>
+        {recommended && <Pill tone="gold">Recommended</Pill>}
+      </div>
+      <dl className="space-y-1 text-[12px]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="flex items-center justify-between">
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd className="font-mono tabular">{v}</dd>
+          </div>
+        ))}
+      </dl>
+    </Comp>
+  );
+}

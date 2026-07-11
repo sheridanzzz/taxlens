@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateText } from "ai";
-import { getModel, type ModelKey } from "@/lib/ai-providers";
+import { getModel, MODEL_LABELS, type ModelKey } from "@/lib/ai-providers";
 import {
   EXPENSE_CATEGORIES,
   INSTANT_DEDUCTION_THRESHOLD,
@@ -81,6 +81,7 @@ export async function POST(request: NextRequest) {
   const modelsToTry: ModelKey[] = ["primary", "quality", "fallback", "budget"];
 
   let text: string | undefined;
+  let modelUsed: string | undefined;
 
   for (const modelKey of modelsToTry) {
     try {
@@ -102,6 +103,7 @@ export async function POST(request: NextRequest) {
         maxRetries: 1,
       });
       text = result.text;
+      modelUsed = MODEL_LABELS[modelKey];
       console.log(`receipt scanned by model "${modelKey}"`);
       break;
     } catch (error) {
@@ -185,6 +187,7 @@ export async function POST(request: NextRequest) {
     suggestedEffectiveLife: isDepreciation ? effectiveLife : undefined,
     suggestedDepreciationMethod: isDepreciation ? depMethod : undefined,
     depreciationExplanation: isDepreciation ? (parsed.depreciationExplanation || "") : undefined,
+    modelUsed,
   };
 
   return NextResponse.json(result);
