@@ -8,6 +8,7 @@ import {
   Clock3,
   Package,
   FileBarChart2,
+  MessageCircleQuestion,
   ScanLine,
   Settings,
   Sparkles,
@@ -27,6 +28,7 @@ const NAV: { href: string; label: string; icon: typeof ScanLine; ai?: boolean }[
   { href: "/assets", label: "Assets", icon: Package },
   { href: "/reports", label: "Reports", icon: FileBarChart2 },
   { href: "/expenses?scan=1", label: "AI scan", icon: ScanLine, ai: true },
+  { href: "/ask", label: "Ask AI", icon: MessageCircleQuestion, ai: true },
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 

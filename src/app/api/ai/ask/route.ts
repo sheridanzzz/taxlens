@@ -1,0 +1,61 @@
+import { NextRequest, NextResponse } from "next/server";
+import { generateText } from "ai";
+import { getModel } from "@/lib/ai-providers";
+import { searchChunks } from "@/lib/rag";
+
+// First request after a corpus change re-embeds everything; give it headroom.
+export const maxDuration = 60;
+
+export async function POST(request: NextRequest) {
+  let body: { question?: string };
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+  }
+
+  const question = body.question?.trim();
+  if (!question) {
+    return NextResponse.json(
+      { error: "Missing required field: question" },
+      { status: 400 }
+    );
+  }
+
+  try {
+    return NextResponse.json(await answer(question));
+  } catch (error) {
+    console.warn("ask failed:", error instanceof Error ? error.message : error);
+    return NextResponse.json(
+      { error: "AI is temporarily unavailable. Please try again later." },
+      { status: 503 }
+    );
+  }
+}
+
+const answer = async (question: string) => {
+  const chunks = await searchChunks(question);
+  const context = chunks.map((c) => c.content).join("\n\n---\n\n");
+
+  const { text } = await generateText({
+    model: getModel("primary"),
+    prompt: `You are TaxLens, an assistant for Australian work-related tax deductions.
+Answer the user's question using ONLY the reference material below. If the
+material doesn't cover the question, say so plainly rather than guessing.
+Keep the answer concise and practical, and remind the user this is general
+information, not personal financial advice, only when the question involves
+a judgement call.
+
+Reference material:
+${context}
+
+Question: ${question}`,
+    maxOutputTokens: 1000,
+    maxRetries: 1,
+  });
+
+  return {
+    answer: text,
+    sources: chunks.map(({ source, distance }) => ({ source, distance })),
+  };
+};
