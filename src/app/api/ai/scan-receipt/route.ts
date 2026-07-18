@@ -101,6 +101,9 @@ export async function POST(request: NextRequest) {
         ],
         maxOutputTokens: 2000,
         maxRetries: 1,
+        // qwen3.6 is a thinking model; without this it spends the whole
+        // token budget reasoning and returns no JSON. Google ignores it.
+        providerOptions: { groq: { reasoningEffort: "none" } },
       });
       text = result.text;
       modelUsed = MODEL_LABELS[modelKey];
