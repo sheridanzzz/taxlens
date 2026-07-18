@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
-import { getModel, MODEL_LABELS, type ModelKey } from "@/lib/ai-providers";
+import { generateTextWithFallback, MODEL_LABELS } from "@/lib/ai-providers";
 import {
   EXPENSE_CATEGORIES,
   INSTANT_DEDUCTION_THRESHOLD,
@@ -78,44 +77,26 @@ export async function POST(request: NextRequest) {
   }
 
   const prompt = buildPrompt(occupation);
-  const modelsToTry: ModelKey[] = ["primary", "quality", "fallback", "budget"];
 
-  let text: string | undefined;
-  let modelUsed: string | undefined;
-
-  for (const modelKey of modelsToTry) {
-    try {
-      const result = await generateText({
-        model: getModel(modelKey),
-        messages: [
-          {
-            role: "user",
-            content: [
-              { type: "text", text: prompt },
-              {
-                type: "image",
-                image: `data:${mimeType};base64,${base64}`,
-              },
-            ],
-          },
-        ],
-        maxOutputTokens: 2000,
-        maxRetries: 1,
-        // qwen3.6 is a thinking model; without this it spends the whole
-        // token budget reasoning and returns no JSON. Google ignores it.
-        providerOptions: { groq: { reasoningEffort: "none" } },
-      });
-      text = result.text;
-      modelUsed = MODEL_LABELS[modelKey];
-      console.log(`receipt scanned by model "${modelKey}"`);
-      break;
-    } catch (error) {
-      console.warn(`AI model "${modelKey}" failed:`, error instanceof Error ? error.message : error);
-      continue;
-    }
-  }
-
-  if (!text) {
+  let text: string;
+  let modelUsed: string;
+  try {
+    const result = await generateTextWithFallback(
+      [
+        {
+          role: "user",
+          content: [
+            { type: "text", text: prompt },
+            { type: "image", image: `data:${mimeType};base64,${base64}` },
+          ],
+        },
+      ],
+      2000
+    );
+    text = result.text;
+    modelUsed = MODEL_LABELS[result.modelKey];
+    console.log(`receipt scanned by model "${result.modelKey}"`);
+  } catch {
     return NextResponse.json(
       { error: "All AI models unavailable. Please try again later." },
       { status: 503 }

@@ -23,13 +23,19 @@ import { useTax } from "@/context/tax-context";
 import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
 import { formatCurrency, calculateTaxPayable } from "@/lib/tax-calculator";
 import { calculateDiminishingValue, calculatePrimeCost } from "@/lib/depreciation";
-import { EXPENSE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD } from "@/lib/constants";
+import {
+  EXPENSE_CATEGORIES,
+  INSTANT_DEDUCTION_THRESHOLD,
+  FINANCIAL_YEARS,
+  getFinancialYearForDate,
+} from "@/lib/constants";
 import type {
   Expense,
   ReceiptScanResult,
   ExpenseCategory,
   DepreciationMethod,
   DepreciatingAsset,
+  FinancialYear,
 } from "@/lib/types";
 
 type ScanStep = "entry" | "scanning" | "review" | "review-notclaimable" | "error" | "saved";
@@ -137,6 +143,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const [editCategory, setEditCategory] = useState<ExpenseCategory>("other");
   const [editWorkUse, setEditWorkUse] = useState(100);
   const [editDepMethod, setEditDepMethod] = useState<DepreciationMethod>("diminishing");
+  const [editFY, setEditFY] = useState<FinancialYear>(state.settings.financialYear);
 
   const [savedDestination, setSavedDestination] = useState<"expenses" | "assets">("expenses");
   const [savedName, setSavedName] = useState("");
@@ -223,6 +230,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
         setEditCategory(result.suggestedCategory);
         setEditWorkUse(result.suggestedWorkUsePercent);
         setEditDepMethod(result.suggestedDepreciationMethod ?? state.settings.depreciationMethod);
+        setEditFY(getFinancialYearForDate(result.date) ?? state.settings.financialYear);
         setStep(result.isRelevantToOccupation ? "review" : "review-notclaimable");
       })
       .catch((err) => {
@@ -244,11 +252,13 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     setEditName("");
     setEditMerchant("");
     setEditAmount(0);
-    setEditDate(new Date().toISOString().split("T")[0]);
+    const today = new Date().toISOString().split("T")[0];
+    setEditDate(today);
+    setEditFY(getFinancialYearForDate(today) ?? state.settings.financialYear);
     setEditCategory("other");
     setEditWorkUse(100);
     setStep("review");
-  }, []);
+  }, [state.settings.financialYear]);
 
   const handleOverride = useCallback(() => {
     setEditWorkUse((w) => (w > 0 ? w : 100));
@@ -271,7 +281,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
         effectiveLifeYears: effectiveLife,
         depreciationMethod: editDepMethod,
         workUsePercent: editWorkUse,
-        financialYear: state.settings.financialYear,
+        financialYear: editFY,
         createdAt: new Date().toISOString(),
       };
       await addAsset(asset);
@@ -290,7 +300,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
         notes: scanResult
           ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}`
           : undefined,
-        financialYear: state.settings.financialYear,
+        financialYear: editFY,
         createdAt: new Date().toISOString(),
       };
       await addExpense(expense);
@@ -304,7 +314,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   }, [
     editAmount, editName, editDate, editCategory, editWorkUse, editMerchant,
     claimableAmount, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
-    state.settings.financialYear, addExpense, addAsset, onExpenseCreated, estimateRefundImpact,
+    editFY, addExpense, addAsset, onExpenseCreated, estimateRefundImpact,
   ]);
 
   const handleSaveAsPersonal = useCallback(async () => {
@@ -322,7 +332,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
       notes: scanResult
         ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}`
         : undefined,
-      financialYear: state.settings.financialYear,
+      financialYear: editFY,
       createdAt: new Date().toISOString(),
     };
     await addExpense(expense);
@@ -331,7 +341,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     setRefundImpact(0);
     setStep("saved");
     onExpenseCreated();
-  }, [editName, editDate, editAmount, editMerchant, previewUrl, scanResult, state.settings.financialYear, addExpense, onExpenseCreated]);
+  }, [editName, editDate, editAmount, editMerchant, previewUrl, scanResult, editFY, addExpense, onExpenseCreated]);
 
   if (!open) return null;
 
@@ -637,9 +647,24 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   <input
                     type="date"
                     value={editDate}
-                    onChange={(e) => setEditDate(e.target.value)}
+                    onChange={(e) => {
+                      setEditDate(e.target.value);
+                      const fy = getFinancialYearForDate(e.target.value);
+                      if (fy) setEditFY(fy);
+                    }}
                     className="scan-input font-mono"
                   />
+                </Field>
+                <Field label="Financial year">
+                  <select
+                    value={editFY}
+                    onChange={(e) => setEditFY(e.target.value as FinancialYear)}
+                    className="scan-input"
+                  >
+                    {FINANCIAL_YEARS.map((fy) => (
+                      <option key={fy.value} value={fy.value}>{fy.label}</option>
+                    ))}
+                  </select>
                 </Field>
                 <Field label="Category">
                   <select
@@ -857,7 +882,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
               <p className="mt-2 text-sm text-muted-foreground">
                 {savedName} was added to your{" "}
                 <span className="text-foreground">{savedDestination}</span> for FY{" "}
-                {state.settings.financialYear}.
+                {editFY}.
               </p>
 
               <div className="mt-6 grid grid-cols-2 gap-3 text-left">

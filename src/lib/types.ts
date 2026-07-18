@@ -1,4 +1,4 @@
-export type FinancialYear = "2024-25" | "2025-26";
+export type FinancialYear = "2024-25" | "2025-26" | "2026-27";
 
 export type ClaimType = "full" | "depreciation";
 

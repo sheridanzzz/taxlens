@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { generateText } from "ai";
-import { getModel } from "@/lib/ai-providers";
+import { generateTextWithFallback } from "@/lib/ai-providers";
 import { searchChunks } from "@/lib/rag";
 
-// First request after a corpus change re-embeds everything; give it headroom.
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
@@ -37,9 +35,11 @@ const answer = async (question: string) => {
   const chunks = await searchChunks(question);
   const context = chunks.map((c) => c.content).join("\n\n---\n\n");
 
-  const { text } = await generateText({
-    model: getModel("primary"),
-    prompt: `You are TaxLens, an assistant for Australian work-related tax deductions.
+  const { text } = await generateTextWithFallback(
+    [
+      {
+        role: "user",
+        content: `You are TaxLens, an assistant for Australian work-related tax deductions.
 Answer the user's question using ONLY the reference material below. If the
 material doesn't cover the question, say so plainly rather than guessing.
 Keep the answer concise and practical, and remind the user this is general
@@ -50,12 +50,13 @@ Reference material:
 ${context}
 
 Question: ${question}`,
-    maxOutputTokens: 1000,
-    maxRetries: 1,
-  });
+      },
+    ],
+    1000
+  );
 
   return {
     answer: text,
-    sources: chunks.map(({ source, distance }) => ({ source, distance })),
+    sources: chunks.map(({ source }) => ({ source })),
   };
 };

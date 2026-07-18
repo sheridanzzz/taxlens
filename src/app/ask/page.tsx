@@ -10,7 +10,7 @@ import { fadeInUp } from "@/lib/animations";
 
 interface AskResponse {
   answer: string;
-  sources: { source: string; distance: number }[];
+  sources: { source: string }[];
 }
 
 const SUGGESTIONS = [
@@ -122,9 +122,7 @@ export default function AskPage() {
               </p>
               <div className="mt-4 flex flex-wrap gap-2 border-t border-border pt-3">
                 {result.sources.map((s) => (
-                  <Pill key={s.source} tone="gold">
-                    {s.source} · {(1 - s.distance).toFixed(2)}
-                  </Pill>
+                  <Pill key={s.source} tone="gold">{s.source}</Pill>
                 ))}
               </div>
             </Card>

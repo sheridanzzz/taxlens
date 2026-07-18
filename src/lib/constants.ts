@@ -104,6 +104,14 @@ export const TAX_BRACKETS: Record<FinancialYear, TaxBracket[]> = {
     { min: 135001, max: 190000, rate: 0.37, base: 31288 },
     { min: 190001, max: Infinity, rate: 0.45, base: 51638 },
   ],
+  // 16% bracket drops to 15% from 1 Jul 2026 (More Cost of Living Tax Cuts Act 2025)
+  "2026-27": [
+    { min: 0, max: 18200, rate: 0, base: 0 },
+    { min: 18201, max: 45000, rate: 0.15, base: 0 },
+    { min: 45001, max: 135000, rate: 0.30, base: 4020 },
+    { min: 135001, max: 190000, rate: 0.37, base: 31020 },
+    { min: 190001, max: Infinity, rate: 0.45, base: 51370 },
+  ],
 };
 
 export const MEDICARE_LEVY_RATE = 0.02;
@@ -111,6 +119,7 @@ export const MEDICARE_LEVY_RATE = 0.02;
 export const FINANCIAL_YEARS: { value: FinancialYear; label: string }[] = [
   { value: "2024-25", label: "FY 2024-25 (Jul 2024 - Jun 2025)" },
   { value: "2025-26", label: "FY 2025-26 (Jul 2025 - Jun 2026)" },
+  { value: "2026-27", label: "FY 2026-27 (Jul 2026 - Jun 2027)" },
 ];
 
 export const DEFAULT_SETTINGS = {
@@ -129,7 +138,17 @@ export const FY_DATE_RANGES: Record<
 > = {
   "2024-25": { start: "2024-07-01", end: "2025-06-30" },
   "2025-26": { start: "2025-07-01", end: "2026-06-30" },
+  "2026-27": { start: "2026-07-01", end: "2027-06-30" },
 };
+
+/** The financial year a date falls in, or undefined if outside all known FYs. */
+export const getFinancialYearForDate = (
+  date: string
+): FinancialYear | undefined =>
+  (Object.keys(FY_DATE_RANGES) as FinancialYear[]).find((fy) => {
+    const { start, end } = FY_DATE_RANGES[fy];
+    return date >= start && date <= end;
+  });
 
 /**
  * Returns today when it falls within the selected FY, otherwise the nearest
