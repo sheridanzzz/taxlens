@@ -6,7 +6,7 @@ import { LedgrLogo } from "@/components/LedgrLogo";
 export const metadata: Metadata = {
   title: "Ledgr — Every Australian tax deduction, on the record.",
   description:
-    "Ledgr is the tax deduction system of record for Australian software engineers and remote workers. ATO-aware categories, $300 threshold logic, WFH at 67c/hr, depreciation schedules, and a live refund estimate.",
+    "Ledgr is the tax deduction system of record for Australian software engineers and remote workers. ATO-aware categories, $300 threshold logic, WFH at 70c/hr, depreciation schedules, and a live refund estimate.",
   openGraph: {
     title: "Ledgr — Every Australian tax deduction, on the record.",
     description:
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 const ESTIMATE_ROWS: [string, number, number][] = [
   ["Computer equipment", 1840, 90],
   ["Software & SaaS", 612, 30],
-  ["Home office (67c · 1,690 h)", 1132, 55],
+  ["Home office (70c · 1,690 h)", 1183, 55],
   ["Internet & phone", 489, 24],
   ["Professional dev", 760, 37],
 ];
@@ -34,9 +34,9 @@ const PRODUCT_FEATURES = [
   {
     n: "02",
     tag: "logged this FY",
-    title: "WFH hours at 67c, without the spreadsheet",
+    title: "WFH hours at 70c, without the spreadsheet",
     body: "Log a day, a week, or a whole period at once. Ledgr tracks hours under the fixed-rate method and runs an actual-cost comparison so you always claim the bigger number.",
-    stat: "67c / hour",
+    stat: "70c / hour",
   },
   {
     n: "03",
@@ -48,7 +48,7 @@ const PRODUCT_FEATURES = [
 ];
 
 const DEDUCTIONS: [string, string][] = [
-  ["Home office", "67c fixed-rate method with hour logs and actual-cost comparison"],
+  ["Home office", "70c fixed-rate method with hour logs and actual-cost comparison"],
   ["Computer & peripherals", "Instant write-off under $300, depreciation above"],
   ["Software & SaaS", "GitHub, JetBrains, AWS, Figma — 100% work-use presumption"],
   ["Internet & phone", "Automatic apportionment with a work-use %"],
@@ -94,7 +94,7 @@ const LandingPage = () => {
           </h1>
           <p className="mt-6 max-w-lg leading-relaxed text-muted-foreground">
             Ledgr is the deduction system of record for Australian software
-            engineers and remote workers. AI receipt capture, WFH hours at 67c,
+            engineers and remote workers. AI receipt capture, WFH hours at 70c,
             depreciation schedules, and a live refund estimate on the current
             ATO brackets.
           </p>

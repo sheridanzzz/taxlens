@@ -114,7 +114,7 @@ const WfhPage = () => {
       animate={fadeInUp.animate}
       transition={fadeInUp.transition}
     >
-      <Section eyebrow="WFH · 67c method" title="Home office, hour by hour." />
+      <Section eyebrow="WFH · 70c method" title="Home office, hour by hour." />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi
@@ -126,7 +126,7 @@ const WfhPage = () => {
         <Kpi
           label="Fixed-rate claim"
           value={formatCurrency(fixedRate)}
-          hint={`67c × ${totalHours.toLocaleString()} h`}
+          hint={`70c × ${totalHours.toLocaleString()} h`}
           positive={fixedWins && fixedRate > 0}
         />
         <Kpi

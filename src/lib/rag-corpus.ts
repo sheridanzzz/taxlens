@@ -6,8 +6,9 @@
 // automatically (content hash check).
 export const CORPUS = `## Working from home: fixed rate method
 
-The fixed rate method lets you claim 67 cents per hour worked from home
-(FY 2024-25 and 2025-26). The rate covers electricity and gas, internet,
+The fixed rate method lets you claim 70 cents per hour worked from home
+(from FY 2024-25 onward, per ATO guideline PCG 2023/1; the rate was 67
+cents up to FY 2023-24). The rate covers electricity and gas, internet,
 mobile and home phone usage, stationery and computer consumables. Because
 these are bundled into the rate, you cannot claim them again separately.
 You CAN separately claim the decline in value of depreciating assets used
@@ -109,7 +110,7 @@ internet, but not costs reimbursed by an employer.
 You can claim the work-related portion of mobile phone and home internet
 costs, based on a reasonable usage split such as a four-week itemised
 diary applied across the year. If you use the working-from-home fixed
-rate method, phone and internet are already included in the 67 cents per
+rate method, phone and internet are already included in the 70 cents per
 hour and cannot be claimed again separately. Handsets over 300 dollars
 are depreciated over their effective life rather than claimed outright.
 
@@ -130,11 +131,11 @@ Travel between home and your regular workplace is private and not
 deductible. Deductible travel includes trips between two workplaces,
 travel to clients or alternative work sites, and trips to conferences or
 training. Car costs can be claimed by the cents-per-kilometre method (88
-cents per km in FY 2024-25, capped at 5,000 work kilometres per year, no
-receipts needed but a diary of trips required) or the logbook method
-(work percentage of all actual car costs, requiring a 12-week logbook and
-receipts). Public transport, flights, tolls and parking for deductible
-trips are claimed at cost.
+cents per km in FY 2024-25 and 2025-26, rising to 91 cents in FY 2026-27;
+capped at 5,000 work kilometres per year, no receipts needed but a diary
+of trips required) or the logbook method (work percentage of all actual
+car costs, requiring a 12-week logbook and receipts). Public transport,
+flights, tolls and parking for deductible trips are claimed at cost.
 
 ## Union and professional association fees
 
@@ -144,4 +145,16 @@ apportionment needed. Examples: union membership, engineering or
 accounting body memberships, professional society subscriptions. Renewal
 receipts or annual statements are sufficient evidence. Joining fees for a
 new association are also deductible if the membership relates to your
-current income-earning activities.`;
+current income-earning activities.
+
+## Key rates and thresholds by financial year
+
+Working from home fixed rate: 70 cents per hour for FY 2024-25, 2025-26
+and 2026-27 (was 67 cents up to FY 2023-24). Cents per kilometre for car
+expenses: 88 cents for FY 2024-25 and FY 2025-26, 91 cents for FY
+2026-27, always capped at 5,000 work kilometres. Instant deduction
+threshold for work items: 300 dollars (unchanged). Laundry: 1 dollar per
+load of deductible work clothing. Lowest marginal tax rate: 16 percent
+for FY 2024-25 and 2025-26, dropping to 15 percent in FY 2026-27 under
+legislated tax cuts; other brackets unchanged. Medicare levy: 2 percent.
+Records must be kept for five years from lodgment.`;

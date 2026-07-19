@@ -13,7 +13,7 @@ const getFyRange = (fy: string): { start: Date; end: Date } => {
   };
 };
 
-const getDaysInFinancialYear = (
+export const getDaysInFinancialYear = (
   purchaseDate: string,
   financialYear: string
 ): number => {

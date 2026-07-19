@@ -32,6 +32,11 @@ export const neonDeleteExpense = async (id: string): Promise<void> => {
   await neonDb.deleteExpense(userId, id);
 };
 
+export const neonGetExpenseReceipt = async (id: string): Promise<string | null> => {
+  const userId = await getUserId();
+  return neonDb.getExpenseReceipt(userId, id);
+};
+
 export const neonGetAssets = async (fy?: FinancialYear): Promise<DepreciatingAsset[]> => {
   const userId = await getUserId();
   return neonDb.getAssets(userId, fy);

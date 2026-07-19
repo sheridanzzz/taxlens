@@ -22,7 +22,7 @@ import { Pill } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
 import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
 import { formatCurrency, calculateTaxPayable } from "@/lib/tax-calculator";
-import { calculateDiminishingValue, calculatePrimeCost } from "@/lib/depreciation";
+import { calculateDiminishingValue, calculatePrimeCost, getDaysInFinancialYear } from "@/lib/depreciation";
 import {
   EXPENSE_CATEGORIES,
   INSTANT_DEDUCTION_THRESHOLD,
@@ -114,7 +114,7 @@ const calcFirstYearDepreciation = (
   effectiveLife: number,
   method: DepreciationMethod,
   workUsePercent: number,
-  daysHeld: number = 365
+  daysHeld: number
 ): number => {
   const raw =
     method === "diminishing"
@@ -144,6 +144,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const [editWorkUse, setEditWorkUse] = useState(100);
   const [editDepMethod, setEditDepMethod] = useState<DepreciationMethod>("diminishing");
   const [editFY, setEditFY] = useState<FinancialYear>(state.settings.financialYear);
+  const [dupWarning, setDupWarning] = useState<string | null>(null);
 
   const [savedDestination, setSavedDestination] = useState<"expenses" | "assets">("expenses");
   const [savedName, setSavedName] = useState("");
@@ -179,6 +180,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     setIsPdf(false);
     setScanResult(null);
     setErrorMessage("");
+    setDupWarning(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   }, []);
@@ -268,6 +270,17 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const handleSaveExpense = useCallback(async () => {
     if (isNaN(editAmount) || editAmount <= 0 || !editName.trim()) return;
 
+    // same amount + date already on file → warn once; a second click saves anyway
+    if (!dupWarning) {
+      const dup = state.expenses.find(
+        (x) => x.amount === editAmount && x.date === editDate
+      );
+      if (dup) {
+        setDupWarning(dup.description);
+        return;
+      }
+    }
+
     const name = editName.trim();
     const impact = estimateRefundImpact(claimableAmount);
 
@@ -314,7 +327,8 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   }, [
     editAmount, editName, editDate, editCategory, editWorkUse, editMerchant,
     claimableAmount, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
-    editFY, addExpense, addAsset, onExpenseCreated, estimateRefundImpact,
+    editFY, dupWarning, state.expenses, addExpense, addAsset, onExpenseCreated,
+    estimateRefundImpact,
   ]);
 
   const handleSaveAsPersonal = useCallback(async () => {
@@ -636,7 +650,10 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                     step="0.01"
                     min="0"
                     value={editAmount || ""}
-                    onChange={(e) => setEditAmount(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => {
+                      setEditAmount(parseFloat(e.target.value) || 0);
+                      setDupWarning(null);
+                    }}
                     className="scan-input font-mono tabular"
                   />
                 </Field>
@@ -649,6 +666,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                     value={editDate}
                     onChange={(e) => {
                       setEditDate(e.target.value);
+                      setDupWarning(null);
                       const fy = getFinancialYearForDate(e.target.value);
                       if (fy) setEditFY(fy);
                     }}
@@ -714,8 +732,10 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                 {isDep ? (
                   <div className="grid gap-3 md:grid-cols-2">
                     {(() => {
-                      const dim = calcFirstYearDepreciation(editAmount, effectiveLife, "diminishing", editWorkUse);
-                      const prime = calcFirstYearDepreciation(editAmount, effectiveLife, "prime_cost", editWorkUse);
+                      // ATO pro-rates year one from the purchase date, not a full 365 days
+                      const daysHeld = getDaysInFinancialYear(editDate, editFY) || 365;
+                      const dim = calcFirstYearDepreciation(editAmount, effectiveLife, "diminishing", editWorkUse, daysHeld);
+                      const prime = calcFirstYearDepreciation(editAmount, effectiveLife, "prime_cost", editWorkUse, daysHeld);
                       return (
                         <>
                           <StrategyCard
@@ -770,6 +790,12 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                 )}
               </div>
 
+              {dupWarning && (
+                <p className="mb-3 rounded-md border border-negative/30 bg-negative/10 px-3 py-2 text-[13px] text-negative">
+                  Possible duplicate: &ldquo;{dupWarning}&rdquo; is already
+                  recorded for this amount and date. Save again to keep both.
+                </p>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <button
                   onClick={handleReset}
@@ -782,7 +808,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   disabled={!editName.trim() || editAmount <= 0}
                   className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {isDep ? "Save as asset" : "Save expense"}
+                  {dupWarning ? "Save anyway" : isDep ? "Save as asset" : "Save expense"}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               </div>

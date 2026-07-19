@@ -56,7 +56,7 @@ const RESIDENCY_LABELS: Record<string, string> = {
 };
 
 const WFH_METHOD_LABELS: Record<string, string> = {
-  fixed_rate: "Fixed Rate (67c/hour)",
+  fixed_rate: "Fixed Rate (70c/hour)",
   actual_cost: "Actual Cost",
 };
 
@@ -354,7 +354,7 @@ const SettingsPage = () => {
                 <Label htmlFor="settings-wfh-method" className="text-xs">
                   WFH Method
                 </Label>
-                <InfoTip content="Fixed Rate is simpler -- claim 67c for every hour worked from home (covers electricity, phone, internet, stationery). Actual Cost lets you claim the real work-portion of each bill, which can be higher if your bills are large. Ledgr compares both so you can pick whichever saves more." />
+                <InfoTip content="Fixed Rate is simpler -- claim 70c for every hour worked from home (covers electricity, phone, internet, stationery). Actual Cost lets you claim the real work-portion of each bill, which can be higher if your bills are large. Ledgr compares both so you can pick whichever saves more." />
               </div>
               <Select
                 value={wfhMethod}
@@ -369,7 +369,7 @@ const SettingsPage = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="fixed_rate">
-                    Fixed Rate (67c/hour)
+                    Fixed Rate (70c/hour)
                   </SelectItem>
                   <SelectItem value="actual_cost">Actual Cost</SelectItem>
                 </SelectContent>

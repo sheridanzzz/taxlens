@@ -21,6 +21,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useTax } from "@/context/tax-context";
+import { neonGetExpenseReceipt } from "@/lib/storage-actions";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { isAiScanned } from "@/lib/utils";
@@ -157,13 +158,16 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                             <Sparkles className="h-3 w-3 text-gold" />
                           </span>
                         )}
-                        {expense.receiptDataUrl && (
+                        {(expense.receiptDataUrl || expense.hasReceipt) && (
                           <Button
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6"
-                            onClick={() =>
-                              setReceiptUrl(expense.receiptDataUrl || null)
+                            onClick={async () =>
+                              setReceiptUrl(
+                                expense.receiptDataUrl ??
+                                  (await neonGetExpenseReceipt(expense.id))
+                              )
                             }
                             aria-label="View receipt"
                           >

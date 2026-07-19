@@ -6,7 +6,10 @@ import type {
 
 export const INSTANT_DEDUCTION_THRESHOLD = 300;
 
-export const WFH_FIXED_RATE_PER_HOUR = 0.67;
+// 70c/hr per ATO PCG 2023/1 (as amended) from FY 2024-25 onward.
+// ponytail: scalar because the rate is identical across every supported FY;
+// make it per-FY like TAX_BRACKETS when a year diverges.
+export const WFH_FIXED_RATE_PER_HOUR = 0.70;
 
 export const EXPENSE_CATEGORIES: Record<
   ExpenseCategory,
@@ -122,16 +125,6 @@ export const FINANCIAL_YEARS: { value: FinancialYear; label: string }[] = [
   { value: "2026-27", label: "FY 2026-27 (Jul 2026 - Jun 2027)" },
 ];
 
-export const DEFAULT_SETTINGS = {
-  financialYear: "2025-26" as FinancialYear,
-  annualIncome: 0,
-  occupation: "Software Engineer",
-  taxResidentStatus: "resident" as const,
-  defaultWorkUsePercent: 100,
-  wfhMethod: "fixed_rate" as const,
-  depreciationMethod: "diminishing" as const,
-};
-
 export const FY_DATE_RANGES: Record<
   FinancialYear,
   { start: string; end: string }
@@ -149,6 +142,19 @@ export const getFinancialYearForDate = (
     const { start, end } = FY_DATE_RANGES[fy];
     return date >= start && date <= end;
   });
+
+export const DEFAULT_SETTINGS = {
+  // today's FY, falling back to the newest supported year
+  financialYear:
+    getFinancialYearForDate(new Date().toISOString().split("T")[0]) ??
+    FINANCIAL_YEARS[FINANCIAL_YEARS.length - 1].value,
+  annualIncome: 0,
+  occupation: "Software Engineer",
+  taxResidentStatus: "resident" as const,
+  defaultWorkUsePercent: 100,
+  wfhMethod: "fixed_rate" as const,
+  depreciationMethod: "diminishing" as const,
+};
 
 /**
  * Returns today when it falls within the selected FY, otherwise the nearest

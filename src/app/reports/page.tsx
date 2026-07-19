@@ -4,6 +4,7 @@ import { Download, FileText, Printer } from "lucide-react";
 import { motion } from "motion/react";
 import { Section, Kpi, Card } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
+import { neonGetExpenseReceipt } from "@/lib/storage-actions";
 import {
   formatCurrency,
   getCategoryBreakdown,
@@ -135,11 +136,20 @@ const ReportsPage = () => {
     downloadCsv(`ledgr-depreciation-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
 
-  const handleReceiptPack = () => {
+  const handleReceiptPack = async () => {
     const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-AU");
     const byDate = [...state.expenses].sort((a, b) => a.date.localeCompare(b.date));
-    const withReceipt = byDate.filter((e) => e.receiptDataUrl);
-    const missing = byDate.filter((e) => !e.receiptDataUrl);
+    // cloud lists carry only a flag — pull the actual images for the pack
+    const withReceipt = await Promise.all(
+      byDate
+        .filter((e) => e.receiptDataUrl || e.hasReceipt)
+        .map(async (e) => ({
+          ...e,
+          receiptDataUrl:
+            e.receiptDataUrl ?? (await neonGetExpenseReceipt(e.id)) ?? undefined,
+        }))
+    ).then((list) => list.filter((e) => e.receiptDataUrl));
+    const missing = byDate.filter((e) => !e.receiptDataUrl && !e.hasReceipt);
 
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>Ledgr receipt pack — FY ${fy}</title>
 <style>
@@ -249,7 +259,7 @@ ${
                     <td className="py-3">
                       <span className="mr-3 inline-block h-2 w-2 rounded-full bg-gold" />
                       Working from home (
-                      {state.settings.wfhMethod === "fixed_rate" ? "67c fixed rate" : "actual cost"})
+                      {state.settings.wfhMethod === "fixed_rate" ? "70c fixed rate" : "actual cost"})
                     </td>
                     <td className="py-3 text-right font-mono tabular">
                       {formatCurrency(summary.totalWfhDeduction)}

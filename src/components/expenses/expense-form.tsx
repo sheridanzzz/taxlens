@@ -25,13 +25,16 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useTax } from "@/context/tax-context";
+import { neonGetExpenseReceipt } from "@/lib/storage-actions";
 import {
   EXPENSE_CATEGORIES,
+  FINANCIAL_YEARS,
   FY_DATE_RANGES,
   getDefaultDateForFinancialYear,
+  getFinancialYearForDate,
   INSTANT_DEDUCTION_THRESHOLD,
 } from "@/lib/constants";
-import type { Expense, ExpenseCategory, ClaimType } from "@/lib/types";
+import type { Expense, ExpenseCategory, ClaimType, FinancialYear } from "@/lib/types";
 
 // ponytail: no recurrence engine — monthly subs expand into plain expense
 // rows at save time, one per month until the FY ends (30 Jun)
@@ -72,16 +75,21 @@ export const ExpenseForm = ({
   const [notes, setNotes] = useState("");
   const [receiptDataUrl, setReceiptDataUrl] = useState<string | undefined>();
   const [monthly, setMonthly] = useState(false);
+  const [fy, setFy] = useState<FinancialYear>(state.settings.financialYear);
+  // distinguishes "user removed the receipt" from "payload not hydrated yet"
+  const [receiptRemoved, setReceiptRemoved] = useState(false);
 
   function resetForm() {
     setDescription("");
     setAmount("");
     setCategory("computer_equipment");
     setDate(getDefaultDateForFinancialYear(state.settings.financialYear));
+    setFy(state.settings.financialYear);
     setClaimType("full");
     setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
     setNotes("");
     setReceiptDataUrl(undefined);
+    setReceiptRemoved(false);
     setMonthly(false);
   }
 
@@ -95,6 +103,14 @@ export const ExpenseForm = ({
       setWorkUsePercent(editingExpense.workUsePercent.toString());
       setNotes(editingExpense.notes || "");
       setReceiptDataUrl(editingExpense.receiptDataUrl);
+      setFy(editingExpense.financialYear);
+      setReceiptRemoved(false);
+      // cloud list rows carry a flag, not the image — hydrate it for editing
+      if (!editingExpense.receiptDataUrl && editingExpense.hasReceipt) {
+        neonGetExpenseReceipt(editingExpense.id).then(
+          (data) => data && setReceiptDataUrl(data)
+        );
+      }
     } else {
       resetForm();
     }
@@ -116,12 +132,14 @@ export const ExpenseForm = ({
     const reader = new FileReader();
     reader.onload = (ev) => {
       setReceiptDataUrl(ev.target?.result as string);
+      setReceiptRemoved(false);
     };
     reader.readAsDataURL(file);
   };
 
   const handleRemoveReceipt = () => {
     setReceiptDataUrl(undefined);
+    setReceiptRemoved(true);
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
@@ -147,15 +165,16 @@ export const ExpenseForm = ({
       workUsePercent: numWorkUse,
       claimableAmount,
       receiptDataUrl,
+      hasReceipt: !receiptRemoved && !!editingExpense?.hasReceipt,
       notes: notes.trim() || undefined,
-      financialYear: state.settings.financialYear,
+      financialYear: fy,
       createdAt: editingExpense?.createdAt || new Date().toISOString(),
     };
 
     if (editingExpense) {
       await updateExpense(expense);
     } else if (monthly && claimType === "full") {
-      const dates = monthlyDates(date, state.settings.financialYear);
+      const dates = monthlyDates(date, fy);
       for (let i = 0; i < dates.length; i++) {
         await addExpense({
           ...expense,
@@ -173,7 +192,7 @@ export const ExpenseForm = ({
     resetForm();
   };
 
-  const fyRange = FY_DATE_RANGES[state.settings.financialYear];
+  const fyRange = FY_DATE_RANGES[fy];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -215,15 +234,32 @@ export const ExpenseForm = ({
               <Input
                 id="expense-date"
                 type="date"
-                min={fyRange.start}
-                max={fyRange.end}
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  const dateFy = getFinancialYearForDate(e.target.value);
+                  if (dateFy) setFy(dateFy);
+                }}
                 required
               />
               <p className="text-xs text-muted-foreground">
-                {state.settings.financialYear} runs from {fyRange.start} to {fyRange.end}.
+                {fy} runs from {fyRange.start} to {fyRange.end}.
               </p>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="expense-fy">Financial year</Label>
+              <Select value={fy} onValueChange={(v) => setFy(v as FinancialYear)}>
+                <SelectTrigger id="expense-fy">
+                  {FINANCIAL_YEARS.find((f) => f.value === fy)?.label ?? fy}
+                </SelectTrigger>
+                <SelectContent>
+                  {FINANCIAL_YEARS.map((f) => (
+                    <SelectItem key={f.value} value={f.value}>
+                      {f.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 

@@ -42,6 +42,9 @@ export interface Expense {
   workUsePercent: number;
   claimableAmount: number;
   receiptDataUrl?: string;
+  /** Cloud mode: list queries omit the receipt payload and set this instead;
+   *  fetch the image on demand via neonGetExpenseReceipt. */
+  hasReceipt?: boolean;
   notes?: string;
   financialYear: FinancialYear;
   createdAt: string;

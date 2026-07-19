@@ -5,7 +5,7 @@ import { searchChunks } from "@/lib/rag";
 export const maxDuration = 60;
 
 export async function POST(request: NextRequest) {
-  let body: { question?: string };
+  let body: { question?: string; occupation?: string };
   try {
     body = await request.json();
   } catch {
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    return NextResponse.json(await answer(question));
+    return NextResponse.json(await answer(question, body.occupation?.trim()));
   } catch (error) {
     console.warn("ask failed:", error instanceof Error ? error.message : error);
     return NextResponse.json(
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-const answer = async (question: string) => {
+const answer = async (question: string, occupation?: string) => {
   const chunks = await searchChunks(question);
   const context = chunks.map((c) => c.content).join("\n\n---\n\n");
 
@@ -39,7 +39,9 @@ const answer = async (question: string) => {
     [
       {
         role: "user",
-        content: `You are TaxLens, an assistant for Australian work-related tax deductions.
+        content: `You are TaxLens, an assistant for Australian work-related tax deductions.${
+          occupation ? `\nThe user works as: ${occupation}. Tailor examples and deductibility judgements to that occupation.` : ""
+        }
 Answer the user's question using ONLY the reference material below. If the
 material doesn't cover the question, say so plainly rather than guessing.
 Keep the answer concise and practical, and remind the user this is general

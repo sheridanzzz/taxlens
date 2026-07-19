@@ -159,7 +159,7 @@ const DashboardPage = () => {
         <Kpi
           label="WFH hours"
           value={`${wfhHours.toLocaleString()} h`}
-          hint="67c fixed rate"
+          hint="70c fixed rate"
         />
         <Kpi
           label="Effective rate"

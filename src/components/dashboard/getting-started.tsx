@@ -23,7 +23,7 @@ const ACTIONS = [
     href: "/wfh",
     icon: Home,
     title: "Log WFH hours",
-    detail: "67c per hour, bulk-log a whole period",
+    detail: "70c per hour, bulk-log a whole period",
   },
 ] as const;
 

@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import { Section, Card, Pill } from "@/components/ledgr/primitives";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useTax } from "@/context/tax-context";
 import { fadeInUp } from "@/lib/animations";
 
 interface AskResponse {
@@ -20,6 +21,7 @@ const SUGGESTIONS = [
 ];
 
 export default function AskPage() {
+  const { state } = useTax();
   const [question, setQuestion] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -36,7 +38,10 @@ export default function AskPage() {
       const res = await fetch("/api/ai/ask", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({
+          question: trimmed,
+          occupation: state.settings.occupation,
+        }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Something went wrong.");

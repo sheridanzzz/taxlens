@@ -21,6 +21,7 @@ const toExpense = (r: Row): Expense => ({
   workUsePercent: Number(r.work_use_percent),
   claimableAmount: Number(r.claimable_amount),
   receiptDataUrl: (r.receipt_data_url as string) || undefined,
+  hasReceipt: Boolean(r.has_receipt ?? r.receipt_data_url),
   notes: (r.notes as string) || undefined,
   financialYear: r.financial_year as FinancialYear,
   createdAt: r.created_at as string,
@@ -66,22 +67,49 @@ const toSettings = (r: Row): UserSettings => ({
 
 // ── Expenses ───────────────────────────────────────────────────────
 
+// receipt payload stays out of list queries — it's fetched on demand via
+// getExpenseReceipt. ponytail: receipts live in the same column as always,
+// just off the hot path; move to blob storage if they outgrow Postgres.
+const EXPENSE_LIST_COLS = `id, user_id, date, description, amount, category,
+  claim_type, work_use_percent, claimable_amount, notes, financial_year,
+  created_at, (receipt_data_url IS NOT NULL AND receipt_data_url <> '') AS has_receipt`;
+
 export const getExpenses = async (userId: string, fy?: FinancialYear): Promise<Expense[]> => {
   const db = sql();
   const rows = fy
-    ? await db`SELECT * FROM expenses WHERE user_id = ${userId} AND financial_year = ${fy} ORDER BY date DESC`
-    : await db`SELECT * FROM expenses WHERE user_id = ${userId} ORDER BY date DESC`;
-  return rows.map(toExpense);
+    ? await db.query(
+        `SELECT ${EXPENSE_LIST_COLS} FROM expenses WHERE user_id = $1 AND financial_year = $2 ORDER BY date DESC`,
+        [userId, fy]
+      )
+    : await db.query(
+        `SELECT ${EXPENSE_LIST_COLS} FROM expenses WHERE user_id = $1 ORDER BY date DESC`,
+        [userId]
+      );
+  return (rows as Row[]).map(toExpense);
+};
+
+export const getExpenseReceipt = async (
+  userId: string,
+  expenseId: string
+): Promise<string | null> => {
+  const db = sql();
+  const rows = await db`SELECT receipt_data_url FROM expenses
+    WHERE id = ${expenseId} AND user_id = ${userId}`;
+  return (rows[0]?.receipt_data_url as string) || null;
 };
 
 export const saveExpense = async (userId: string, e: Expense): Promise<void> => {
   const db = sql();
+  // an expense loaded from a list carries hasReceipt but no payload — keep
+  // the stored image in that case instead of nulling it on edit
+  const keepStored = e.receiptDataUrl === undefined && !!e.hasReceipt;
   await db`INSERT INTO expenses (id, user_id, date, description, amount, category, claim_type, work_use_percent, claimable_amount, receipt_data_url, notes, financial_year, created_at)
      VALUES (${e.id}, ${userId}, ${e.date}, ${e.description}, ${e.amount}, ${e.category}, ${e.claimType}, ${e.workUsePercent}, ${e.claimableAmount}, ${e.receiptDataUrl ?? null}, ${e.notes ?? null}, ${e.financialYear}, ${e.createdAt})
      ON CONFLICT (id) DO UPDATE SET
        date=EXCLUDED.date, description=EXCLUDED.description, amount=EXCLUDED.amount,
        category=EXCLUDED.category, claim_type=EXCLUDED.claim_type, work_use_percent=EXCLUDED.work_use_percent,
-       claimable_amount=EXCLUDED.claimable_amount, receipt_data_url=EXCLUDED.receipt_data_url,
+       claimable_amount=EXCLUDED.claimable_amount,
+       receipt_data_url=CASE WHEN ${keepStored} THEN expenses.receipt_data_url ELSE EXCLUDED.receipt_data_url END,
        notes=EXCLUDED.notes, financial_year=EXCLUDED.financial_year`;
 };
 
