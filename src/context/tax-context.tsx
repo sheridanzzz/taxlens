@@ -75,6 +75,8 @@ interface TaxContextValue {
   updateWfhActualCost: (cost: WfhActualCost) => Promise<void>;
   removeWfhActualCost: (id: string) => Promise<void>;
   refreshData: () => Promise<void>;
+  /** Expenses for an arbitrary FY — state.expenses only holds the active one. */
+  getExpensesForFy: (fy: FinancialYear) => Promise<Expense[]>;
 }
 
 const TaxContext = createContext<TaxContextValue | null>(null);
@@ -282,6 +284,7 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         updateWfhActualCost,
         removeWfhActualCost,
         refreshData: loadAll,
+        getExpensesForFy: storage.getExpenses,
       }}
     >
       {children}

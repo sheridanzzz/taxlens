@@ -124,7 +124,7 @@ const calcFirstYearDepreciation = (
 };
 
 export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: ReceiptScannerProps) => {
-  const { state, summary, addExpense, addAsset } = useTax();
+  const { state, summary, addExpense, addAsset, getExpensesForFy } = useTax();
 
   const [step, setStep] = useState<ScanStep>("entry");
   const [stageIndex, setStageIndex] = useState(0);
@@ -270,9 +270,12 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const handleSaveExpense = useCallback(async () => {
     if (isNaN(editAmount) || editAmount <= 0 || !editName.trim()) return;
 
-    // same amount + date already on file → warn once; a second click saves anyway
+    // same amount + date already on file → warn once; a second click saves
+    // anyway. Checked against the TARGET FY's stored expenses — state only
+    // holds the active FY, and scanned receipts often belong to the prior one.
     if (!dupWarning) {
-      const dup = state.expenses.find(
+      const pool = await getExpensesForFy(editFY);
+      const dup = pool.find(
         (x) => x.amount === editAmount && x.date === editDate
       );
       if (dup) {
@@ -327,7 +330,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   }, [
     editAmount, editName, editDate, editCategory, editWorkUse, editMerchant,
     claimableAmount, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
-    editFY, dupWarning, state.expenses, addExpense, addAsset, onExpenseCreated,
+    editFY, dupWarning, getExpensesForFy, addExpense, addAsset, onExpenseCreated,
     estimateRefundImpact,
   ]);
 
