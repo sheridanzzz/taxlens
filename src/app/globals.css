@@ -119,16 +119,31 @@
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    scroll-behavior: smooth;
   }
 
   body {
     @apply bg-background text-foreground;
     font-weight: 400;
     font-feature-settings: "cv02" 1, "cv11" 1, "ss01" 1;
+    background-image:
+      radial-gradient(circle at 78% -10%, oklch(0.82 0.16 82 / 5%), transparent 28rem),
+      linear-gradient(to bottom, oklch(1 0 0 / 1.5%), transparent 12rem);
+    background-attachment: fixed;
   }
 
   .font-serif {
     font-feature-settings: "liga" 1, "dlig" 1;
+  }
+
+  :where(a, button, input, select, textarea, [role="button"]):focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
   }
 
   ::selection {
@@ -138,9 +153,14 @@
 }
 
 @utility surface {
-  background-color: var(--color-surface);
+  background: linear-gradient(
+    145deg,
+    color-mix(in oklab, var(--color-surface) 96%, white),
+    var(--color-surface)
+  );
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
+  box-shadow: 0 1px 0 oklch(1 0 0 / 3%) inset, 0 12px 36px oklch(0 0 0 / 8%);
 }
 
 @utility hairline {
@@ -189,4 +209,19 @@
   background: linear-gradient(90deg, var(--surface) 25%, var(--surface-2) 50%, var(--surface) 75%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

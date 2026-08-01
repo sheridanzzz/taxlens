@@ -16,9 +16,14 @@ import type {
   UserSettings,
   FinancialYear,
   TaxSummary,
+  CgtTransaction,
+  RentalProperty,
+  RentalTransaction,
 } from "@/lib/types";
 import * as storage from "@/lib/storage";
 import { calculateTaxSummary } from "@/lib/tax-calculator";
+import { calculateCgt, type CgtSummary } from "@/lib/cgt";
+import { calculateRentalSummary, type RentalSummary } from "@/lib/rental";
 import { DEFAULT_SETTINGS } from "@/lib/constants";
 import { useAuth } from "@/context/auth-context";
 
@@ -28,6 +33,10 @@ interface TaxState {
   assets: DepreciatingAsset[];
   wfhEntries: WfhEntry[];
   wfhActualCosts: WfhActualCost[];
+  /** Every trade ever, not just this FY — FIFO needs the whole history. */
+  cgtTransactions: CgtTransaction[];
+  rentalProperties: RentalProperty[];
+  rentalTransactions: RentalTransaction[];
   loaded: boolean;
 }
 
@@ -37,7 +46,10 @@ type TaxAction =
   | { type: "SET_EXPENSES"; payload: Expense[] }
   | { type: "SET_ASSETS"; payload: DepreciatingAsset[] }
   | { type: "SET_WFH_ENTRIES"; payload: WfhEntry[] }
-  | { type: "SET_WFH_ACTUAL_COSTS"; payload: WfhActualCost[] };
+  | { type: "SET_WFH_ACTUAL_COSTS"; payload: WfhActualCost[] }
+  | { type: "SET_CGT"; payload: CgtTransaction[] }
+  | { type: "SET_RENTAL_PROPERTIES"; payload: RentalProperty[] }
+  | { type: "SET_RENTAL_TRANSACTIONS"; payload: RentalTransaction[] };
 
 const taxReducer = (state: TaxState, action: TaxAction): TaxState => {
   switch (action.type) {
@@ -53,6 +65,12 @@ const taxReducer = (state: TaxState, action: TaxAction): TaxState => {
       return { ...state, wfhEntries: action.payload };
     case "SET_WFH_ACTUAL_COSTS":
       return { ...state, wfhActualCosts: action.payload };
+    case "SET_CGT":
+      return { ...state, cgtTransactions: action.payload };
+    case "SET_RENTAL_PROPERTIES":
+      return { ...state, rentalProperties: action.payload };
+    case "SET_RENTAL_TRANSACTIONS":
+      return { ...state, rentalTransactions: action.payload };
     default:
       return state;
   }
@@ -74,6 +92,15 @@ interface TaxContextValue {
   addWfhActualCost: (cost: WfhActualCost) => Promise<void>;
   updateWfhActualCost: (cost: WfhActualCost) => Promise<void>;
   removeWfhActualCost: (id: string) => Promise<void>;
+  cgt: CgtSummary;
+  addCgtTransaction: (tx: CgtTransaction) => Promise<void>;
+  addCgtTransactions: (txs: CgtTransaction[]) => Promise<void>;
+  removeCgtTransaction: (id: string) => Promise<void>;
+  rental: RentalSummary;
+  addRentalProperty: (property: RentalProperty) => Promise<void>;
+  removeRentalProperty: (id: string) => Promise<void>;
+  addRentalTransaction: (transaction: RentalTransaction) => Promise<void>;
+  removeRentalTransaction: (id: string) => Promise<void>;
   refreshData: () => Promise<void>;
   /** Expenses for an arbitrary FY — state.expenses only holds the active one. */
   getExpensesForFy: (fy: FinancialYear) => Promise<Expense[]>;
@@ -87,6 +114,9 @@ const initialState: TaxState = {
   assets: [],
   wfhEntries: [],
   wfhActualCosts: [],
+  cgtTransactions: [],
+  rentalProperties: [],
+  rentalTransactions: [],
   loaded: false,
 };
 
@@ -97,6 +127,10 @@ const emptySummary: TaxSummary = {
   totalWfhDeduction: 0,
   totalDeductions: 0,
   estimatedTaxSaved: 0,
+  netCapitalGain: 0,
+  rentalIncome: 0,
+  rentalDeductions: 0,
+  netRentalResult: 0,
   taxableIncome: 0,
   taxPayable: 0,
   taxPayableWithoutDeductions: 0,
@@ -110,21 +144,51 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
     if (cloudEnabled && !user) return;
     const settings = await storage.getSettings();
     const fy = settings.financialYear;
-    const [expenses, assets, wfhEntries, wfhActualCosts] = await Promise.all([
-      storage.getExpenses(fy),
-      storage.getAssets(fy),
-      storage.getWfhEntries(fy),
-      storage.getWfhActualCosts(fy),
-    ]);
+    const [
+      expenses,
+      assets,
+      wfhEntries,
+      wfhActualCosts,
+      cgtTransactions,
+      rentalProperties,
+      rentalTransactions,
+    ] =
+      await Promise.all([
+        storage.getExpenses(fy),
+        storage.getAssets(fy),
+        storage.getWfhEntries(fy),
+        storage.getWfhActualCosts(fy),
+        storage.getCgtTransactions(),
+        storage.getRentalProperties(),
+        storage.getRentalTransactions(fy),
+      ]);
     dispatch({
       type: "LOAD_ALL",
-      payload: { settings, expenses, assets, wfhEntries, wfhActualCosts },
+      payload: {
+        settings,
+        expenses,
+        assets,
+        wfhEntries,
+        wfhActualCosts,
+        cgtTransactions,
+        rentalProperties,
+        rentalTransactions,
+      },
     });
   }, [user, cloudEnabled]);
 
   useEffect(() => {
     loadAll();
   }, [loadAll]);
+
+  const cgt = calculateCgt(
+    state.cgtTransactions,
+    state.settings.financialYear
+  );
+  const rental = calculateRentalSummary(
+    state.rentalProperties,
+    state.rentalTransactions
+  );
 
   const summary = state.loaded
     ? calculateTaxSummary(
@@ -135,7 +199,14 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         state.settings.annualIncome,
         state.settings.financialYear,
         state.settings.wfhMethod,
-        state.settings.taxResidentStatus === "resident"
+        state.settings.taxResidentStatus === "resident",
+        {
+          hasHelpDebt: state.settings.hasHelpDebt,
+          hasPrivateHospitalCover: state.settings.hasPrivateHospitalCover,
+        },
+        cgt.netCapitalGain,
+        rental.assessableIncome,
+        rental.deductibleExpenses
       )
     : emptySummary;
 
@@ -144,16 +215,24 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
       await storage.saveSettings(settings);
       dispatch({ type: "SET_SETTINGS", payload: settings });
       const fy = settings.financialYear;
-      const [expenses, assets, wfhEntries, wfhActualCosts] = await Promise.all([
+      const [
+        expenses,
+        assets,
+        wfhEntries,
+        wfhActualCosts,
+        rentalTransactions,
+      ] = await Promise.all([
         storage.getExpenses(fy),
         storage.getAssets(fy),
         storage.getWfhEntries(fy),
         storage.getWfhActualCosts(fy),
+        storage.getRentalTransactions(fy),
       ]);
       dispatch({ type: "SET_EXPENSES", payload: expenses });
       dispatch({ type: "SET_ASSETS", payload: assets });
       dispatch({ type: "SET_WFH_ENTRIES", payload: wfhEntries });
       dispatch({ type: "SET_WFH_ACTUAL_COSTS", payload: wfhActualCosts });
+      dispatch({ type: "SET_RENTAL_TRANSACTIONS", payload: rentalTransactions });
     },
     []
   );
@@ -265,11 +344,81 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
     [fy]
   );
 
+  const addCgtTransaction = useCallback(async (tx: CgtTransaction) => {
+    await storage.saveCgtTransaction(tx);
+    dispatch({ type: "SET_CGT", payload: await storage.getCgtTransactions() });
+  }, []);
+
+  // one refresh for a whole CSV import instead of one per row
+  const addCgtTransactions = useCallback(async (txs: CgtTransaction[]) => {
+    for (const tx of txs) await storage.saveCgtTransaction(tx);
+    dispatch({ type: "SET_CGT", payload: await storage.getCgtTransactions() });
+  }, []);
+
+  const removeCgtTransaction = useCallback(async (id: string) => {
+    await storage.deleteCgtTransaction(id);
+    dispatch({ type: "SET_CGT", payload: await storage.getCgtTransactions() });
+  }, []);
+
+  const addRentalProperty = useCallback(async (property: RentalProperty) => {
+    await storage.saveRentalProperty(property);
+    dispatch({
+      type: "SET_RENTAL_PROPERTIES",
+      payload: await storage.getRentalProperties(),
+    });
+  }, []);
+
+  const removeRentalProperty = useCallback(
+    async (id: string) => {
+      await storage.deleteRentalProperty(id);
+      dispatch({
+        type: "SET_RENTAL_PROPERTIES",
+        payload: await storage.getRentalProperties(),
+      });
+      dispatch({
+        type: "SET_RENTAL_TRANSACTIONS",
+        payload: await storage.getRentalTransactions(fy),
+      });
+    },
+    [fy]
+  );
+
+  const addRentalTransaction = useCallback(
+    async (transaction: RentalTransaction) => {
+      await storage.saveRentalTransaction(transaction);
+      dispatch({
+        type: "SET_RENTAL_TRANSACTIONS",
+        payload: await storage.getRentalTransactions(fy),
+      });
+    },
+    [fy]
+  );
+
+  const removeRentalTransaction = useCallback(
+    async (id: string) => {
+      await storage.deleteRentalTransaction(id);
+      dispatch({
+        type: "SET_RENTAL_TRANSACTIONS",
+        payload: await storage.getRentalTransactions(fy),
+      });
+    },
+    [fy]
+  );
+
   return (
     <TaxContext.Provider
       value={{
         state,
         summary,
+        cgt,
+        rental,
+        addCgtTransaction,
+        addCgtTransactions,
+        removeCgtTransaction,
+        addRentalProperty,
+        removeRentalProperty,
+        addRentalTransaction,
+        removeRentalTransaction,
         updateSettings,
         addExpense,
         updateExpense,

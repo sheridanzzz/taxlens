@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowRight, ArrowUpRight, Check } from "lucide-react";
+import { ArrowRight, ArrowUpRight, Check, Menu } from "lucide-react";
 import { LedgrLogo } from "@/components/LedgrLogo";
 
 export const metadata: Metadata = {
@@ -60,7 +60,7 @@ const LandingPage = () => {
   return (
     <div className="min-h-screen bg-background text-foreground">
       {/* Nav */}
-      <header className="h-16 border-b border-border">
+      <header className="relative h-16 border-b border-border">
         <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
           <LedgrLogo />
           <nav className="hidden items-center gap-8 text-sm text-muted-foreground md:flex">
@@ -68,15 +68,40 @@ const LandingPage = () => {
             <a href="#deductions" className="hover:text-foreground">Deductions</a>
             <a href="#pricing" className="hover:text-foreground">Pricing</a>
           </nav>
-          <div className="flex items-center gap-3">
-            <Link href="/login" className="text-sm text-muted-foreground hover:text-foreground">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <details className="group md:hidden">
+              <summary
+                className="grid h-10 w-10 list-none place-items-center rounded-lg border border-border text-muted-foreground hover:bg-surface hover:text-foreground [&::-webkit-details-marker]:hidden"
+                aria-label="Open navigation"
+              >
+                <Menu className="h-4 w-4" />
+              </summary>
+              <nav className="absolute inset-x-4 top-[3.65rem] z-30 grid rounded-lg border border-border bg-popover p-2 text-sm shadow-2xl">
+                {[
+                  ["Product", "#product"],
+                  ["Deductions", "#deductions"],
+                  ["Pricing", "#pricing"],
+                ].map(([label, href]) => (
+                  <a
+                    key={href}
+                    href={href}
+                    className="rounded-md px-3 py-3 text-muted-foreground hover:bg-surface-2 hover:text-foreground"
+                  >
+                    {label}
+                  </a>
+                ))}
+              </nav>
+            </details>
+            <Link href="/login" className="hidden text-sm text-muted-foreground hover:text-foreground sm:inline">
               Sign in
             </Link>
             <Link
               href="/dashboard"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
+              className="inline-flex h-10 items-center gap-2 rounded-lg bg-primary px-3 text-sm font-medium text-primary-foreground hover:opacity-90 sm:px-4"
             >
-              Open Ledgr <ArrowRight className="h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Open Ledgr</span>
+              <span className="sm:hidden">Open</span>
+              <ArrowRight className="h-3.5 w-3.5" />
             </Link>
           </div>
         </div>

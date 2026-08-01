@@ -3,6 +3,7 @@ import Link from "next/link";
 type LogoProps = {
   className?: string;
   size?: "sm" | "md" | "lg";
+  href?: string;
 };
 
 const sizeMap = {
@@ -11,10 +12,14 @@ const sizeMap = {
   lg: "text-4xl",
 };
 
-export function LedgrLogo({ className = "", size = "md" }: LogoProps) {
+export function LedgrLogo({
+  className = "",
+  size = "md",
+  href = "/",
+}: LogoProps) {
   return (
     <Link
-      href="/"
+      href={href}
       className={`inline-flex items-baseline font-serif leading-none tracking-tight text-foreground ${sizeMap[size]} ${className}`}
     >
       <span>ledgr</span>

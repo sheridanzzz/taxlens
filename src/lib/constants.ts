@@ -6,6 +6,17 @@ import type {
 
 export const INSTANT_DEDUCTION_THRESHOLD = 300;
 
+/**
+ * Only physical kit hits the $300 rule. A $1,500 course, donation or agent fee
+ * is deductible in full the year you pay it — it has no effective life.
+ */
+export const DEPRECIABLE_CATEGORIES: ExpenseCategory[] = [
+  "computer_equipment",
+  "office_furniture",
+  "tools_equipment",
+  "other",
+];
+
 // 70c/hr per ATO PCG 2023/1 (as amended) from FY 2024-25 onward.
 // ponytail: scalar because the rate is identical across every supported FY;
 // make it per-FY like TAX_BRACKETS when a year diverges.
@@ -59,6 +70,21 @@ export const EXPENSE_CATEGORIES: Record<
     label: "Travel",
     description: "Travel between workplaces, client visits",
     icon: "Car",
+  },
+  car_km: {
+    label: "Car (cents per km)",
+    description: "Work kilometres in your own car, 5,000 km cap",
+    icon: "Car",
+  },
+  donations: {
+    label: "Gifts & Donations",
+    description: "Donations of $2+ to deductible gift recipients",
+    icon: "HeartHandshake",
+  },
+  tax_affairs: {
+    label: "Managing Tax Affairs",
+    description: "Accountant fees, tax agent charges, this app",
+    icon: "Receipt",
   },
   other: {
     label: "Other Work-Related",
@@ -119,6 +145,80 @@ export const TAX_BRACKETS: Record<FinancialYear, TaxBracket[]> = {
 
 export const MEDICARE_LEVY_RATE = 0.02;
 
+/**
+ * Medicare levy surcharge, singles thresholds on taxable income.
+ * ponytail: singles only — family thresholds are ~2x and need a partner/
+ * dependants field. Add that when someone lodges as a couple.
+ * ponytail: proper MLS income also adds reportable fringe benefits, super and
+ * net investment losses; taxable income is the right answer for a plain salary.
+ */
+export const MLS_TIERS: Record<FinancialYear, { over: number; rate: number }[]> = {
+  "2024-25": [
+    { over: 151000, rate: 0.015 },
+    { over: 113000, rate: 0.0125 },
+    { over: 97000, rate: 0.01 },
+  ],
+  // thresholds indexed from 1 Jul 2025
+  "2025-26": [
+    { over: 158000, rate: 0.015 },
+    { over: 118000, rate: 0.0125 },
+    { over: 101000, rate: 0.01 },
+  ],
+  // ponytail: 2026-27 indexation not published yet — reusing 2025-26.
+  // Update the three numbers when the ATO releases them.
+  "2026-27": [
+    { over: 158000, rate: 0.015 },
+    { over: 118000, rate: 0.0125 },
+    { over: 101000, rate: 0.01 },
+  ],
+};
+
+/**
+ * HELP/HECS compulsory repayment.
+ * 2024-25 is the old step system: a percentage of *total* repayment income.
+ * 2025-26 onward is the marginal system (Cutting Student Debt reforms):
+ * nothing under the threshold, then a rate on the income above each step.
+ */
+export const HELP_MARGINAL: Record<string, { over: number; rate: number }[]> = {
+  marginal: [
+    { over: 125000, rate: 0.17 },
+    { over: 67000, rate: 0.15 },
+  ],
+};
+
+export const HELP_2024_25_BANDS: { over: number; rate: number }[] = [
+  { over: 159663, rate: 0.1 },
+  { over: 150626, rate: 0.095 },
+  { over: 142100, rate: 0.09 },
+  { over: 134056, rate: 0.085 },
+  { over: 126467, rate: 0.08 },
+  { over: 119309, rate: 0.075 },
+  { over: 112556, rate: 0.07 },
+  { over: 106185, rate: 0.065 },
+  { over: 100174, rate: 0.06 },
+  { over: 94503, rate: 0.055 },
+  { over: 89154, rate: 0.05 },
+  { over: 84107, rate: 0.045 },
+  { over: 79346, rate: 0.04 },
+  { over: 74855, rate: 0.035 },
+  { over: 70618, rate: 0.03 },
+  { over: 66620, rate: 0.025 },
+  { over: 62850, rate: 0.02 },
+  { over: 54434, rate: 0.01 },
+];
+
+/**
+ * Cents-per-kilometre rate for work car use (myTax D1), capped at 5,000 km.
+ * ponytail: 2026-27 rate not published — reusing 88c. One number to update.
+ */
+export const CAR_RATE_PER_KM: Record<FinancialYear, number> = {
+  "2024-25": 0.88,
+  "2025-26": 0.88,
+  "2026-27": 0.88,
+};
+
+export const CAR_KM_CAP = 5000;
+
 export const FINANCIAL_YEARS: { value: FinancialYear; label: string }[] = [
   { value: "2024-25", label: "FY 2024-25 (Jul 2024 - Jun 2025)" },
   { value: "2025-26", label: "FY 2025-26 (Jul 2025 - Jun 2026)" },
@@ -154,6 +254,8 @@ export const DEFAULT_SETTINGS = {
   defaultWorkUsePercent: 100,
   wfhMethod: "fixed_rate" as const,
   depreciationMethod: "diminishing" as const,
+  hasHelpDebt: false,
+  hasPrivateHospitalCover: false,
 };
 
 /**

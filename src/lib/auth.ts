@@ -1,15 +1,11 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { sql, isNeonConfigured } from "@/lib/neon";
-
-const hashPassword = async (password: string): Promise<string> => {
-  const encoder = new TextEncoder();
-  const data = encoder.encode(password);
-  const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-};
+import {
+  hashPassword,
+  verifyPassword,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/password";
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   trustHost: true,
@@ -30,19 +26,30 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         if (!email || !password) return null;
 
         const db = sql();
-        const passwordHash = await hashPassword(password);
 
         if (action === "signup") {
+          if (password.length < MIN_PASSWORD_LENGTH) return null;
           const existing = await db`SELECT id FROM users WHERE email = ${email}`;
           if (existing.length > 0) return null;
 
-          const result = await db`INSERT INTO users (email, password_hash) VALUES (${email}, ${passwordHash}) RETURNING id, email`;
+          const result = await db`INSERT INTO users (email, password_hash) VALUES (${email}, ${await hashPassword(password)}) RETURNING id, email`;
           if (!result[0]) return null;
           return { id: result[0].id as string, email: result[0].email as string };
         }
 
-        const rows = await db`SELECT id, email FROM users WHERE email = ${email} AND password_hash = ${passwordHash}`;
+        const rows = await db`SELECT id, email, password_hash FROM users WHERE email = ${email}`;
         if (!rows[0]) return null;
+
+        const { ok, needsUpgrade } = await verifyPassword(
+          password,
+          rows[0].password_hash as string
+        );
+        if (!ok) return null;
+
+        if (needsUpgrade) {
+          await db`UPDATE users SET password_hash = ${await hashPassword(password)} WHERE id = ${rows[0].id as string}`;
+        }
+
         return { id: rows[0].id as string, email: rows[0].email as string };
       },
     }),

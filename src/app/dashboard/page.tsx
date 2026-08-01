@@ -20,6 +20,7 @@ import { ArrowUpRight, ScanLine, Sparkles } from "lucide-react";
 import { Section, Kpi, Card, Pill } from "@/components/ledgr/primitives";
 import { Onboarding } from "@/components/onboarding";
 import { GettingStarted } from "@/components/dashboard/getting-started";
+import { useLaunchers } from "@/components/layout/app-shell";
 import { useTax } from "@/context/tax-context";
 import {
   formatCurrency,
@@ -53,6 +54,7 @@ const greeting = () => {
 
 const DashboardPage = () => {
   const { state, summary } = useTax();
+  const { openScanner, openExpenseForm } = useLaunchers();
 
   if (!state.loaded) {
     return (
@@ -69,14 +71,12 @@ const DashboardPage = () => {
     state.assets,
     state.wfhEntries,
     state.settings.wfhMethod,
-    fy
+    fy,
+    state.rentalProperties,
+    state.rentalTransactions
   );
 
   // cumulative deduction series up to the current month
-  const marginalRatio =
-    summary.totalDeductions > 0
-      ? summary.estimatedTaxSaved / summary.totalDeductions
-      : 0;
   const nowKey = new Date().toISOString().slice(0, 7);
   const lastIndex = months.findIndex((m) => m.key === nowKey);
   const elapsed = lastIndex === -1 ? months : months.slice(0, lastIndex + 1);
@@ -102,6 +102,13 @@ const DashboardPage = () => {
     value: Math.round(b.amount),
     color: CHART_COLORS[i % CHART_COLORS.length],
   }));
+  if (summary.rentalDeductions > 0) {
+    donut.push({
+      name: "Rental property",
+      value: Math.round(summary.rentalDeductions),
+      color: CHART_COLORS[donut.length % CHART_COLORS.length],
+    });
+  }
 
   return (
     <motion.div
@@ -114,23 +121,26 @@ const DashboardPage = () => {
       <Section
         eyebrow={`FY ${fy} · live`}
         title={greeting()}
+        description="Your tax position updates as you record expenses, work-from-home hours, assets, and investments."
         action={
-          <div className="hidden items-center gap-2 md:flex">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto sm:items-center">
             {scannedCount > 0 && (
-              <Pill tone="gold">
-                <Sparkles className="h-3 w-3" /> {scannedCount} receipt
-                {scannedCount === 1 ? "" : "s"} AI-scanned
-              </Pill>
+              <span className="hidden md:inline-flex">
+                <Pill tone="gold">
+                  <Sparkles className="h-3 w-3" /> {scannedCount} receipt
+                  {scannedCount === 1 ? "" : "s"} AI-scanned
+                </Pill>
+              </span>
             )}
-            <Link
-              href="/expenses?scan=1"
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm text-muted-foreground hover:text-foreground"
+            <button
+              onClick={openScanner}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-surface hover:text-foreground sm:px-4"
             >
               <ScanLine className="h-4 w-4 text-gold" /> Scan receipt
-            </Link>
+            </button>
             <Link
               href="/reports"
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gold px-3 text-sm font-medium text-primary-foreground hover:opacity-90 sm:px-4"
             >
               Export myTax <ArrowUpRight className="h-3.5 w-3.5" />
             </Link>
@@ -143,7 +153,7 @@ const DashboardPage = () => {
       </div>
 
       {/* KPI row */}
-      <div className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <Kpi
           label="Est. tax saved"
           value={formatCurrency(summary.estimatedTaxSaved)}
@@ -225,9 +235,12 @@ const DashboardPage = () => {
           </div>
           {donut.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">
-              <Link href="/expenses?add=1" className="text-foreground underline underline-offset-2">
+              <button
+                onClick={openExpenseForm}
+                className="text-foreground underline underline-offset-2"
+              >
                 Add expenses
-              </Link>{" "}
+              </button>{" "}
               to see categories
             </p>
           ) : (
@@ -307,11 +320,19 @@ const DashboardPage = () => {
         </Card>
 
         <Card>
-          <div className="mb-4">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
             <div className="eyebrow">Recent activity</div>
             <div className="mt-1 font-serif text-2xl">
               Last {recent.length || "0"} item{recent.length === 1 ? "" : "s"}
             </div>
+            </div>
+            <Link
+              href="/expenses"
+              className="text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
+            >
+              View all
+            </Link>
           </div>
           {recent.length === 0 ? (
             <p className="text-[13px] text-muted-foreground">

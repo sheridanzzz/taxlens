@@ -6,24 +6,33 @@ export function Section({
   title,
   children,
   action,
+  description,
 }: {
   eyebrow?: string;
   title: string;
   children?: ReactNode;
   action?: ReactNode;
+  description?: ReactNode;
 }) {
   return (
-    <section className="mb-8">
-      <div className="flex items-end justify-between gap-4 mb-4">
-        <div>
+    <section className="mb-7 md:mb-8">
+      <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
+        <div className="min-w-0">
           {eyebrow && (
             <div className="eyebrow mb-1">
               <span className="text-gold">•</span> {eyebrow}
             </div>
           )}
-          <h2 className="font-serif text-3xl md:text-4xl leading-tight">{title}</h2>
+          <h1 className="font-serif text-3xl leading-[1.08] tracking-[-0.02em] md:text-4xl">
+            {title}
+          </h1>
+          {description && (
+            <div className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
+              {description}
+            </div>
+          )}
         </div>
-        {action}
+        {action && <div className="w-full shrink-0 sm:w-auto">{action}</div>}
       </div>
       {children}
     </section>
@@ -46,10 +55,18 @@ export function Kpi({
   large?: boolean;
 }) {
   return (
-    <div className="surface p-5 flex flex-col gap-2">
+    <div className="surface relative flex min-w-0 flex-col gap-2 overflow-hidden p-4 sm:p-5">
+      {positive && <span className="absolute inset-y-0 left-0 w-px bg-positive/70" />}
       <div className="eyebrow">{label}</div>
-      <div className={`font-serif tabular ${large ? "text-5xl" : "text-3xl"}`}>{value}</div>
-      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <div
+        className={`truncate font-serif leading-none tabular ${
+          large ? "text-4xl md:text-5xl" : "text-3xl"
+        }`}
+        title={value}
+      >
+        {value}
+      </div>
+      <div className="flex min-h-4 items-center gap-2 text-xs text-muted-foreground">
         {delta && (
           <span
             className={`inline-flex items-center gap-1 tabular ${
@@ -74,7 +91,7 @@ export function Card({
   className?: string;
 }) {
   // min-w-0 stops ResponsiveContainer↔grid-column width feedback loops
-  return <div className={`surface min-w-0 p-5 ${className}`}>{children}</div>;
+  return <div className={`surface min-w-0 p-4 sm:p-5 ${className}`}>{children}</div>;
 }
 
 export function Pill({

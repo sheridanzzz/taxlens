@@ -1,9 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Pencil, Trash2, Receipt, Search, Sparkles } from "lucide-react";
+import { useState } from "react";
+import {
+  Pencil,
+  Trash2,
+  Receipt,
+  Search,
+  Sparkles,
+  SlidersHorizontal,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Pill } from "@/components/ledgr/primitives";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,28 +46,44 @@ interface ExpenseTableProps {
   initialSearch?: string;
 }
 
+type StatusFilter = "all" | "deductible" | "depreciating" | "personal";
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "deductible", label: "Deductible" },
+  { value: "depreciating", label: "Depreciating" },
+  { value: "personal", label: "Personal" },
+];
+
 export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) => {
   const { state, removeExpense } = useTax();
   const [search, setSearch] = useState(initialSearch);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
-
-  // header search lands after mount via ?q= — adopt it when it arrives
-  useEffect(() => {
-    if (initialSearch) setSearch(initialSearch);
-  }, [initialSearch]);
 
   const categories = Object.entries(EXPENSE_CATEGORIES);
 
   const filtered = state.expenses
     .filter((e) => {
-      const matchesSearch = e.description
-        .toLowerCase()
-        .includes(search.toLowerCase());
+      const query = search.trim().toLowerCase();
+      const categoryLabel = EXPENSE_CATEGORIES[e.category]?.label ?? "";
+      const matchesSearch =
+        !query ||
+        e.description.toLowerCase().includes(query) ||
+        categoryLabel.toLowerCase().includes(query) ||
+        e.notes?.toLowerCase().includes(query);
       const matchesCategory =
         categoryFilter === "all" || e.category === categoryFilter;
-      return matchesSearch && matchesCategory;
+      const matchesStatus =
+        statusFilter === "all" ||
+        (statusFilter === "personal" && e.workUsePercent === 0) ||
+        (statusFilter === "depreciating" && e.claimType === "depreciation") ||
+        (statusFilter === "deductible" &&
+          e.workUsePercent > 0 &&
+          e.claimType !== "depreciation");
+      return matchesSearch && matchesCategory && matchesStatus;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -65,6 +95,8 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
   };
 
   const statusFor = (e: Expense) => {
+    if (e.workUsePercent === 0)
+      return { label: "Personal", tone: "muted" as const };
     if (e.claimType === "depreciation")
       return { label: "Depreciate", tone: "muted" as const };
     if (e.workUsePercent < 100)
@@ -72,56 +104,199 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
     return { label: "Deductible", tone: "positive" as const };
   };
 
+  const hasFilters =
+    search.trim().length > 0 || categoryFilter !== "all" || statusFilter !== "all";
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategoryFilter("all");
+    setStatusFilter("all");
+  };
+
+  const openReceipt = async (expense: Expense) => {
+    setReceiptUrl(
+      expense.receiptDataUrl ?? (await neonGetExpenseReceipt(expense.id))
+    );
+  };
+
   return (
-    <div className="surface p-5">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+    <div className="surface overflow-hidden">
+      <div className="border-b border-border p-4 sm:p-5">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
         <div className="relative min-w-[200px] flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
-            placeholder="Search expenses…"
+            placeholder="Search description or category…"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="h-9 w-full rounded-md border border-border bg-surface-2 pl-9 pr-3 text-sm outline-none focus:border-gold/60"
+            className="h-10 w-full rounded-lg border border-border bg-surface-2 pl-9 pr-9 text-sm outline-none focus:border-gold/60"
             aria-label="Search expenses"
           />
-        </div>
-        <div className="flex flex-wrap gap-1.5">
-          <button
-            onClick={() => setCategoryFilter("all")}
-            className={`h-9 rounded-md border px-3 text-sm ${
-              categoryFilter === "all"
-                ? "border-gold/60 text-gold"
-                : "border-border text-muted-foreground hover:text-foreground"
-            }`}
-            aria-label="Show all categories"
-          >
-            All
-          </button>
-          {categories.map(([key, cat]) => (
+          {search && (
             <button
-              key={key}
-              onClick={() => setCategoryFilter(key)}
-              className={`h-9 rounded-md border px-3 text-sm ${
-                categoryFilter === key
-                  ? "border-gold/60 text-gold"
-                  : "border-border text-muted-foreground hover:text-foreground"
-              }`}
-              aria-label={`Filter by ${cat.label}`}
+              onClick={() => setSearch("")}
+              className="absolute right-1.5 top-1/2 grid h-7 w-7 -translate-y-1/2 place-items-center rounded-md text-muted-foreground hover:bg-surface hover:text-foreground"
+              aria-label="Clear search"
             >
-              {cat.label.split(" ").slice(0, 2).join(" ")}
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+
+        <div
+          className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-surface-2 p-1"
+          aria-label="Filter expenses by status"
+        >
+          {STATUS_FILTERS.map((filter) => (
+            <button
+              key={filter.value}
+              onClick={() => setStatusFilter(filter.value)}
+              className={`h-8 shrink-0 rounded-md px-3 text-xs transition-colors ${
+                statusFilter === filter.value
+                  ? "bg-surface text-foreground shadow-sm"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              aria-pressed={statusFilter === filter.value}
+            >
+              {filter.label}
             </button>
           ))}
+        </div>
+
+        <Select value={categoryFilter} onValueChange={(value) => setCategoryFilter(value ?? "all")}>
+          <SelectTrigger
+            className="h-10 w-full rounded-lg border-border bg-surface-2 px-3 text-sm xl:w-52"
+            aria-label="Filter by category"
+          >
+            <span className="flex items-center gap-2 truncate">
+              <SlidersHorizontal className="h-3.5 w-3.5 text-muted-foreground" />
+              {categoryFilter === "all"
+                ? "All categories"
+                : EXPENSE_CATEGORIES[categoryFilter as keyof typeof EXPENSE_CATEGORIES]?.label}
+            </span>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All categories</SelectItem>
+            {categories.map(([key, category]) => (
+              <SelectItem key={key} value={key}>
+                {category.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        {hasFilters && (
+          <button
+            onClick={clearFilters}
+            className="h-10 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+          >
+            Clear filters
+          </button>
+        )}
+        </div>
+
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {filtered.length} of {state.expenses.length} expense
+            {state.expenses.length === 1 ? "" : "s"}
+          </span>
+          <span className="hidden sm:inline">Newest first</span>
         </div>
       </div>
 
       {filtered.length === 0 ? (
         <div className="py-12 text-center">
-          <p className="text-[13px] text-muted-foreground">
-            No expenses match your filters
+          <p className="font-serif text-xl">No matching expenses</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Try a different search or clear the active filters.
           </p>
+          <button
+            onClick={clearFilters}
+            className="mt-4 h-9 rounded-md border border-border px-3 text-sm hover:bg-surface-2"
+          >
+            Clear filters
+          </button>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="divide-y divide-border md:hidden">
+          {filtered.map((expense) => {
+            const status = statusFor(expense);
+            return (
+              <article key={expense.id} className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <h3 className="truncate text-sm font-medium">
+                        {expense.description}
+                      </h3>
+                      {isAiScanned(expense) && (
+                        <Sparkles className="h-3 w-3 shrink-0 text-gold" aria-label="AI scanned" />
+                      )}
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {new Date(expense.date).toLocaleDateString("en-AU", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                      {" · "}
+                      {EXPENSE_CATEGORIES[expense.category]?.label}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <div className="font-mono text-sm tabular">
+                      {formatCurrency(expense.amount)}
+                    </div>
+                    <div className="mt-1">
+                      <Pill tone={status.tone}>{status.label}</Pill>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                  <div>
+                    <span className="eyebrow">Claimable </span>
+                    <span className="ml-1 font-mono text-sm tabular">
+                      {formatCurrency(expense.claimableAmount)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {(expense.receiptDataUrl || expense.hasReceipt) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-9 px-2.5"
+                        onClick={() => openReceipt(expense)}
+                      >
+                        <Receipt className="mr-1.5 h-3.5 w-3.5 text-gold" />
+                        Receipt
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9"
+                      onClick={() => onEdit(expense)}
+                      aria-label={`Edit ${expense.description}`}
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-9 w-9 text-destructive hover:text-destructive"
+                      onClick={() => setDeleteId(expense.id)}
+                      aria-label={`Delete ${expense.description}`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full text-sm">
             <thead>
               <tr className="eyebrow border-b border-border">
@@ -163,12 +338,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                             variant="ghost"
                             size="icon"
                             className="h-6 w-6"
-                            onClick={async () =>
-                              setReceiptUrl(
-                                expense.receiptDataUrl ??
-                                  (await neonGetExpenseReceipt(expense.id))
-                              )
-                            }
+                            onClick={() => openReceipt(expense)}
                             aria-label="View receipt"
                           >
                             <Receipt className="h-3.5 w-3.5 text-gold" />
@@ -219,6 +389,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
             </tbody>
           </table>
         </div>
+        </>
       )}
 
       <AlertDialog

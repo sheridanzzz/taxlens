@@ -16,6 +16,9 @@ export type ExpenseCategory =
   | "tools_equipment"
   | "clothing"
   | "travel"
+  | "car_km"
+  | "donations"
+  | "tax_affairs"
   | "other";
 
 export type AssetType =
@@ -78,6 +81,48 @@ export interface WfhActualCost {
   financialYear: FinancialYear;
 }
 
+export interface RentalProperty {
+  id: string;
+  address: string;
+  ownershipPercent: number;
+  acquiredDate?: string;
+  notes?: string;
+  createdAt: string;
+}
+
+export type RentalTransactionKind = "income" | "expense";
+
+export type RentalCategory =
+  | "rent"
+  | "other_income"
+  | "loan_interest"
+  | "council_rates"
+  | "water_charges"
+  | "insurance"
+  | "property_agent_fees"
+  | "repairs_maintenance"
+  | "cleaning"
+  | "advertising"
+  | "land_tax"
+  | "body_corporate"
+  | "legal_accounting"
+  | "other_expense";
+
+export interface RentalTransaction {
+  id: string;
+  propertyId: string;
+  date: string;
+  kind: RentalTransactionKind;
+  category: RentalCategory;
+  description: string;
+  amount: number;
+  /** Expense-only apportionment before the property's ownership share. */
+  deductiblePercent: number;
+  financialYear: FinancialYear;
+  notes?: string;
+  createdAt: string;
+}
+
 export interface UserSettings {
   financialYear: FinancialYear;
   annualIncome: number;
@@ -86,6 +131,33 @@ export interface UserSettings {
   defaultWorkUsePercent: number;
   wfhMethod: WfhMethod;
   depreciationMethod: DepreciationMethod;
+  /** Compulsory HELP/HECS repayment falls with taxable income — deductions cut it too. */
+  hasHelpDebt: boolean;
+  /** No hospital cover above the MLS threshold means an extra 1–1.5%. */
+  hasPrivateHospitalCover: boolean;
+}
+
+export type CgtAssetKind = "crypto" | "share";
+
+/**
+ * One side of one trade. Holdings, parcels and gains are all derived from
+ * these — there is no separate holdings table to drift out of sync.
+ * No financialYear field on purpose: the FY of a disposal comes from its date.
+ */
+export interface CgtTransaction {
+  id: string;
+  kind: CgtAssetKind;
+  /** Ticker or symbol, uppercased: "BTC", "CBA". */
+  asset: string;
+  side: "buy" | "sell";
+  date: string;
+  quantity: number;
+  /** AUD per unit at the time of the trade. */
+  unitPrice: number;
+  /** Brokerage or network fee in AUD. Adds to cost base, reduces proceeds. */
+  fee: number;
+  notes?: string;
+  createdAt: string;
 }
 
 export interface TaxSummary {
@@ -95,6 +167,11 @@ export interface TaxSummary {
   totalWfhDeduction: number;
   totalDeductions: number;
   estimatedTaxSaved: number;
+  /** Net capital gain for the year, after losses and the 50% discount. */
+  netCapitalGain: number;
+  rentalIncome: number;
+  rentalDeductions: number;
+  netRentalResult: number;
   taxableIncome: number;
   taxPayable: number;
   taxPayableWithoutDeductions: number;

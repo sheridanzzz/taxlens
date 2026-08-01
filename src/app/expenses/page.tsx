@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState, Suspense } from "react";
+import { useSearchParams } from "next/navigation";
 import { Plus, Camera } from "lucide-react";
 import { motion } from "motion/react";
 import { Section, Kpi } from "@/components/ledgr/primitives";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ExpenseTable } from "@/components/expenses/expense-table";
-import { ReceiptScanner } from "@/components/expenses/receipt-scanner";
+import { useLaunchers } from "@/components/layout/app-shell";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { fadeInUp } from "@/lib/animations";
@@ -16,43 +16,14 @@ import type { Expense } from "@/lib/types";
 
 const ExpensesInner = () => {
   const { state, summary } = useTax();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const [formOpen, setFormOpen] = useState(false);
-  const [scannerOpen, setScannerOpen] = useState(false);
+  const { openScanner, openExpenseForm } = useLaunchers();
+  // ?q= is a real navigation (header search); the scan/add launchers are not —
+  // those open the shell's dialogs in place.
+  const initialSearch = useSearchParams().get("q") ?? "";
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
-  const [initialSearch, setInitialSearch] = useState("");
-
-  // react to ?scan=1 / ?add=1 on every navigation, not just mount, so the
-  // sidebar/header launchers work while already on this page
-  useEffect(() => {
-    if (searchParams.get("scan") === "1") setScannerOpen(true);
-    else if (searchParams.get("add") === "1") setFormOpen(true);
-    const q = searchParams.get("q");
-    if (q) setInitialSearch(q);
-  }, [searchParams]);
-
-  // strip launcher params on close so re-clicking the same link re-triggers
-  const clearParams = () => {
-    if (window.location.search) router.replace("/expenses", { scroll: false });
-  };
 
   const handleEdit = (expense: Expense) => {
     setEditingExpense(expense);
-    setFormOpen(true);
-  };
-
-  const handleFormOpenChange = (open: boolean) => {
-    setFormOpen(open);
-    if (!open) {
-      setEditingExpense(null);
-      clearParams();
-    }
-  };
-
-  const handleScannerOpenChange = (open: boolean) => {
-    setScannerOpen(open);
-    if (!open) clearParams();
   };
 
   if (!state.loaded) {
@@ -79,18 +50,19 @@ const ExpensesInner = () => {
       <Section
         eyebrow="Expenses"
         title="Every receipt, on the record."
+        description="Capture receipts as they happen, review what is deductible, and keep every claim ready for tax time."
         action={
-          <div className="flex gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex">
             <button
-              onClick={() => setScannerOpen(true)}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
+              onClick={openScanner}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-surface hover:text-foreground"
               aria-label="Scan receipt with AI"
             >
               <Camera className="h-4 w-4" /> Scan receipt
             </button>
             <button
-              onClick={() => setFormOpen(true)}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+              onClick={openExpenseForm}
+              className="btn-press inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gold px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
               aria-label="Add new expense"
             >
               <Plus className="h-4 w-4" /> Add expense
@@ -99,7 +71,7 @@ const ExpensesInner = () => {
         }
       />
 
-      <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <Kpi
           label="Claimable YTD"
           value={formatCurrency(summary.totalFullClaims)}
@@ -112,7 +84,7 @@ const ExpensesInner = () => {
       </div>
 
       {state.expenses.length === 0 ? (
-        <div className="surface p-8 text-center">
+        <div className="surface px-5 py-10 text-center sm:p-12">
           <p className="font-serif text-2xl">
             No expenses in FY {state.settings.financialYear} yet
           </p>
@@ -120,35 +92,34 @@ const ExpensesInner = () => {
             Snap a receipt and the AI fills in the details, or add one manually.
             Every expense feeds your refund estimate.
           </p>
-          <div className="mt-6 flex justify-center gap-2">
+          <div className="mx-auto mt-6 grid max-w-sm gap-2 sm:grid-cols-2">
             <button
-              onClick={() => setScannerOpen(true)}
-              className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
+              onClick={openScanner}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-gold px-4 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <Camera className="h-4 w-4" /> Scan a receipt
             </button>
             <button
-              onClick={() => setFormOpen(true)}
-              className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-4 text-sm text-muted-foreground hover:text-foreground"
+              onClick={openExpenseForm}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-lg border border-border px-4 text-sm text-muted-foreground hover:bg-surface-2 hover:text-foreground"
             >
               <Plus className="h-4 w-4" /> Add manually
             </button>
           </div>
         </div>
       ) : (
-        <ExpenseTable onEdit={handleEdit} initialSearch={initialSearch} />
+        <ExpenseTable
+          key={initialSearch}
+          onEdit={handleEdit}
+          initialSearch={initialSearch}
+        />
       )}
 
+      {/* add/scan live in the shell — this one only ever edits */}
       <ExpenseForm
-        open={formOpen}
-        onOpenChange={handleFormOpenChange}
+        open={!!editingExpense}
+        onOpenChange={(open) => !open && setEditingExpense(null)}
         editingExpense={editingExpense}
-      />
-
-      <ReceiptScanner
-        open={scannerOpen}
-        onOpenChange={handleScannerOpenChange}
-        onExpenseCreated={() => {}}
       />
     </motion.div>
   );

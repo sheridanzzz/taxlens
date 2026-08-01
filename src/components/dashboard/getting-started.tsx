@@ -3,18 +3,19 @@
 import Link from "next/link";
 import { ScanLine, Plus, Home } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
+import { useLaunchers } from "@/components/layout/app-shell";
 import { useTax } from "@/context/tax-context";
 import { cardHover } from "@/lib/animations";
 
 const ACTIONS = [
   {
-    href: "/expenses?scan=1",
+    action: "scan",
     icon: ScanLine,
     title: "Scan a receipt",
     detail: "AI reads it and suggests the claim",
   },
   {
-    href: "/expenses?add=1",
+    action: "add",
     icon: Plus,
     title: "Add an expense",
     detail: "Enter a deduction manually",
@@ -31,6 +32,7 @@ const ACTIONS = [
 // and the "switched FY and everything vanished" confusion.
 export const GettingStarted = () => {
   const { state } = useTax();
+  const { openScanner, openExpenseForm } = useLaunchers();
   const prefersReduced = useReducedMotion();
 
   const empty =
@@ -55,19 +57,34 @@ export const GettingStarted = () => {
         estimate.
       </p>
       <div className="mt-4 grid gap-2 sm:grid-cols-3">
-        {ACTIONS.map((a) => (
-          <Link
-            key={a.href}
-            href={a.href}
-            className="group flex items-start gap-3 rounded-md border border-border p-3 transition-colors hover:border-gold/60"
-          >
-            <a.icon className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-            <div>
-              <p className="text-xs font-medium text-foreground">{a.title}</p>
-              <p className="mt-0.5 text-[11px] text-muted-foreground">{a.detail}</p>
-            </div>
-          </Link>
-        ))}
+        {ACTIONS.map((a) => {
+          const className =
+            "group flex items-start gap-3 rounded-md border border-border p-3 text-left transition-colors hover:border-gold/60";
+          const body = (
+            <>
+              <a.icon className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+              <div>
+                <p className="text-xs font-medium text-foreground">{a.title}</p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  {a.detail}
+                </p>
+              </div>
+            </>
+          );
+          return "href" in a ? (
+            <Link key={a.title} href={a.href} className={className}>
+              {body}
+            </Link>
+          ) : (
+            <button
+              key={a.title}
+              onClick={a.action === "scan" ? openScanner : openExpenseForm}
+              className={className}
+            >
+              {body}
+            </button>
+          );
+        })}
       </div>
     </motion.div>
   );

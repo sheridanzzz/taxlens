@@ -2,6 +2,9 @@ import {
   TAX_BRACKETS,
   MEDICARE_LEVY_RATE,
   WFH_FIXED_RATE_PER_HOUR,
+  MLS_TIERS,
+  HELP_MARGINAL,
+  HELP_2024_25_BANDS,
 } from "./constants";
 import type {
   FinancialYear,
@@ -12,14 +15,51 @@ import type {
   TaxSummary,
   CategoryBreakdown,
   ExpenseCategory,
+  RentalProperty,
+  RentalTransaction,
 } from "./types";
 import { EXPENSE_CATEGORIES } from "./constants";
 import { calculateCurrentYearDepreciation } from "./depreciation";
 
+/** Extra liabilities that also move when deductions move. */
+export interface LiabilityOptions {
+  hasHelpDebt?: boolean;
+  hasPrivateHospitalCover?: boolean;
+}
+
+/** Medicare levy surcharge — 0 with hospital cover or under the tier 1 floor. */
+export const calculateMls = (
+  taxableIncome: number,
+  financialYear: FinancialYear,
+  hasPrivateHospitalCover: boolean
+): number => {
+  if (hasPrivateHospitalCover) return 0;
+  const tier = MLS_TIERS[financialYear].find((t) => taxableIncome > t.over);
+  return tier ? taxableIncome * tier.rate : 0;
+};
+
+/** Compulsory HELP/HECS repayment for the year. */
+export const calculateHelpRepayment = (
+  taxableIncome: number,
+  financialYear: FinancialYear
+): number => {
+  if (financialYear === "2024-25") {
+    const band = HELP_2024_25_BANDS.find((b) => taxableIncome > b.over);
+    return band ? taxableIncome * band.rate : 0;
+  }
+  // marginal system: rate applies only to income above each step
+  return HELP_MARGINAL.marginal.reduce((sum, step, i, steps) => {
+    const ceiling = i === 0 ? Infinity : steps[i - 1].over;
+    const inStep = Math.min(taxableIncome, ceiling) - step.over;
+    return sum + (inStep > 0 ? inStep * step.rate : 0);
+  }, 0);
+};
+
 export const calculateTaxPayable = (
   taxableIncome: number,
   financialYear: FinancialYear,
-  isResident: boolean = true
+  isResident: boolean = true,
+  options: LiabilityOptions = {}
 ): number => {
   if (taxableIncome <= 0) return 0;
 
@@ -37,6 +77,15 @@ export const calculateTaxPayable = (
 
   if (isResident && taxableIncome > 18200) {
     tax += taxableIncome * MEDICARE_LEVY_RATE;
+    tax += calculateMls(
+      taxableIncome,
+      financialYear,
+      !!options.hasPrivateHospitalCover
+    );
+  }
+
+  if (options.hasHelpDebt) {
+    tax += calculateHelpRepayment(taxableIncome, financialYear);
   }
 
   return Math.round(tax * 100) / 100;
@@ -84,7 +133,14 @@ export const calculateTaxSummary = (
   annualIncome: number,
   financialYear: FinancialYear,
   wfhMethod: "fixed_rate" | "actual_cost",
-  isResident: boolean = true
+  isResident: boolean = true,
+  options: LiabilityOptions = {},
+  /** Already netted and discounted — see lib/cgt.ts. Adds to taxable income. */
+  netCapitalGain: number = 0,
+  /** Ownership-adjusted assessable rent received. */
+  rentalIncome: number = 0,
+  /** Ownership and private-use adjusted rental expenses. */
+  rentalDeductions: number = 0
 ): TaxSummary => {
   const totalFullClaims = calculateTotalExpenseDeductions(expenses);
   const totalDepreciationClaims = calculateTotalDepreciationDeductions(
@@ -98,16 +154,29 @@ export const calculateTaxSummary = (
       : calculateWfhDeductionActualCost(wfhActualCosts);
 
   const totalDeductions =
-    totalFullClaims + totalDepreciationClaims + totalWfhDeduction;
+    totalFullClaims +
+    totalDepreciationClaims +
+    totalWfhDeduction +
+    rentalDeductions;
 
   const totalExpenses = expenses.reduce((sum, e) => sum + e.amount, 0);
 
-  const taxableIncome = Math.max(0, annualIncome - totalDeductions);
-  const taxPayable = calculateTaxPayable(taxableIncome, financialYear, isResident);
-  const taxPayableWithoutDeductions = calculateTaxPayable(
-    annualIncome,
+  // a capital gain is assessable income, so it sits on top of salary before
+  // deductions come off — and it can push you into a higher bracket, which is
+  // exactly when a deduction is worth most
+  const grossIncome = annualIncome + netCapitalGain + rentalIncome;
+  const taxableIncome = Math.max(0, grossIncome - totalDeductions);
+  const taxPayable = calculateTaxPayable(
+    taxableIncome,
     financialYear,
-    isResident
+    isResident,
+    options
+  );
+  const taxPayableWithoutDeductions = calculateTaxPayable(
+    grossIncome,
+    financialYear,
+    isResident,
+    options
   );
   const estimatedTaxSaved = taxPayableWithoutDeductions - taxPayable;
 
@@ -118,6 +187,10 @@ export const calculateTaxSummary = (
     totalWfhDeduction,
     totalDeductions,
     estimatedTaxSaved: Math.round(estimatedTaxSaved * 100) / 100,
+    netCapitalGain,
+    rentalIncome,
+    rentalDeductions,
+    netRentalResult: Math.round((rentalIncome - rentalDeductions) * 100) / 100,
     taxableIncome,
     taxPayable,
     taxPayableWithoutDeductions,
@@ -186,7 +259,9 @@ export const getMonthlyDeductionTotals = (
   assets: DepreciatingAsset[],
   wfhEntries: WfhEntry[],
   wfhMethod: "fixed_rate" | "actual_cost",
-  financialYear: FinancialYear
+  financialYear: FinancialYear,
+  rentalProperties: RentalProperty[] = [],
+  rentalTransactions: RentalTransaction[] = []
 ): { month: string; key: string; amount: number }[] => {
   const startYear = Number(financialYear.slice(0, 4));
   const keys = MONTH_LABELS.map((_, i) => {
@@ -214,6 +289,22 @@ export const getMonthlyDeductionTotals = (
     const purchaseKey = a.purchaseDate.slice(0, 7);
     const k = totals.has(purchaseKey) ? purchaseKey : keys[0];
     totals.set(k, totals.get(k)! + yearDeduction);
+  }
+  const ownership = new Map(
+    rentalProperties.map((property) => [
+      property.id,
+      property.ownershipPercent / 100,
+    ])
+  );
+  for (const transaction of rentalTransactions) {
+    if (transaction.kind !== "expense") continue;
+    const k = transaction.date.slice(0, 7);
+    if (!totals.has(k)) continue;
+    const deduction =
+      transaction.amount *
+      (ownership.get(transaction.propertyId) ?? 1) *
+      (transaction.deductiblePercent / 100);
+    totals.set(k, totals.get(k)! + deduction);
   }
 
   return keys.map((key, i) => ({

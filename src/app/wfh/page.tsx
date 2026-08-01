@@ -142,7 +142,7 @@ const WfhPage = () => {
         />
       </div>
 
-      <div className="mb-6 grid gap-4 lg:grid-cols-2">
+      <div className="mb-6 grid items-start gap-4 lg:grid-cols-2">
         <WfhCalendar />
         <WfhCalculator />
       </div>

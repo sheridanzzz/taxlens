@@ -8,8 +8,11 @@ import type {
   WfhActualCost,
   UserSettings,
   FinancialYear,
+  CgtTransaction,
+  RentalProperty,
+  RentalTransaction,
 } from "./types";
-import { DEFAULT_SETTINGS } from "./constants";
+import { DEFAULT_SETTINGS, FY_DATE_RANGES } from "./constants";
 
 const KEYS = {
   expenses: "taxlens_expenses",
@@ -17,6 +20,9 @@ const KEYS = {
   wfhEntries: "taxlens_wfh_entries",
   wfhActualCosts: "taxlens_wfh_actual_costs",
   settings: "taxlens_settings",
+  cgt: "taxlens_cgt_transactions",
+  rentalProperties: "ledgr_rental_properties",
+  rentalTransactions: "ledgr_rental_transactions",
 } as const;
 
 const getItem = <T>(key: string, fallback: T): T => {
@@ -59,10 +65,11 @@ export const deleteExpense = (id: string): void => {
   );
 };
 
+// see storage-neon.getAssets — depreciation runs past the year of purchase
 export const getAssets = (fy?: FinancialYear): DepreciatingAsset[] => {
   const all = getItem<DepreciatingAsset[]>(KEYS.assets, []);
   if (!fy) return all;
-  return all.filter((a) => a.financialYear === fy);
+  return all.filter((a) => a.purchaseDate <= FY_DATE_RANGES[fy].end);
 };
 
 export const saveAsset = (asset: DepreciatingAsset): void => {
@@ -134,9 +141,81 @@ export const deleteWfhActualCost = (id: string): void => {
   );
 };
 
-export const getSettings = (): UserSettings => {
-  return getItem<UserSettings>(KEYS.settings, DEFAULT_SETTINGS);
+// merged over defaults so settings saved before a new field existed still load
+// never FY-filtered: FIFO matching needs the whole history to find the parcels
+// a sale consumes, which are usually from an earlier year
+export const getCgtTransactions = (): CgtTransaction[] =>
+  getItem<CgtTransaction[]>(KEYS.cgt, []);
+
+export const saveCgtTransaction = (tx: CgtTransaction): void => {
+  const all = getItem<CgtTransaction[]>(KEYS.cgt, []);
+  const idx = all.findIndex((t) => t.id === tx.id);
+  if (idx >= 0) all[idx] = tx;
+  else all.push(tx);
+  setItem(KEYS.cgt, all);
 };
+
+export const deleteCgtTransaction = (id: string): void => {
+  setItem(
+    KEYS.cgt,
+    getItem<CgtTransaction[]>(KEYS.cgt, []).filter((t) => t.id !== id)
+  );
+};
+
+export const getRentalProperties = (): RentalProperty[] =>
+  getItem<RentalProperty[]>(KEYS.rentalProperties, []);
+
+export const saveRentalProperty = (property: RentalProperty): void => {
+  const all = getRentalProperties();
+  const index = all.findIndex((item) => item.id === property.id);
+  if (index >= 0) all[index] = property;
+  else all.push(property);
+  setItem(KEYS.rentalProperties, all);
+};
+
+export const deleteRentalProperty = (id: string): void => {
+  setItem(
+    KEYS.rentalProperties,
+    getRentalProperties().filter((property) => property.id !== id)
+  );
+  setItem(
+    KEYS.rentalTransactions,
+    getItem<RentalTransaction[]>(KEYS.rentalTransactions, []).filter(
+      (transaction) => transaction.propertyId !== id
+    )
+  );
+};
+
+export const getRentalTransactions = (
+  fy?: FinancialYear
+): RentalTransaction[] => {
+  const all = getItem<RentalTransaction[]>(KEYS.rentalTransactions, []);
+  return fy ? all.filter((transaction) => transaction.financialYear === fy) : all;
+};
+
+export const saveRentalTransaction = (
+  transaction: RentalTransaction
+): void => {
+  const all = getItem<RentalTransaction[]>(KEYS.rentalTransactions, []);
+  const index = all.findIndex((item) => item.id === transaction.id);
+  if (index >= 0) all[index] = transaction;
+  else all.push(transaction);
+  setItem(KEYS.rentalTransactions, all);
+};
+
+export const deleteRentalTransaction = (id: string): void => {
+  setItem(
+    KEYS.rentalTransactions,
+    getItem<RentalTransaction[]>(KEYS.rentalTransactions, []).filter(
+      (transaction) => transaction.id !== id
+    )
+  );
+};
+
+export const getSettings = (): UserSettings => ({
+  ...DEFAULT_SETTINGS,
+  ...getItem<Partial<UserSettings>>(KEYS.settings, {}),
+});
 
 export const saveSettings = (settings: UserSettings): void => {
   setItem(KEYS.settings, settings);
@@ -148,6 +227,9 @@ export const exportAllData = (): string => {
     assets: getItem<DepreciatingAsset[]>(KEYS.assets, []),
     wfhEntries: getItem<WfhEntry[]>(KEYS.wfhEntries, []),
     wfhActualCosts: getItem<WfhActualCost[]>(KEYS.wfhActualCosts, []),
+    cgtTransactions: getCgtTransactions(),
+    rentalProperties: getRentalProperties(),
+    rentalTransactions: getRentalTransactions(),
     settings: getSettings(),
     exportedAt: new Date().toISOString(),
   };
@@ -161,6 +243,11 @@ export const importAllData = (json: string): boolean => {
     if (data.assets) setItem(KEYS.assets, data.assets);
     if (data.wfhEntries) setItem(KEYS.wfhEntries, data.wfhEntries);
     if (data.wfhActualCosts) setItem(KEYS.wfhActualCosts, data.wfhActualCosts);
+    if (data.cgtTransactions) setItem(KEYS.cgt, data.cgtTransactions);
+    if (data.rentalProperties)
+      setItem(KEYS.rentalProperties, data.rentalProperties);
+    if (data.rentalTransactions)
+      setItem(KEYS.rentalTransactions, data.rentalTransactions);
     if (data.settings) setItem(KEYS.settings, data.settings);
     return true;
   } catch {

@@ -1,4 +1,4 @@
-import type { DepreciatingAsset, DepreciationMethod, FinancialYear } from "./types";
+import type { DepreciatingAsset, FinancialYear } from "./types";
 
 /**
  * Diminishing value: deduction = base value × (days held ÷ 365) × (200% ÷ effective life)
@@ -27,36 +27,17 @@ export const getDaysInFinancialYear = (
   return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
 };
 
-const getYearsElapsed = (
-  purchaseDate: string,
-  financialYear: string
-): number => {
-  const { start: fyStart } = getFyRange(financialYear);
-  const purchase = new Date(purchaseDate);
-
-  if (purchase >= fyStart) return 0;
-
-  const diffYears =
-    (fyStart.getTime() - purchase.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  return Math.floor(diffYears);
+/** The FY immediately before this one, e.g. "2025-26" -> "2024-25". */
+const previousFy = (financialYear: string): string => {
+  const startYear = Number(financialYear.slice(0, 4)) - 1;
+  return `${startYear}-${String(startYear + 1).slice(2)}`;
 };
 
 export const calculateDiminishingValue = (
-  cost: number,
+  baseValue: number,
   effectiveLife: number,
-  daysHeld: number,
-  yearsElapsed: number
-): number => {
-  const rate = 2 / effectiveLife;
-  let baseValue = cost;
-
-  for (let i = 0; i < yearsElapsed; i++) {
-    baseValue -= baseValue * rate;
-    if (baseValue <= 0) return 0;
-  }
-
-  return baseValue * (daysHeld / 365) * rate;
-};
+  daysHeld: number
+): number => baseValue * (daysHeld / 365) * (2 / effectiveLife);
 
 export const calculatePrimeCost = (
   cost: number,
@@ -74,26 +55,22 @@ export const calculateCurrentYearDepreciation = (
   const daysHeld = getDaysInFinancialYear(asset.purchaseDate, financialYear);
   if (daysHeld <= 0) return 0;
 
-  const yearsElapsed = getYearsElapsed(asset.purchaseDate, financialYear);
+  // Opening value = whatever was left at the end of last FY. Counting whole
+  // calendar years elapsed got this wrong for anything bought mid-year, which
+  // understated the write-down and so overstated the deduction from year 3 on.
+  const opening = calculateRemainingValue(
+    asset,
+    previousFy(financialYear) as FinancialYear
+  );
+  if (opening <= 0) return 0;
 
-  let deduction: number;
+  const deduction =
+    asset.depreciationMethod === "diminishing"
+      ? calculateDiminishingValue(opening, asset.effectiveLifeYears, daysHeld)
+      : calculatePrimeCost(asset.purchasePrice, asset.effectiveLifeYears, daysHeld);
 
-  if (asset.depreciationMethod === "diminishing") {
-    deduction = calculateDiminishingValue(
-      asset.purchasePrice,
-      asset.effectiveLifeYears,
-      daysHeld,
-      yearsElapsed
-    );
-  } else {
-    deduction = calculatePrimeCost(
-      asset.purchasePrice,
-      asset.effectiveLifeYears,
-      daysHeld
-    );
-  }
-
-  const workPortion = (deduction * asset.workUsePercent) / 100;
+  // never claim past the asset's remaining value
+  const workPortion = (Math.min(deduction, opening) * asset.workUsePercent) / 100;
   return Math.round(workPortion * 100) / 100;
 };
 
@@ -137,35 +114,22 @@ export const getDepreciationSchedule = (
   asset: DepreciatingAsset
 ): { year: string; deduction: number; remaining: number }[] => {
   const schedule: { year: string; deduction: number; remaining: number }[] = [];
-  const startYear = new Date(asset.purchaseDate).getFullYear();
-  let remaining = asset.purchasePrice;
+  const purchase = new Date(asset.purchaseDate);
+  // the FY the asset was bought in — Jul-Dec starts that FY, Jan-Jun the last
+  // one. Using the calendar year skipped the first year for anything bought
+  // between January and June.
+  const startYear =
+    purchase.getMonth() >= 6 ? purchase.getFullYear() : purchase.getFullYear() - 1;
 
-  const rate =
-    asset.depreciationMethod === "diminishing"
-      ? 2 / asset.effectiveLifeYears
-      : 1 / asset.effectiveLifeYears;
-
-  for (let i = 0; i < Math.ceil(asset.effectiveLifeYears) + 1; i++) {
+  for (let i = 0; i <= Math.ceil(asset.effectiveLifeYears); i++) {
     const year = startYear + i;
     const fy = `${year}-${(year + 1).toString().slice(2)}` as FinancialYear;
-    const days = getDaysInFinancialYear(asset.purchaseDate, fy);
-    if (days <= 0) continue;
-
-    let deduction: number;
-    if (asset.depreciationMethod === "diminishing") {
-      deduction = remaining * (days / 365) * rate;
-    } else {
-      deduction = asset.purchasePrice * (days / 365) * rate;
-    }
-
-    deduction = Math.min(deduction, remaining);
-    const workDeduction = (deduction * asset.workUsePercent) / 100;
-    remaining = Math.max(0, remaining - deduction);
+    const remaining = calculateRemainingValue(asset, fy);
 
     schedule.push({
       year: `FY ${fy}`,
-      deduction: Math.round(workDeduction * 100) / 100,
-      remaining: Math.round(remaining * 100) / 100,
+      deduction: calculateCurrentYearDepreciation(asset, fy),
+      remaining,
     });
 
     if (remaining <= 0) break;

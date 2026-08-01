@@ -39,7 +39,7 @@ const answer = async (question: string, occupation?: string) => {
     [
       {
         role: "user",
-        content: `You are TaxLens, an assistant for Australian work-related tax deductions.${
+        content: `You are Ledgr, an assistant for Australian work-related tax deductions.${
           occupation ? `\nThe user works as: ${occupation}. Tailor examples and deductibility judgements to that occupation.` : ""
         }
 Answer the user's question using ONLY the reference material below. If the

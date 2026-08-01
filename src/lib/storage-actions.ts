@@ -9,6 +9,9 @@ import type {
   WfhActualCost,
   UserSettings,
   FinancialYear,
+  CgtTransaction,
+  RentalProperty,
+  RentalTransaction,
 } from "./types";
 
 const getUserId = async (): Promise<string> => {
@@ -80,6 +83,59 @@ export const neonSaveWfhActualCost = async (cost: WfhActualCost): Promise<void> 
 export const neonDeleteWfhActualCost = async (id: string): Promise<void> => {
   const userId = await getUserId();
   await neonDb.deleteWfhActualCost(userId, id);
+};
+
+export const neonGetCgtTransactions = async (): Promise<CgtTransaction[]> => {
+  const userId = await getUserId();
+  return neonDb.getCgtTransactions(userId);
+};
+
+export const neonSaveCgtTransaction = async (tx: CgtTransaction): Promise<void> => {
+  const userId = await getUserId();
+  await neonDb.saveCgtTransaction(userId, tx);
+};
+
+export const neonDeleteCgtTransaction = async (id: string): Promise<void> => {
+  const userId = await getUserId();
+  await neonDb.deleteCgtTransaction(userId, id);
+};
+
+export const neonGetRentalProperties = async (): Promise<RentalProperty[]> => {
+  const userId = await getUserId();
+  return neonDb.getRentalProperties(userId);
+};
+
+export const neonSaveRentalProperty = async (
+  property: RentalProperty
+): Promise<void> => {
+  const userId = await getUserId();
+  await neonDb.saveRentalProperty(userId, property);
+};
+
+export const neonDeleteRentalProperty = async (id: string): Promise<void> => {
+  const userId = await getUserId();
+  await neonDb.deleteRentalProperty(userId, id);
+};
+
+export const neonGetRentalTransactions = async (
+  fy?: FinancialYear
+): Promise<RentalTransaction[]> => {
+  const userId = await getUserId();
+  return neonDb.getRentalTransactions(userId, fy);
+};
+
+export const neonSaveRentalTransaction = async (
+  transaction: RentalTransaction
+): Promise<void> => {
+  const userId = await getUserId();
+  await neonDb.saveRentalTransaction(userId, transaction);
+};
+
+export const neonDeleteRentalTransaction = async (
+  id: string
+): Promise<void> => {
+  const userId = await getUserId();
+  await neonDb.deleteRentalTransaction(userId, id);
 };
 
 export const neonGetSettings = async (): Promise<UserSettings> => {

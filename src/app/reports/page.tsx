@@ -25,18 +25,24 @@ import { fadeInUp } from "@/lib/animations";
 // myTax item each category lands under at lodgment. Depreciation follows its
 // category (equipment/furniture → D5); WFH is its own D5 question.
 const MYTAX_ITEM: Record<string, string> = {
+  car_km: "Work-related car (D1)",
   travel: "Work-related travel (D2)",
   clothing: "Clothing & laundry (D3)",
   professional_development: "Self-education (D4)",
+  donations: "Gifts & donations (D9)",
+  tax_affairs: "Cost of managing tax affairs (D10)",
 };
 const MYTAX_OTHER = "Other work-related expenses (D5)";
 const MYTAX_WFH = "Working from home (D5)";
 const MYTAX_ORDER = [
+  "Work-related car (D1)",
   "Work-related travel (D2)",
   "Clothing & laundry (D3)",
   "Self-education (D4)",
   MYTAX_WFH,
   MYTAX_OTHER,
+  "Gifts & donations (D9)",
+  "Cost of managing tax affairs (D10)",
 ];
 
 const CHART_COLORS = [
@@ -70,7 +76,7 @@ const Row = ({ label, value, bold }: { label: string; value: string; bold?: bool
 );
 
 const ReportsPage = () => {
-  const { state, summary } = useTax();
+  const { state, summary, cgt } = useTax();
   const fy = state.settings.financialYear;
 
   if (!state.loaded) {
@@ -86,8 +92,12 @@ const ReportsPage = () => {
   const wfhActualTotal = calculateWfhDeductionActualCost(state.wfhActualCosts);
   const totalHours = state.wfhEntries.reduce((s, e) => s + e.hours, 0);
   const effectiveRate =
-    state.settings.annualIncome > 0
-      ? (summary.taxPayable / state.settings.annualIncome) * 100
+    state.settings.annualIncome + summary.rentalIncome + summary.netCapitalGain > 0
+      ? (summary.taxPayable /
+          (state.settings.annualIncome +
+            summary.rentalIncome +
+            summary.netCapitalGain)) *
+        100
       : 0;
 
   const myTaxGroups = new Map<string, number>();
@@ -102,11 +112,17 @@ const ReportsPage = () => {
     (i) => ({ item: i, amount: myTaxGroups.get(i)! })
   );
 
+  // The 70c fixed rate already covers phone and internet — claiming both is the
+  // single most common ATO adjustment.
+  const doubleClaim =
+    state.settings.wfhMethod === "fixed_rate" &&
+    state.expenses.some((e) => e.category === "internet_phone");
+
   const handleExportTaxSummary = () => {
     const lines = [
       "Ledgr Tax Summary Report", `Financial Year: FY ${fy}`, `Generated: ${new Date().toLocaleDateString("en-AU")}`, `Occupation: ${state.settings.occupation}`, "",
       "SECTION,ITEM,AMOUNT", `Income,Annual Income,${state.settings.annualIncome}`, "",
-      `Deductions,Total Full Claims,${summary.totalFullClaims}`, `Deductions,Total Depreciation Claims,${summary.totalDepreciationClaims}`, `Deductions,Total WFH Deduction,${summary.totalWfhDeduction}`, `Deductions,TOTAL DEDUCTIONS,${summary.totalDeductions}`, "",
+      `Income,Rental Income,${summary.rentalIncome}`, `Deductions,Total Full Claims,${summary.totalFullClaims}`, `Deductions,Total Depreciation Claims,${summary.totalDepreciationClaims}`, `Deductions,Total WFH Deduction,${summary.totalWfhDeduction}`, `Deductions,Rental Property,${summary.rentalDeductions}`, `Deductions,TOTAL DEDUCTIONS,${summary.totalDeductions}`, "",
       `Tax,Taxable Income,${summary.taxableIncome}`, `Tax,Tax Payable (with deductions),${summary.taxPayable}`, `Tax,Tax Payable (without deductions),${summary.taxPayableWithoutDeductions}`, `Tax,ESTIMATED TAX SAVED,${summary.estimatedTaxSaved}`, "",
       ...myTaxRows.map((r) => `myTax,"${r.item}",${Math.round(r.amount * 100) / 100}`),
     ];
@@ -134,6 +150,56 @@ const ReportsPage = () => {
       return `"${a.name}",${ASSET_EFFECTIVE_LIVES[a.assetType]?.label || a.assetType},${a.purchaseDate},${a.purchasePrice},${a.effectiveLifeYears},${a.depreciationMethod},${a.workUsePercent},${deduction},${remaining}`;
     });
     downloadCsv(`ledgr-depreciation-FY${fy}.csv`, [header, ...rows].join("\n"));
+  };
+
+  const handleExportCgt = () => {
+    const header =
+      "Asset,Acquired,Disposed,Quantity,Cost base,Proceeds,Gain/Loss,Held (days),50% discount";
+    const rows = cgt.disposals.map(
+      (d) =>
+        `${d.asset},${d.unmatched ? "" : d.acquiredDate},${d.disposedDate},${d.quantity},${d.costBase},${d.proceeds},${d.gain},${d.holdingDays},${d.discountable ? "yes" : "no"}`
+    );
+    const footer = [
+      "",
+      `Total gains,${cgt.grossGains}`,
+      `Total losses,${cgt.grossLosses}`,
+      `Prior-year losses used,${cgt.priorLossesUsed}`,
+      `50% discount,${cgt.discountApplied}`,
+      `NET CAPITAL GAIN,${cgt.netCapitalGain}`,
+      `Losses carried forward,${cgt.lossesCarriedForward}`,
+      "",
+      "Method,FIFO parcel matching",
+    ];
+    downloadCsv(`ledgr-cgt-FY${fy}.csv`, [header, ...rows, ...footer].join("\n"));
+  };
+
+  const handleExportRental = () => {
+    const properties = new Map(
+      state.rentalProperties.map((property) => [property.id, property])
+    );
+    const header =
+      "Date,Property,Type,Category,Description,Gross Amount,Ownership %,Deductible %,Tax Amount";
+    const rows = state.rentalTransactions.map((transaction) => {
+      const property = properties.get(transaction.propertyId);
+      const ownership = property?.ownershipPercent ?? 100;
+      const taxAmount =
+        transaction.amount *
+        (ownership / 100) *
+        (transaction.kind === "expense"
+          ? transaction.deductiblePercent / 100
+          : 1);
+      return `${transaction.date},"${property?.address ?? "Unknown property"}",${transaction.kind},${transaction.category},"${transaction.description}",${transaction.amount},${ownership},${transaction.deductiblePercent},${taxAmount}`;
+    });
+    const footer = [
+      "",
+      `Assessable rental income,${summary.rentalIncome}`,
+      `Deductible rental expenses,${summary.rentalDeductions}`,
+      `Net rental result,${summary.netRentalResult}`,
+    ];
+    downloadCsv(
+      `ledgr-rental-FY${fy}.csv`,
+      [header, ...rows, ...footer].join("\n")
+    );
   };
 
   const handleReceiptPack = async () => {
@@ -192,6 +258,8 @@ ${
     { label: "WFH hour log (CSV)", detail: `${state.wfhEntries.length} days`, handler: handleExportWfh, disabled: state.wfhEntries.length === 0, icon: FileText },
     { label: "Depreciation schedule (CSV)", detail: `${state.assets.length} assets`, handler: handleExportDepreciation, disabled: state.assets.length === 0, icon: FileText },
     { label: "Receipt pack (print/PDF)", detail: "Audit-ready archive", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
+    { label: "CGT worksheet (CSV)", detail: `${cgt.disposals.length} disposals`, handler: handleExportCgt, disabled: cgt.disposals.length === 0, icon: FileText },
+    { label: "Rental schedule (CSV)", detail: `${state.rentalTransactions.length} entries`, handler: handleExportRental, disabled: state.rentalTransactions.length === 0, icon: FileText },
   ];
 
   return (
@@ -214,6 +282,15 @@ ${
         }
       />
 
+      {doubleClaim && (
+        <div className="mb-6 rounded-md border border-gold/50 bg-gold/5 p-4 text-[13px]">
+          <strong className="text-gold">Double-claim risk.</strong> You have
+          Internet &amp; Phone expenses while using the 70c fixed rate, which
+          already covers phone, internet, electricity and stationery. Remove
+          those expenses, or switch to the actual cost method.
+        </div>
+      )}
+
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi label="Annual income" value={formatCurrency(state.settings.annualIncome)} hint="gross salary" />
         <Kpi
@@ -233,7 +310,9 @@ ${
       <div className="mb-8 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <div className="eyebrow">FY {fy} · Deductions summary</div>
-          {breakdown.length === 0 && summary.totalWfhDeduction === 0 ? (
+          {breakdown.length === 0 &&
+          summary.totalWfhDeduction === 0 &&
+          summary.rentalDeductions === 0 ? (
             <p className="mt-4 text-[13px] text-muted-foreground">
               Nothing to report yet — add expenses, assets or WFH hours first.
             </p>
@@ -266,6 +345,17 @@ ${
                     </td>
                   </tr>
                 )}
+                {summary.rentalDeductions > 0 && (
+                  <tr className="border-b border-border">
+                    <td className="py-3">
+                      <span className="mr-3 inline-block h-2 w-2 rounded-full bg-chart-2" />
+                      Rental property expenses
+                    </td>
+                    <td className="py-3 text-right font-mono tabular">
+                      {formatCurrency(summary.rentalDeductions)}
+                    </td>
+                  </tr>
+                )}
                 <tr>
                   <td className="py-4 font-serif text-lg">Total</td>
                   <td className="py-4 text-right font-serif text-lg tabular">
@@ -292,6 +382,18 @@ ${
           <div className="eyebrow">Refund math</div>
           <div className="mt-6 space-y-4 text-sm">
             <Row label="Gross salary" value={formatCurrency(state.settings.annualIncome)} />
+            {summary.netCapitalGain > 0 && (
+              <Row
+                label="Plus: net capital gain"
+                value={`+ ${formatCurrency(summary.netCapitalGain)}`}
+              />
+            )}
+            {summary.rentalIncome > 0 && (
+              <Row
+                label="Plus: rental income"
+                value={`+ ${formatCurrency(summary.rentalIncome)}`}
+              />
+            )}
             <Row label="Less: deductions" value={`− ${formatCurrency(summary.totalDeductions)}`} />
             <Row label="Taxable income" value={formatCurrency(summary.taxableIncome)} bold />
             <div className="hairline mt-4 pt-4" />
@@ -307,6 +409,10 @@ ${
                 {formatCurrency(summary.estimatedTaxSaved)}
               </span>
             </div>
+            <p className="text-[11px] text-muted-foreground">
+              Tax figures include the Medicare levy, plus HELP repayment and
+              the Medicare levy surcharge where they apply.
+            </p>
           </div>
         </Card>
       </div>

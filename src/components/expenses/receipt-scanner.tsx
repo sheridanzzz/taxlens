@@ -118,7 +118,7 @@ const calcFirstYearDepreciation = (
 ): number => {
   const raw =
     method === "diminishing"
-      ? calculateDiminishingValue(cost, effectiveLife, daysHeld, 0)
+      ? calculateDiminishingValue(cost, effectiveLife, daysHeld)
       : calculatePrimeCost(cost, effectiveLife, daysHeld);
   return Math.round(raw * (workUsePercent / 100) * 100) / 100;
 };
@@ -152,6 +152,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const isDep = editAmount > INSTANT_DEDUCTION_THRESHOLD;
   const effectiveLife = scanResult?.suggestedEffectiveLife ?? 5;
@@ -162,14 +163,24 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     (claimable: number) => {
       if (claimable <= 0) return 0;
       const isResident = state.settings.taxResidentStatus === "resident";
+      const opts = {
+        hasHelpDebt: state.settings.hasHelpDebt,
+        hasPrivateHospitalCover: state.settings.hasPrivateHospitalCover,
+      };
       const before = summary.taxableIncome;
       const after = Math.max(0, before - claimable);
       const delta =
-        calculateTaxPayable(before, state.settings.financialYear, isResident) -
-        calculateTaxPayable(after, state.settings.financialYear, isResident);
+        calculateTaxPayable(before, state.settings.financialYear, isResident, opts) -
+        calculateTaxPayable(after, state.settings.financialYear, isResident, opts);
       return Math.round(delta * 100) / 100;
     },
-    [state.settings.taxResidentStatus, state.settings.financialYear, summary.taxableIncome]
+    [
+      state.settings.taxResidentStatus,
+      state.settings.financialYear,
+      state.settings.hasHelpDebt,
+      state.settings.hasPrivateHospitalCover,
+      summary.taxableIncome,
+    ]
   );
 
   const handleReset = useCallback(() => {
@@ -192,9 +203,40 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
 
   useEffect(() => {
     if (!open) return;
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && handleClose();
+    const previousFocus = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        handleClose();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+
+      const focusable = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
   }, [open, handleClose]);
 
   const handleFile = useCallback(async (files: FileList | null) => {
@@ -372,17 +414,33 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 md:p-6">
-      <div className="absolute inset-0 bg-background/80 backdrop-blur-sm" onClick={handleClose} />
-      <div className="surface relative max-h-[92vh] w-full max-w-3xl overflow-y-auto p-0 shadow-2xl">
-        <div className="flex h-14 items-center justify-between border-b border-border px-6 md:px-8">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4 md:p-6">
+      <div
+        className="absolute inset-0 bg-background/80 backdrop-blur-sm"
+        onClick={handleClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="receipt-scanner-title"
+        tabIndex={-1}
+        className="surface relative h-[100dvh] w-full max-w-3xl overflow-y-auto rounded-none p-0 shadow-2xl outline-none sm:h-auto sm:max-h-[92vh] sm:rounded-lg"
+      >
+        <div className="sticky top-0 z-10 flex h-16 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur-xl sm:h-14 sm:px-6 md:px-8">
           <div className="flex items-center gap-3">
             <span className="grid h-7 w-7 place-items-center rounded-md border border-gold/30 bg-gold-soft text-gold">
               <ScanLine className="h-4 w-4" />
             </span>
             <div>
               <div className="eyebrow">AI receipt intelligence</div>
-              <div className="mt-0.5 font-serif text-lg leading-none">{titleMap[step]}</div>
+              <div
+                id="receipt-scanner-title"
+                className="mt-0.5 font-serif text-lg leading-none"
+              >
+                {titleMap[step]}
+              </div>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -394,7 +452,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
               )}
             <button
               onClick={handleClose}
-              className="grid h-8 w-8 place-items-center rounded-md border border-border text-muted-foreground hover:text-foreground"
+              className="grid h-10 w-10 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-surface-2 hover:text-foreground sm:h-8 sm:w-8"
               aria-label="Close"
             >
               <X className="h-4 w-4" />
@@ -402,7 +460,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
           </div>
         </div>
 
-        <div className="p-6 md:p-8">
+        <div className="p-4 pb-8 sm:p-6 md:p-8">
           {step === "entry" && (
             <div>
               <div className="mb-6">
@@ -537,7 +595,11 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
           )}
 
           {step === "scanning" && (
-            <div className="grid items-start gap-8 md:grid-cols-[220px_1fr]">
+            <div
+              className="grid items-start gap-6 md:grid-cols-[220px_1fr] md:gap-8"
+              aria-live="polite"
+              aria-busy="true"
+            >
               <div className="relative aspect-[3/4] w-full overflow-hidden rounded-md border border-border bg-surface md:w-[220px]">
                 <div className="absolute inset-0 grid place-items-center">
                   {previewUrl ? (

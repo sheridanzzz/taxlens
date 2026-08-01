@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Plus, Trash2, Info } from "lucide-react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,11 +35,9 @@ export const WfhCalculator = () => {
   const {
     state,
     addWfhActualCost,
-    updateWfhActualCost,
     removeWfhActualCost,
     updateSettings,
   } = useTax();
-  const prefersReduced = useReducedMotion();
   const [newCategory, setNewCategory] = useState("");
   const [newCost, setNewCost] = useState("");
   const [newPercent, setNewPercent] = useState("30");
@@ -139,7 +137,7 @@ export const WfhCalculator = () => {
                       {m.recommended && (
                         <Badge
                           variant="secondary"
-                          className="rounded-full bg-mint text-[10px] font-medium text-foreground"
+                          className="rounded-full border border-gold/30 bg-gold-soft text-[10px] font-medium text-gold"
                         >
                           Better
                         </Badge>

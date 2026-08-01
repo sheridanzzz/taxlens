@@ -250,8 +250,8 @@ export const WfhCalendar = () => {
                 className={`
                   relative flex aspect-square flex-col items-center justify-center rounded-md text-xs transition-colors
                   ${!inFy ? "cursor-not-allowed opacity-30" : "cursor-pointer hover:bg-secondary dark:hover:bg-secondary"}
-                  ${entry ? "bg-mint font-medium text-foreground dark:bg-primary/20 dark:text-primary" : ""}
-                  ${isToday ? "ring-1 ring-primary" : ""}
+                  ${entry ? "bg-gold-soft font-medium text-gold" : ""}
+                  ${isToday ? "ring-1 ring-gold" : ""}
                   ${isWeekend && !entry ? "text-muted-foreground" : ""}
                 `}
                 aria-label={`${dateStr}${entry ? `, ${entry.hours} hours logged` : ""}`}
@@ -365,7 +365,7 @@ export const WfhCalendar = () => {
                       }
                       className={`flex-1 rounded-md border px-0 py-1.5 text-xs font-medium transition-colors ${
                         bulkDays[i]
-                          ? "border-primary bg-primary text-primary-foreground"
+                          ? "border-gold bg-gold text-primary-foreground"
                           : "border-border bg-transparent text-muted-foreground hover:bg-secondary"
                       }`}
                       aria-pressed={bulkDays[i]}

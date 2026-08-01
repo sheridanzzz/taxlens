@@ -9,11 +9,15 @@ import {
   CheckCircle,
   Info,
   LogOut,
+  UserRound,
+  SlidersHorizontal,
+  Database,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -87,6 +91,9 @@ const SettingsPage = () => {
   const [saved, setSaved] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [importError, setImportError] = useState("");
+  const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "data">(
+    "profile"
+  );
 
   const [income, setIncome] = useState(state.settings.annualIncome.toString());
   const [occupation, setOccupation] = useState(state.settings.occupation);
@@ -101,6 +108,10 @@ const SettingsPage = () => {
   const [depMethod, setDepMethod] = useState<DepreciationMethod>(
     state.settings.depreciationMethod
   );
+  const [helpDebt, setHelpDebt] = useState(state.settings.hasHelpDebt);
+  const [privateCover, setPrivateCover] = useState(
+    state.settings.hasPrivateHospitalCover
+  );
 
   // Settings load async — re-seed the form once they arrive, or a hard
   // reload of this page shows defaults and Save wipes the real values.
@@ -113,6 +124,8 @@ const SettingsPage = () => {
     setDefaultWorkUse(state.settings.defaultWorkUsePercent.toString());
     setWfhMethod(state.settings.wfhMethod);
     setDepMethod(state.settings.depreciationMethod);
+    setHelpDebt(state.settings.hasHelpDebt);
+    setPrivateCover(state.settings.hasPrivateHospitalCover);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.loaded]);
 
@@ -125,6 +138,8 @@ const SettingsPage = () => {
       defaultWorkUsePercent: parseFloat(defaultWorkUse) || 100,
       wfhMethod,
       depreciationMethod: depMethod,
+      hasHelpDebt: helpDebt,
+      hasPrivateHospitalCover: privateCover,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
@@ -169,7 +184,7 @@ const SettingsPage = () => {
   if (!state.loaded) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        <div className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />
       </div>
     );
   }
@@ -187,7 +202,37 @@ const SettingsPage = () => {
         </h2>
       </section>
 
-      {cloudEnabled ? (
+      <div
+        className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-surface-2/60 p-1"
+        role="tablist"
+        aria-label="Settings sections"
+      >
+        {[
+          { id: "profile", label: "Profile", icon: UserRound },
+          { id: "preferences", label: "Preferences", icon: SlidersHorizontal },
+          { id: "data", label: "Data & account", icon: Database },
+        ].map(({ id, label, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === id}
+            onClick={() =>
+              setActiveTab(id as "profile" | "preferences" | "data")
+            }
+            className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-4 text-sm transition-colors ${
+              activeTab === id
+                ? "bg-surface text-foreground shadow-sm"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Icon className="h-4 w-4" />
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {cloudEnabled && activeTab === "profile" ? (
         <Card className="border-border/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-sm">Account</CardTitle>
@@ -207,7 +252,7 @@ const SettingsPage = () => {
             </div>
           </CardContent>
         </Card>
-      ) : (
+      ) : !cloudEnabled && activeTab === "data" ? (
         <Card className="border-border/50">
           <CardHeader className="pb-4">
             <CardTitle className="text-sm">Storage</CardTitle>
@@ -231,10 +276,14 @@ const SettingsPage = () => {
             </p>
           </CardContent>
         </Card>
-      )}
+      ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="border-border/50">
+      <div className="grid gap-4">
+        <Card
+          className={`border-border/50 ${
+            activeTab === "profile" ? "" : "hidden"
+          }`}
+        >
           <CardHeader className="pb-4">
             <CardTitle className="text-sm">Tax Profile</CardTitle>
           </CardHeader>
@@ -327,7 +376,11 @@ const SettingsPage = () => {
           </CardContent>
         </Card>
 
-        <Card className="border-border/50">
+        <Card
+          className={`border-border/50 ${
+            activeTab === "preferences" ? "" : "hidden"
+          }`}
+        >
           <CardHeader className="pb-4">
             <CardTitle className="text-sm">Defaults</CardTitle>
           </CardHeader>
@@ -403,6 +456,34 @@ const SettingsPage = () => {
               </Select>
             </div>
 
+            <div className="flex items-center justify-between gap-3 pt-1">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="settings-help-debt" className="text-xs">
+                  HELP / HECS debt
+                </Label>
+                <InfoTip content="Your compulsory repayment is worked out on taxable income, so deductions cut it too. From FY 2025-26 it's 15% of income above $67,000 and 17% above $125,000 — that can be worth more than the tax saving itself." />
+              </div>
+              <Switch
+                id="settings-help-debt"
+                checked={helpDebt}
+                onCheckedChange={setHelpDebt}
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-1.5">
+                <Label htmlFor="settings-private-cover" className="text-xs">
+                  Private hospital cover
+                </Label>
+                <InfoTip content="Without hospital cover, income over the singles threshold (about $101,000 in FY 2025-26) attracts the Medicare levy surcharge of 1-1.5%. Deductions that push you under the threshold remove it entirely." />
+              </div>
+              <Switch
+                id="settings-private-cover"
+                checked={privateCover}
+                onCheckedChange={setPrivateCover}
+              />
+            </div>
+
             <Button onClick={handleSave} className="mt-2 w-full" size="sm">
               {saved ? (
                 <>
@@ -420,7 +501,9 @@ const SettingsPage = () => {
         </Card>
       </div>
 
-      <Card className="border-border/50">
+      <Card
+        className={`border-border/50 ${activeTab === "data" ? "" : "hidden"}`}
+      >
         <CardHeader className="pb-4">
           <CardTitle className="text-sm">Data</CardTitle>
         </CardHeader>
@@ -468,8 +551,9 @@ const SettingsPage = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Clear all data?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all your expenses, assets, WFH
-              entries, and settings. Consider exporting a backup first.
+              This will permanently delete your expenses, assets, WFH entries,
+              investments, rental property ledgers, and settings. Consider
+              exporting a backup first.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

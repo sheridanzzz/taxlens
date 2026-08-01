@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check": "tsc src/lib/tax.check.ts --outDir .check --module commonjs --target es2022 --moduleResolution node --esModuleInterop --skipLibCheck && node .check/tax.check.js"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.82",

@@ -82,7 +82,7 @@ export default function AskPage() {
             />
             <div className="flex items-center justify-between gap-3">
               <p className="text-[11px] text-muted-foreground">
-                Answers come from TaxLens&apos;s ATO deduction notes — general
+                Answers come from Ledgr&apos;s ATO deduction notes — general
                 information, not personal advice.
               </p>
               <Button type="submit" disabled={loading || !question.trim()}>

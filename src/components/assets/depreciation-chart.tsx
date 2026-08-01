@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { Lightbulb } from "lucide-react";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { getDepreciationSchedule, calculateDiminishingValue, calculatePrimeCost } from "@/lib/depreciation";
@@ -20,12 +19,14 @@ export const DepreciationChart = ({ asset, currentFy }: DepreciationChartProps) 
   const totalClaimable = schedule.reduce((sum, r) => sum + r.deduction, 0);
   const maxDeduction = Math.max(...schedule.map((r) => r.deduction));
 
-  const tips = useMemo(() => {
+  // ponytail: plain function, not useMemo — it ran after an early return,
+  // which is a conditional hook, and building four strings costs nothing.
+  const tips = (() => {
     const result: string[] = [];
     const altMethod = asset.depreciationMethod === "diminishing" ? "prime_cost" : "diminishing";
     const altFirstYear =
       altMethod === "diminishing"
-        ? calculateDiminishingValue(asset.purchasePrice, asset.effectiveLifeYears, 365, 0) * (asset.workUsePercent / 100)
+        ? calculateDiminishingValue(asset.purchasePrice, asset.effectiveLifeYears, 365) * (asset.workUsePercent / 100)
         : calculatePrimeCost(asset.purchasePrice, asset.effectiveLifeYears, 365) * (asset.workUsePercent / 100);
     const currentFirstYear = schedule[0]?.deduction ?? 0;
 
@@ -55,7 +56,7 @@ export const DepreciationChart = ({ asset, currentFy }: DepreciationChartProps) 
     );
 
     return result;
-  }, [asset, schedule]);
+  })();
 
   return (
     <div className="space-y-4">
