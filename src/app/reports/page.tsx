@@ -21,29 +21,7 @@ import {
   WFH_FIXED_RATE_PER_HOUR,
 } from "@/lib/constants";
 import { fadeInUp } from "@/lib/animations";
-
-// myTax item each category lands under at lodgment. Depreciation follows its
-// category (equipment/furniture → D5); WFH is its own D5 question.
-const MYTAX_ITEM: Record<string, string> = {
-  car_km: "Work-related car (D1)",
-  travel: "Work-related travel (D2)",
-  clothing: "Clothing & laundry (D3)",
-  professional_development: "Self-education (D4)",
-  donations: "Gifts & donations (D9)",
-  tax_affairs: "Cost of managing tax affairs (D10)",
-};
-const MYTAX_OTHER = "Other work-related expenses (D5)";
-const MYTAX_WFH = "Working from home (D5)";
-const MYTAX_ORDER = [
-  "Work-related car (D1)",
-  "Work-related travel (D2)",
-  "Clothing & laundry (D3)",
-  "Self-education (D4)",
-  MYTAX_WFH,
-  MYTAX_OTHER,
-  "Gifts & donations (D9)",
-  "Cost of managing tax affairs (D10)",
-];
+import { getMyTaxRows } from "@/lib/mytax";
 
 const CHART_COLORS = [
   "var(--color-chart-1)",
@@ -100,17 +78,7 @@ const ReportsPage = () => {
         100
       : 0;
 
-  const myTaxGroups = new Map<string, number>();
-  for (const b of breakdown) {
-    const item = MYTAX_ITEM[b.category] ?? MYTAX_OTHER;
-    myTaxGroups.set(item, (myTaxGroups.get(item) ?? 0) + b.amount);
-  }
-  if (summary.totalWfhDeduction > 0) {
-    myTaxGroups.set(MYTAX_WFH, summary.totalWfhDeduction);
-  }
-  const myTaxRows = MYTAX_ORDER.filter((i) => (myTaxGroups.get(i) ?? 0) > 0).map(
-    (i) => ({ item: i, amount: myTaxGroups.get(i)! })
-  );
+  const myTaxRows = getMyTaxRows(breakdown, summary.totalWfhDeduction);
 
   // The 70c fixed rate already covers phone and internet — claiming both is the
   // single most common ATO adjustment.
@@ -258,7 +226,7 @@ ${
     { label: "WFH hour log (CSV)", detail: `${state.wfhEntries.length} days`, handler: handleExportWfh, disabled: state.wfhEntries.length === 0, icon: FileText },
     { label: "Depreciation schedule (CSV)", detail: `${state.assets.length} assets`, handler: handleExportDepreciation, disabled: state.assets.length === 0, icon: FileText },
     { label: "Receipt pack (print/PDF)", detail: "Audit-ready archive", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
-    { label: "CGT worksheet (CSV)", detail: `${cgt.disposals.length} disposals`, handler: handleExportCgt, disabled: cgt.disposals.length === 0, icon: FileText },
+    { label: "CGT worksheet (CSV)", detail: `${cgt.disposals.length} disposal${cgt.disposals.length === 1 ? "" : "s"}`, handler: handleExportCgt, disabled: cgt.disposals.length === 0, icon: FileText },
     { label: "Rental schedule (CSV)", detail: `${state.rentalTransactions.length} entries`, handler: handleExportRental, disabled: state.rentalTransactions.length === 0, icon: FileText },
   ];
 
@@ -269,8 +237,8 @@ ${
       transition={fadeInUp.transition}
     >
       <Section
-        eyebrow="Reports · myTax ready"
-        title="Your return, already written."
+        eyebrow="Ready for myTax"
+        title="Your return"
         action={
           <button
             onClick={handleExportTaxSummary}

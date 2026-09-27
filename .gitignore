@@ -43,3 +43,7 @@ next-env.d.ts
 
 # tax self-check build output
 .check/
+
+# Browser verification artifacts
+.playwright-cli/
+output/playwright/

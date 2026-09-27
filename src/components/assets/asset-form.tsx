@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -38,65 +38,49 @@ interface AssetFormProps {
   editingAsset?: DepreciatingAsset | null;
 }
 
-export const AssetForm = ({
+export const AssetForm = (props: AssetFormProps) =>
+  props.open ? <AssetFormFields key={props.editingAsset?.id ?? "new"} {...props} /> : null;
+
+const AssetFormFields = ({
   open,
   onOpenChange,
   editingAsset,
 }: AssetFormProps) => {
   const { state, addAsset, updateAsset } = useTax();
 
-  const [name, setName] = useState("");
-  const [assetType, setAssetType] = useState<AssetType>("laptop");
-  const [purchasePrice, setPurchasePrice] = useState("");
-  const [purchaseDate, setPurchaseDate] = useState("");
-  const [effectiveLife, setEffectiveLife] = useState("4");
+  const [name, setName] = useState(editingAsset?.name ?? ASSET_EFFECTIVE_LIVES.laptop.label);
+  const [assetType, setAssetType] = useState<AssetType>(editingAsset?.assetType ?? "laptop");
+  const [purchasePrice, setPurchasePrice] = useState(editingAsset?.purchasePrice.toString() ?? "");
+  const [purchaseDate, setPurchaseDate] = useState(editingAsset?.purchaseDate ?? getDefaultDateForFinancialYear(state.settings.financialYear));
+  const [effectiveLife, setEffectiveLife] = useState((editingAsset?.effectiveLifeYears ?? ASSET_EFFECTIVE_LIVES.laptop.years).toString());
   const [depreciationMethod, setDepreciationMethod] =
-    useState<DepreciationMethod>("diminishing");
-  const [workUsePercent, setWorkUsePercent] = useState("100");
+    useState<DepreciationMethod>(editingAsset?.depreciationMethod ?? state.settings.depreciationMethod);
+  const [workUsePercent, setWorkUsePercent] = useState((editingAsset?.workUsePercent ?? state.settings.defaultWorkUsePercent).toString());
 
-  function resetForm() {
-    setName("");
-    setAssetType("laptop");
-    setPurchasePrice("");
-    setPurchaseDate(getDefaultDateForFinancialYear(state.settings.financialYear));
-    setEffectiveLife("4");
-    setDepreciationMethod(state.settings.depreciationMethod);
-    setWorkUsePercent(state.settings.defaultWorkUsePercent.toString());
-  }
-
-  useEffect(() => {
-    if (editingAsset) {
-      setName(editingAsset.name);
-      setAssetType(editingAsset.assetType);
-      setPurchasePrice(editingAsset.purchasePrice.toString());
-      setPurchaseDate(editingAsset.purchaseDate);
-      setEffectiveLife(editingAsset.effectiveLifeYears.toString());
-      setDepreciationMethod(editingAsset.depreciationMethod);
-      setWorkUsePercent(editingAsset.workUsePercent.toString());
-    } else {
-      resetForm();
+  const handleAssetTypeChange = (value: string | null) => {
+    if (!value) return;
+    const next = value as AssetType;
+    setAssetType(next);
+    setEffectiveLife(ASSET_EFFECTIVE_LIVES[next].years.toString());
+    if (!name || Object.values(ASSET_EFFECTIVE_LIVES).some((item) => item.label === name)) {
+      setName(ASSET_EFFECTIVE_LIVES[next].label);
     }
-  }, [editingAsset, open]);
-
-  useEffect(() => {
-    const life = ASSET_EFFECTIVE_LIVES[assetType];
-    if (life) {
-      setEffectiveLife(life.years.toString());
-      if (!name || Object.values(ASSET_EFFECTIVE_LIVES).some((a) => a.label === name)) {
-        setName(life.label);
-      }
-    }
-  }, [assetType]);
+  };
 
   const price = parseFloat(purchasePrice);
   const showThresholdWarning = !isNaN(price) && price <= INSTANT_DEDUCTION_THRESHOLD;
-  const fyRange = FY_DATE_RANGES[state.settings.financialYear];
+  const financialYear = editingAsset?.financialYear ?? state.settings.financialYear;
+  const fyRange = FY_DATE_RANGES[financialYear];
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     const numPrice = parseFloat(purchasePrice);
-    if (isNaN(numPrice) || numPrice <= 0) return;
+    const numWorkUse = parseFloat(workUsePercent);
+    const numLife = parseFloat(effectiveLife);
+    if (!Number.isFinite(numPrice) || numPrice <= 0 ||
+        !Number.isFinite(numWorkUse) || numWorkUse < 0 || numWorkUse > 100 ||
+        !Number.isFinite(numLife) || numLife < 1) return;
 
     const asset: DepreciatingAsset = {
       id: editingAsset?.id || uuidv4(),
@@ -104,10 +88,10 @@ export const AssetForm = ({
       assetType,
       purchaseDate,
       purchasePrice: numPrice,
-      effectiveLifeYears: parseFloat(effectiveLife),
+      effectiveLifeYears: numLife,
       depreciationMethod,
-      workUsePercent: parseFloat(workUsePercent) || 100,
-      financialYear: state.settings.financialYear,
+      workUsePercent: numWorkUse,
+      financialYear,
       createdAt: editingAsset?.createdAt || new Date().toISOString(),
     };
 
@@ -118,7 +102,6 @@ export const AssetForm = ({
     }
 
     onOpenChange(false);
-    resetForm();
   };
 
   return (
@@ -135,7 +118,7 @@ export const AssetForm = ({
             <Label htmlFor="asset-type">Asset Type</Label>
             <Select
               value={assetType}
-              onValueChange={(v) => setAssetType(v as AssetType)}
+              onValueChange={handleAssetTypeChange}
             >
               <SelectTrigger id="asset-type">
                 <span>{ASSET_EFFECTIVE_LIVES[assetType]?.label ?? assetType} ({ASSET_EFFECTIVE_LIVES[assetType]?.years ?? "?"} yr)</span>
@@ -193,7 +176,7 @@ export const AssetForm = ({
                 required
               />
               <p className="text-xs text-muted-foreground">
-                {state.settings.financialYear} runs from {fyRange.start} to {fyRange.end}.
+                {financialYear} runs from {fyRange.start} to {fyRange.end}.
               </p>
             </div>
           </div>
@@ -216,6 +199,7 @@ export const AssetForm = ({
               </div>
               <Input
                 id="asset-life"
+                required
                 type="number"
                 min="1"
                 max="40"
@@ -269,8 +253,10 @@ export const AssetForm = ({
               </div>
               <Input
                 id="asset-work-use"
+                required
                 type="number"
-                min="1"
+                      step="0.01"
+                min="0"
                 max="100"
                 value={workUsePercent}
                 onChange={(e) => setWorkUsePercent(e.target.value)}

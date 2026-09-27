@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, Sparkles } from "lucide-react";
+import { ArrowUp, Loader2 } from "lucide-react";
 import { motion } from "motion/react";
 import { Section, Card, Pill } from "@/components/ledgr/primitives";
 import { Button } from "@/components/ui/button";
@@ -56,8 +56,8 @@ export default function AskPage() {
   return (
     <motion.div {...fadeInUp} className="mx-auto max-w-3xl">
       <Section
-        eyebrow="Ask · AI"
-        title="Ask about deductions."
+        eyebrow="Answers from ATO guidance"
+        title="Ask a question"
       >
         <Card>
           <form
@@ -89,7 +89,7 @@ export default function AskPage() {
                 {loading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  <Sparkles className="h-4 w-4" />
+                  <ArrowUp className="h-4 w-4" />
                 )}
                 Ask
               </Button>

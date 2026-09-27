@@ -37,9 +37,17 @@
   --color-positive: var(--positive);
   --color-negative: var(--negative);
 
+  /* Ledgr brand (option 3): plum, butter, tangerine + soft tints */
+  --color-plum: var(--plum);
+  --color-plum-2: var(--plum-2);
+  --color-butter: var(--butter);
+  --color-mint: var(--mint);
+  --color-pink: var(--pink);
+  --color-sky: var(--sky);
+  --color-lav: var(--lav);
+
   /* legacy aliases still referenced by forms/dialogs */
-  --color-mint: var(--gold-soft);
-  --color-mint-foreground: var(--gold);
+  --color-mint-foreground: var(--positive);
   --color-ink: var(--foreground);
   --color-ink-soft: var(--muted-foreground);
 
@@ -57,57 +65,66 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
 
-  --font-serif: var(--font-instrument-serif), ui-serif, Georgia, serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, monospace;
+  /* ponytail: one family does everything. font-serif = chunky headings,
+     font-mono = tabular figures; both kept as names so no page needs editing */
+  --font-serif: var(--font-gabarito), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: var(--font-gabarito), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-gabarito), ui-sans-serif, system-ui, sans-serif;
+  --font-hand: var(--font-caveat), cursive;
 }
 
-/* Dark ledger — the app is dark by default (Lovable design) */
+/* Option 3: cream paper, plum ink, tangerine actions, butter highlights */
 :root {
-  --radius: 0.5rem;
-  --background: oklch(0.16 0.02 250);
-  --foreground: oklch(0.95 0.01 250);
-  --surface: oklch(0.2 0.02 250);
-  --surface-2: oklch(0.24 0.022 250);
-  --card: oklch(0.2 0.02 250);
-  --card-foreground: oklch(0.95 0.01 250);
-  --popover: oklch(0.22 0.02 250);
-  --popover-foreground: oklch(0.95 0.01 250);
-  --primary: oklch(0.95 0.01 250);
-  --primary-foreground: oklch(0.16 0.02 250);
-  --secondary: oklch(0.28 0.02 250);
-  --secondary-foreground: oklch(0.95 0.01 250);
-  --muted: oklch(0.24 0.02 250);
-  --muted-foreground: oklch(0.7 0.02 250);
-  --accent: oklch(0.28 0.02 250);
-  --accent-foreground: oklch(0.95 0.01 250);
-  --destructive: oklch(0.62 0.19 25);
-  --destructive-foreground: oklch(0.98 0 0);
-  --border: oklch(1 0 0 / 8%);
-  --input: oklch(1 0 0 / 12%);
-  --ring: oklch(0.75 0.14 80);
-  --gold: oklch(0.82 0.16 82);
-  --gold-soft: oklch(0.82 0.16 82 / 20%);
-  --positive: oklch(0.78 0.15 155);
-  --negative: oklch(0.68 0.19 25);
-  --chart-1: oklch(0.82 0.16 82);
-  --chart-2: oklch(0.72 0.14 200);
-  --chart-3: oklch(0.78 0.15 155);
-  --chart-4: oklch(0.72 0.15 300);
-  --chart-5: oklch(0.75 0.16 25);
-  --sidebar: oklch(0.14 0.02 250);
-  --sidebar-foreground: oklch(0.85 0.01 250);
-  --sidebar-primary: oklch(0.82 0.16 82);
-  --sidebar-primary-foreground: oklch(0.16 0.02 250);
-  --sidebar-accent: oklch(0.22 0.02 250);
-  --sidebar-accent-foreground: oklch(0.95 0.01 250);
-  --sidebar-border: oklch(1 0 0 / 8%);
-  --sidebar-ring: oklch(0.75 0.14 80);
-}
-
-.dark {
-  --background: oklch(0.16 0.02 250);
-  --foreground: oklch(0.95 0.01 250);
+  --radius: 0.875rem;
+  --background: #fff5ea;
+  --foreground: #1f1427;
+  --surface: #ffffff;
+  --surface-2: #f7eadc;
+  --card: #ffffff;
+  --card-foreground: #1f1427;
+  --popover: #ffffff;
+  --popover-foreground: #1f1427;
+  /* tangerine is the action colour; plum text on it passes AA */
+  --primary: #f25c1f;
+  --primary-foreground: #1f1427;
+  --secondary: #f3e4d4;
+  --secondary-foreground: #1f1427;
+  --muted: #f3e4d4;
+  --muted-foreground: #665a6e;
+  --accent: #f7eadc;
+  --accent-foreground: #1f1427;
+  --destructive: #c4321c;
+  --destructive-foreground: #ffffff;
+  --border: #eadfd2;
+  --input: #e2d3c3;
+  --ring: #f25c1f;
+  /* "gold" is the old accent name, now tangerine — ~3:1 on cream, for icons and fills */
+  --gold: #f25c1f;
+  --gold-soft: rgb(242 92 31 / 14%);
+  /* tangerine as small text fails AA; text uses this deeper shade (≥4.8:1 on cream and tints) */
+  --gold-ink: #b93a0a;
+  --positive: #177245;
+  --negative: #c4321c;
+  --plum: #2a1538;
+  --plum-2: #3d2152;
+  --butter: #ffd66b;
+  --mint: #bdebd2;
+  --pink: #ffc6d3;
+  --sky: #c4e4ff;
+  --lav: #e4d8ee;
+  --chart-1: #f25c1f;
+  --chart-2: #7b5ea7;
+  --chart-3: #2e9e6a;
+  --chart-4: #e0a800;
+  --chart-5: #e0527a;
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1f1427;
+  --sidebar-primary: #2a1538;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f7eadc;
+  --sidebar-accent-foreground: #1f1427;
+  --sidebar-border: #eadfd2;
+  --sidebar-ring: #f25c1f;
 }
 
 @layer base {
@@ -125,15 +142,15 @@
   body {
     @apply bg-background text-foreground;
     font-weight: 400;
-    font-feature-settings: "cv02" 1, "cv11" 1, "ss01" 1;
-    background-image:
-      radial-gradient(circle at 78% -10%, oklch(0.82 0.16 82 / 5%), transparent 28rem),
-      linear-gradient(to bottom, oklch(1 0 0 / 1.5%), transparent 12rem);
-    background-attachment: fixed;
   }
 
   .font-serif {
-    font-feature-settings: "liga" 1, "dlig" 1;
+    font-weight: 800;
+    letter-spacing: -0.035em;
+  }
+
+  .font-mono {
+    font-variant-numeric: tabular-nums;
   }
 
   :where(a, button, input, select, textarea, [role="button"]):focus-visible {
@@ -147,20 +164,15 @@
   }
 
   ::selection {
-    background: var(--gold);
-    color: var(--primary-foreground);
+    background: var(--butter);
+    color: var(--foreground);
   }
 }
 
 @utility surface {
-  background: linear-gradient(
-    145deg,
-    color-mix(in oklab, var(--color-surface) 96%, white),
-    var(--color-surface)
-  );
+  background: var(--color-surface);
   border: 1px solid var(--color-border);
-  border-radius: var(--radius);
-  box-shadow: 0 1px 0 oklch(1 0 0 / 3%) inset, 0 12px 36px oklch(0 0 0 / 8%);
+  border-radius: calc(var(--radius) + 8px);
 }
 
 @utility hairline {
@@ -168,10 +180,8 @@
 }
 
 @utility eyebrow {
-  font-size: 10px;
-  font-weight: 400;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--muted-foreground);
 }
 
@@ -191,12 +201,16 @@
 
 /* legacy alias used by table numerals */
 @layer utilities {
+  .text-gold,
+  .text-primary {
+    color: var(--gold-ink);
+  }
   .stat-number {
     @apply tabular-nums tracking-tight;
     font-family: var(--font-mono);
   }
   .ring-card {
-    box-shadow: 0 0 0 1px oklch(1 0 0 / 8%);
+    box-shadow: 0 0 0 1px var(--border);
   }
 }
 

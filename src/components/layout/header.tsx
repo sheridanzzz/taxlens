@@ -72,12 +72,13 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
     : "?";
 
   return (
-    <header className="relative z-20 flex h-[4.5rem] shrink-0 items-center gap-2 border-b border-border bg-background/85 px-3 backdrop-blur-xl sm:gap-3 sm:px-6 lg:px-8">
+    <header className="relative z-20 flex h-[4.5rem] shrink-0 items-center gap-2 bg-background px-3 sm:gap-3 sm:px-6 lg:px-8">
       <Button
         variant="ghost"
         size="icon"
         className="h-10 w-10 lg:hidden"
         onClick={onMenuClick}
+        id="sidebar-toggle"
         aria-label="Open sidebar"
       >
         <Menu className="h-[18px] w-[18px]" />
@@ -92,16 +93,16 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         role="search"
         className="relative hidden max-w-2xl flex-1 md:block"
       >
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input
           ref={searchRef}
           name="q"
           placeholder="Search expenses…"
           aria-label="Search expenses"
           aria-keyshortcuts="/"
-          className="h-10 w-full rounded-lg border border-border bg-surface/80 pl-9 pr-12 text-sm outline-none transition-colors placeholder:text-muted-foreground/70 hover:border-border/80 focus:border-gold/60"
+          className="h-11 w-full rounded-full border border-border bg-surface pl-10 pr-12 text-[15px] outline-none transition-colors placeholder:text-muted-foreground focus:border-gold"
         />
-        <kbd className="pointer-events-none absolute right-3 top-1/2 hidden -translate-y-1/2 rounded border border-border bg-surface-2 px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground xl:block">
+        <kbd className="pointer-events-none absolute right-4 top-1/2 hidden -translate-y-1/2 rounded-md border border-border bg-surface-2 px-1.5 py-0.5 text-[11px] font-bold text-muted-foreground xl:block">
           /
         </kbd>
       </form>
@@ -112,10 +113,10 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         onValueChange={handleFinancialYearChange}
       >
         <SelectTrigger
-          className="hidden h-10 w-auto rounded-lg border border-border bg-transparent px-3 text-sm text-muted-foreground hover:bg-surface hover:text-foreground lg:flex"
+          className="h-11 w-auto rounded-full border border-border bg-surface px-2 text-xs font-bold text-foreground hover:bg-surface-2 sm:px-4 sm:text-sm"
           aria-label="Select financial year"
         >
-          FY {state.settings.financialYear}
+          <span className="hidden sm:inline">FY </span>{state.settings.financialYear}
         </SelectTrigger>
         <SelectContent>
           {FINANCIAL_YEARS.map((fy) => (
@@ -128,7 +129,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
 
       <button
         onClick={() => router.push("/expenses")}
-        className="grid h-10 w-10 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-surface hover:text-foreground md:hidden"
+        className="grid h-11 w-11 place-items-center rounded-full border border-border bg-surface text-foreground hover:bg-surface-2 hidden sm:grid md:hidden"
         aria-label="Search expenses"
       >
         <Search className="h-4 w-4" />
@@ -136,7 +137,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
 
       <button
         onClick={openExpenseForm}
-        className="hidden h-10 items-center gap-2 whitespace-nowrap rounded-lg border border-border px-3.5 text-sm text-muted-foreground transition-colors hover:bg-surface hover:text-foreground xl:inline-flex"
+        className="hidden h-11 items-center gap-2 whitespace-nowrap rounded-full border border-border bg-surface px-4 text-sm font-bold text-foreground transition-colors hover:bg-surface-2 xl:inline-flex"
         aria-label="Add expense"
       >
         <Plus className="h-4 w-4" />
@@ -145,8 +146,8 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
 
       <button
         onClick={openScanner}
-        className="btn-press inline-flex h-10 items-center gap-2 whitespace-nowrap rounded-lg bg-gold px-3 text-sm font-medium text-primary-foreground shadow-[0_8px_24px_oklch(0.82_0.16_82/12%)] hover:opacity-90 sm:px-4"
-        aria-label="Scan receipt with AI"
+        className="btn-press inline-flex h-11 lg:hidden items-center gap-2 whitespace-nowrap rounded-full bg-plum px-4 text-sm font-extrabold text-white hover:opacity-90 sm:px-5"
+        aria-label="Scan receipt"
       >
         <ScanLine className="h-4 w-4" />
         <span className="hidden sm:inline">Scan receipt</span>
@@ -155,11 +156,11 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
       {cloudEnabled && (
         <DropdownMenu>
           <DropdownMenuTrigger
-            className="flex h-10 w-10 items-center justify-center rounded-lg hover:bg-surface"
+            className="hidden h-11 w-11 items-center justify-center rounded-full hover:bg-surface-2 sm:flex"
             aria-label="User menu"
           >
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-gradient-to-br from-gold to-chart-5 text-[11px] font-semibold text-primary-foreground">
+              <AvatarFallback className="bg-pink text-xs font-extrabold text-plum">
                 {userInitials}
               </AvatarFallback>
             </Avatar>

@@ -178,8 +178,8 @@ const RentalPage = () => {
     >
       <Section
         eyebrow={`Rental property · FY ${state.settings.financialYear}`}
-        title="Rental income, kept separate."
-        description="Track rent and deductible property costs independently from employment expenses. Ownership share is applied automatically."
+        title="Rental property"
+        description="Rent and property costs, kept apart from your work expenses. Your ownership share is applied for you."
         action={
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <button
@@ -397,7 +397,7 @@ const RentalPage = () => {
       <Dialog open={propertyOpen} onOpenChange={setPropertyOpen}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-serif text-2xl font-normal">
+            <DialogTitle className="font-serif text-2xl">
               Add rental property
             </DialogTitle>
             <DialogDescription>
@@ -479,7 +479,7 @@ const RentalPage = () => {
       <Dialog open={transactionOpen} onOpenChange={setTransactionOpen}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="font-serif text-2xl font-normal">
+            <DialogTitle className="font-serif text-2xl">
               Add rental ledger entry
             </DialogTitle>
             <DialogDescription>

@@ -137,7 +137,7 @@ export const WfhCalculator = () => {
                       {m.recommended && (
                         <Badge
                           variant="secondary"
-                          className="rounded-full border border-gold/30 bg-gold-soft text-[10px] font-medium text-gold"
+                          className="rounded-full border-0 bg-butter text-[11px] font-bold text-plum"
                         >
                           Better
                         </Badge>

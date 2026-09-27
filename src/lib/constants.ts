@@ -1,3 +1,4 @@
+import { toLocalDate } from "./utils";
 import type {
   AssetType,
   ExpenseCategory,
@@ -246,7 +247,7 @@ export const getFinancialYearForDate = (
 export const DEFAULT_SETTINGS = {
   // today's FY, falling back to the newest supported year
   financialYear:
-    getFinancialYearForDate(new Date().toISOString().split("T")[0]) ??
+    getFinancialYearForDate(toLocalDate()) ??
     FINANCIAL_YEARS[FINANCIAL_YEARS.length - 1].value,
   annualIncome: 0,
   occupation: "Software Engineer",

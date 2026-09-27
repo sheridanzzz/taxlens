@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Instrument_Serif, JetBrains_Mono } from "next/font/google";
+import { Caveat, Gabarito } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/theme-provider";
 import { AuthSessionProvider } from "@/components/providers/session-provider";
@@ -8,30 +8,24 @@ import { TaxProvider } from "@/context/tax-context";
 import { AppShell } from "@/components/layout/app-shell";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
-const inter = Inter({
-  variable: "--font-inter",
+const gabarito = Gabarito({
+  variable: "--font-gabarito",
   subsets: ["latin"],
   display: "swap",
 });
 
-const instrumentSerif = Instrument_Serif({
-  variable: "--font-instrument-serif",
+// handwritten notes on the landing page only
+const caveat = Caveat({
+  variable: "--font-caveat",
   subsets: ["latin"],
-  weight: "400",
-  style: ["normal", "italic"],
-  display: "swap",
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-jetbrains-mono",
-  subsets: ["latin"],
+  weight: "700",
   display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: "Ledgr — Every Australian tax deduction, on the record.",
+  title: "Ledgr — your refund, filling up all year",
   description:
-    "Ledgr is the tax deduction system of record for Australian software engineers and remote workers. ATO-aware categories, $300 threshold logic, WFH at 70c/hr, depreciation schedules, and a live refund estimate.",
+    "Chuck your work receipts in as you go, log your work-from-home hours, and watch your refund pot grow. Built on the ATO's rules for Australian employees.",
 };
 
 const RootLayout = ({
@@ -42,7 +36,7 @@ const RootLayout = ({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${instrumentSerif.variable} ${jetbrainsMono.variable} font-sans antialiased`}
+        className={`${gabarito.variable} ${caveat.variable} font-sans antialiased`}
         suppressHydrationWarning
       >
         <AuthSessionProvider>

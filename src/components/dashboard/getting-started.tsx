@@ -9,18 +9,21 @@ import { cardHover } from "@/lib/animations";
 
 const ACTIONS = [
   {
+    tint: "bg-butter",
     action: "scan",
     icon: ScanLine,
     title: "Scan a receipt",
     detail: "AI reads it and suggests the claim",
   },
   {
+    tint: "bg-mint",
     action: "add",
     icon: Plus,
     title: "Add an expense",
     detail: "Enter a deduction manually",
   },
   {
+    tint: "bg-pink",
     href: "/wfh",
     icon: Home,
     title: "Log WFH hours",
@@ -43,31 +46,27 @@ export const GettingStarted = () => {
 
   return (
     <motion.div
-      className="surface p-5"
+      className="surface p-6"
       {...(prefersReduced ? {} : cardHover)}
     >
-      <div className="eyebrow">
-        <span className="text-gold">•</span> Getting started
-      </div>
-      <p className="mt-1 font-serif text-2xl">
-        Nothing in FY {state.settings.financialYear} yet
+      <div className="eyebrow">Getting started</div>
+      <p className="mt-1 font-serif text-3xl font-black text-plum">
+        Your FY {state.settings.financialYear} pot is empty
       </p>
-      <p className="mt-1 text-[13px] text-muted-foreground">
-        Start with whichever is closest to hand — everything feeds your refund
-        estimate.
+      <p className="mt-1 text-[15px] text-muted-foreground">
+        Start with whatever’s closest to hand — it all goes in the pot.
       </p>
-      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+      <div className="mt-5 grid gap-3 sm:grid-cols-3">
         {ACTIONS.map((a) => {
-          const className =
-            "group flex items-start gap-3 rounded-md border border-border p-3 text-left transition-colors hover:border-gold/60";
+          const className = `group flex items-center gap-3 rounded-[20px] p-4 text-left transition-transform hover:-translate-y-0.5 ${a.tint}`;
           const body = (
             <>
-              <a.icon className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
+              <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-white">
+                <a.icon className="h-5 w-5 text-plum" strokeWidth={2} />
+              </span>
               <div>
-                <p className="text-xs font-medium text-foreground">{a.title}</p>
-                <p className="mt-0.5 text-[11px] text-muted-foreground">
-                  {a.detail}
-                </p>
+                <p className="text-[15px] font-extrabold text-plum">{a.title}</p>
+                <p className="mt-0.5 text-[13px] font-medium text-plum/80">{a.detail}</p>
               </div>
             </>
           );

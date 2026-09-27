@@ -207,7 +207,8 @@ export const getExpenses = async (fy?: FinancialYear): Promise<Expense[]> => {
   if (!isSupabaseConfigured()) return Promise.resolve(local.getExpenses(fy));
   let query = supabase().from("expenses").select("*").order("date", { ascending: false });
   if (fy) query = query.eq("financial_year", fy);
-  const { data } = await query;
+  const { data, error } = await query;
+  if (error) throw error;
   return (data ?? []).map(toExpense);
 };
 
@@ -215,7 +216,8 @@ export const saveExpense = async (expense: Expense): Promise<void> => {
   if (isNeonBackend()) return neonActions.neonSaveExpense(expense);
   if (!isSupabaseConfigured()) { local.saveExpense(expense); return; }
   const userId = await getSupabaseUserId();
-  await supabase().from("expenses").upsert(fromExpense(expense, userId), { onConflict: "id" });
+  const { error } = await supabase().from("expenses").upsert(fromExpense(expense, userId), { onConflict: "id" });
+  if (error) throw error;
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {

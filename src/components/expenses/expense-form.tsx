@@ -84,6 +84,9 @@ export const ExpenseForm = ({
 }: ExpenseFormProps) => {
   const { state, addExpense, updateExpense, addAsset } = useTax();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const savingRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
 
   const [description, setDescription] = useState("");
   const [amount, setAmount] = useState("");
@@ -101,6 +104,7 @@ export const ExpenseForm = ({
   const [receiptRemoved, setReceiptRemoved] = useState(false);
 
   function resetForm() {
+    setSaveError("");
     setDescription("");
     setAmount("");
     setCategory("computer_equipment");
@@ -198,8 +202,7 @@ export const ExpenseForm = ({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const saveForm = async () => {
 
     const numAmount = isCarKm ? cappedKm * carRate : parseFloat(amount);
     const numWorkUse = parseFloat(workUsePercent);
@@ -266,6 +269,22 @@ export const ExpenseForm = ({
     resetForm();
   };
 
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError("");
+    try {
+      await saveForm();
+    } catch {
+      setSaveError("Couldn’t save the expense. Your changes are still here — please try again.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  };
+
   const fyRange = FY_DATE_RANGES[fy];
   const claimablePreview =
     claimType === "full"
@@ -285,7 +304,7 @@ export const ExpenseForm = ({
               {editingExpense ? "Update record" : "Manual entry"}
             </span>
           </div>
-          <DialogTitle className="font-serif text-3xl font-normal leading-tight">
+          <DialogTitle className="font-serif text-3xl leading-tight">
             {editingExpense ? "Edit expense" : "Add an expense"}
           </DialogTitle>
           <DialogDescription className="max-w-xl text-[13px] leading-relaxed">
@@ -526,8 +545,10 @@ export const ExpenseForm = ({
                     </div>
                     <Input
                       id="expense-work-use"
+                      required
                       type="number"
-                      min="1"
+                      step="0.01"
+                      min="0"
                       max="100"
                       value={workUsePercent}
                       onChange={(e) => setWorkUsePercent(e.target.value)}
@@ -657,10 +678,11 @@ export const ExpenseForm = ({
             </section>
           </div>
 
+          {saveError && <p role="alert" className="px-5 py-3 text-sm text-negative sm:px-7">{saveError}</p>}
           <div className="flex shrink-0 flex-col-reverse gap-3 border-t border-border bg-popover/95 px-5 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-7">
             <p className="hidden items-center gap-1.5 text-xs text-muted-foreground sm:flex">
               <Check className="h-3.5 w-3.5 text-positive" />
-              Saved to FY {fy}
+              FY {fy}
             </p>
             <div className="flex gap-2 sm:ml-auto">
               <Button
@@ -673,9 +695,10 @@ export const ExpenseForm = ({
               </Button>
               <Button
                 type="submit"
+                disabled={saving}
                 className="flex-1 bg-gold text-primary-foreground hover:bg-gold/90 sm:flex-none"
               >
-                {editingExpense ? "Save changes" : "Add expense"}
+                {saving ? "Saving…" : editingExpense ? "Save changes" : "Add expense"}
               </Button>
             </div>
           </div>

@@ -63,9 +63,9 @@ export const Onboarding = () => {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <div className="eyebrow">
-            <span className="text-gold">•</span> Welcome to Ledgr
+            Welcome to Ledgr
           </div>
-          <DialogTitle className="font-serif text-2xl font-normal">
+          <DialogTitle className="font-serif text-2xl">
             Set up your tax profile
           </DialogTitle>
           <DialogDescription>

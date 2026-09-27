@@ -48,9 +48,8 @@ const ExpensesInner = () => {
       transition={fadeInUp.transition}
     >
       <Section
-        eyebrow="Expenses"
-        title="Every receipt, on the record."
-        description="Capture receipts as they happen, review what is deductible, and keep every claim ready for tax time."
+        title="Expenses"
+        description="Everything you’ve bought for work this year. Scan it, check it, done."
         action={
           <div className="grid grid-cols-2 gap-2 sm:flex">
             <button

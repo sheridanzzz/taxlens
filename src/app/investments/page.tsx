@@ -60,7 +60,7 @@ const InvestmentsPage = () => {
     >
       <Section
         eyebrow={`FY ${fy} · capital gains`}
-        title="Crypto and shares, parcel by parcel."
+        title="Crypto & shares"
         action={
           <div className="flex gap-2">
             <button

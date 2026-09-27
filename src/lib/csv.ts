@@ -1,3 +1,4 @@
+import { toLocalDate } from "./utils";
 import type { CgtTransaction, CgtAssetKind } from "./types";
 
 /**
@@ -110,7 +111,7 @@ export const parseDate = (raw: string): string | null => {
   }
 
   const parsed = new Date(value);
-  if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
+  if (!isNaN(parsed.getTime())) return toLocalDate(parsed);
   return null;
 };
 

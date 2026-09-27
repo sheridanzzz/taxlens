@@ -19,11 +19,9 @@ export function Section({
       <div className="mb-4 flex flex-col items-start justify-between gap-4 sm:flex-row sm:items-end">
         <div className="min-w-0">
           {eyebrow && (
-            <div className="eyebrow mb-1">
-              <span className="text-gold">•</span> {eyebrow}
-            </div>
+            <div className="eyebrow mb-1">{eyebrow}</div>
           )}
-          <h1 className="font-serif text-3xl leading-[1.08] tracking-[-0.02em] md:text-4xl">
+          <h1 className="font-serif text-3xl leading-[1.05] md:text-[40px]">
             {title}
           </h1>
           {description && (
@@ -55,11 +53,14 @@ export function Kpi({
   large?: boolean;
 }) {
   return (
-    <div className="surface relative flex min-w-0 flex-col gap-2 overflow-hidden p-4 sm:p-5">
-      {positive && <span className="absolute inset-y-0 left-0 w-px bg-positive/70" />}
+    <div
+      className={`relative flex min-w-0 flex-col gap-2 overflow-hidden rounded-[22px] p-4 sm:p-5 ${
+        positive ? "bg-mint" : "surface"
+      }`}
+    >
       <div className="eyebrow">{label}</div>
       <div
-        className={`truncate font-serif leading-none tabular ${
+        className={`truncate font-serif font-black leading-none tabular ${
           large ? "text-4xl md:text-5xl" : "text-3xl"
         }`}
         title={value}
@@ -91,7 +92,7 @@ export function Card({
   className?: string;
 }) {
   // min-w-0 stops ResponsiveContainer↔grid-column width feedback loops
-  return <div className={`surface min-w-0 p-4 sm:p-5 ${className}`}>{children}</div>;
+  return <div className={`surface min-w-0 p-5 sm:p-6 ${className}`}>{children}</div>;
 }
 
 export function Pill({
@@ -102,13 +103,13 @@ export function Pill({
   tone?: "muted" | "gold" | "positive" | "negative";
 }) {
   const map = {
-    muted: "bg-surface-2 text-muted-foreground border-border",
-    gold: "bg-gold-soft text-gold border-gold/30",
-    positive: "bg-positive/10 text-positive border-positive/30",
-    negative: "bg-negative/10 text-negative border-negative/30",
+    muted: "bg-surface-2 text-muted-foreground",
+    gold: "bg-butter text-plum",
+    positive: "bg-mint text-positive",
+    negative: "bg-pink text-negative",
   } as const;
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] ${map[tone]}`}>
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-bold ${map[tone]}`}>
       {children}
     </span>
   );

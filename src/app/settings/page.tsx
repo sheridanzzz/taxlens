@@ -1,5 +1,6 @@
 "use client";
 
+import { toLocalDate } from "@/lib/utils";
 import { useState, useRef, useEffect } from "react";
 import {
   Download,
@@ -151,7 +152,7 @@ const SettingsPage = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ledgr-backup-${new Date().toISOString().split("T")[0]}.json`;
+    a.download = `ledgr-backup-${toLocalDate()}.json`;
     a.click();
     URL.revokeObjectURL(url);
   };
@@ -194,12 +195,8 @@ const SettingsPage = () => {
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <section>
-        <div className="eyebrow mb-1">
-          <span className="text-gold">•</span> Settings
-        </div>
-        <h2 className="font-serif text-3xl leading-tight md:text-4xl">
-          Your book, your rules.
-        </h2>
+        <h1 className="font-serif text-3xl leading-tight md:text-[40px]">Settings</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Your tax profile, preferences and data.</p>
       </section>
 
       <div

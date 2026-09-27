@@ -1,5 +1,6 @@
 "use client";
 
+import { toLocalDate } from "@/lib/utils";
 import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
@@ -27,7 +28,7 @@ interface TradeFormProps {
   editing?: CgtTransaction | null;
 }
 
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => toLocalDate();
 
 export const TradeForm = ({ open, onOpenChange, editing }: TradeFormProps) => {
   const { addCgtTransaction } = useTax();

@@ -1,5 +1,6 @@
 "use client";
 
+import { toLocalDate } from "@/lib/utils";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import Link from "next/link";
@@ -8,7 +9,7 @@ import {
   Upload,
   Camera,
   FileText,
-  Sparkles,
+  BadgeCheck,
   ScanLine,
   Check,
   AlertTriangle,
@@ -296,7 +297,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     setEditName("");
     setEditMerchant("");
     setEditAmount(0);
-    const today = new Date().toISOString().split("T")[0];
+    const today = toLocalDate();
     setEditDate(today);
     setEditFY(getFinancialYearForDate(today) ?? state.settings.financialYear);
     setEditCategory("other");
@@ -434,7 +435,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
               <ScanLine className="h-4 w-4" />
             </span>
             <div>
-              <div className="eyebrow">AI receipt intelligence</div>
+              <div className="eyebrow">Receipt scanner</div>
               <div
                 id="receipt-scanner-title"
                 className="mt-0.5 font-serif text-lg leading-none"
@@ -465,7 +466,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
             <div>
               <div className="mb-6">
                 <div className="eyebrow mb-1">
-                  <span className="text-gold">•</span> Step 1 of 3
+                  Step 1 of 3
                 </div>
                 <h3 className="font-serif text-3xl">Drop a receipt. We&apos;ll do the rest.</h3>
                 <p className="mt-2 max-w-lg text-sm text-muted-foreground">
@@ -579,7 +580,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
               <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-3">
                 {[
                   { icon: ScanLine, t: "Line-item extraction", d: "Every item and total, read from the receipt" },
-                  { icon: Sparkles, t: "Occupation-aware", d: "Judged against your ATO profile" },
+                  { icon: BadgeCheck, t: "Occupation-aware", d: "Judged against your ATO profile" },
                   { icon: FileText, t: "myTax ready", d: "Category, method, effective life" },
                 ].map(({ icon: Icon, t, d }) => (
                   <div key={t} className="flex items-start gap-3 text-sm">
@@ -624,7 +625,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
 
               <div>
                 <div className="eyebrow mb-1">
-                  <span className="text-gold">•</span> Working
+                  Working
                 </div>
                 <h3 className="mb-6 font-serif text-3xl">Reading your receipt.</h3>
                 <ol className="space-y-3">
@@ -675,7 +676,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   <div className="mb-1 flex items-center gap-2">
                     {scanResult && (
                       <Pill tone="gold">
-                        <Sparkles className="h-3 w-3" /> AI suggested
+                        <BadgeCheck className="h-3 w-3" /> AI suggested
                       </Pill>
                     )}
                     <Pill tone={isDep ? "muted" : "positive"}>

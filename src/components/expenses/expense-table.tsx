@@ -6,7 +6,7 @@ import {
   Trash2,
   Receipt,
   Search,
-  Sparkles,
+  ScanLine,
   SlidersHorizontal,
   X,
 } from "lucide-react";
@@ -231,7 +231,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                         {expense.description}
                       </h3>
                       {isAiScanned(expense) && (
-                        <Sparkles className="h-3 w-3 shrink-0 text-gold" aria-label="AI scanned" />
+                        <ScanLine className="h-3 w-3 shrink-0 text-gold" aria-label="AI scanned" />
                       )}
                     </div>
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -330,7 +330,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                         </span>
                         {isAiScanned(expense) && (
                           <span title="AI scanned">
-                            <Sparkles className="h-3 w-3 text-gold" />
+                            <ScanLine className="h-3 w-3 text-gold" />
                           </span>
                         )}
                         {(expense.receiptDataUrl || expense.hasReceipt) && (

@@ -76,8 +76,8 @@ const AssetsPage = () => {
       transition={fadeInUp.transition}
     >
       <Section
-        eyebrow="Depreciation"
-        title="Assets, drawn up for you."
+        title="Assets"
+        description="Anything over $300 is spread over its effective life. We work out each year’s share."
         action={
           <button
             onClick={() => setFormOpen(true)}

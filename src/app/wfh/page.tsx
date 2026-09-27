@@ -12,6 +12,7 @@ import {
 } from "@/lib/tax-calculator";
 import { WFH_FIXED_RATE_PER_HOUR } from "@/lib/constants";
 import { fadeInUp } from "@/lib/animations";
+import { toLocalDate } from "@/lib/utils";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 const WEEKS = 12;
@@ -31,7 +32,7 @@ const HourLogHeatmap = ({ hoursByDate }: { hoursByDate: Map<string, number> }) =
     return DAYS.map((_, di) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + di);
-      const key = d.toISOString().slice(0, 10);
+      const key = toLocalDate(d);
       return { key, label: d.toLocaleDateString("en-AU", { day: "2-digit", month: "short" }), hours: hoursByDate.get(key) ?? 0 };
     });
   });
@@ -114,7 +115,7 @@ const WfhPage = () => {
       animate={fadeInUp.animate}
       transition={fadeInUp.transition}
     >
-      <Section eyebrow="WFH · 70c method" title="Home office, hour by hour." />
+      <Section eyebrow="70c for every hour" title="Hours at home" />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi

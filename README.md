@@ -5,6 +5,7 @@ Every Aussie tax deduction, tracked. Built for software engineers and remote wor
 ## Features
 
 - **Dashboard** — overview of total deductions, estimated tax savings, category breakdown
+- **Receipt review** — swipe right to confirm a saved scan, left to mark it personal, or edit in place. Includes undo, keyboard controls, and reduced-motion support.
 - **Expense Tracker** — ATO categories for IT professionals, smart $300 threshold logic (full claim vs depreciation), AI receipt scanning via OpenRouter
 - **Work From Home** — calendar-based WFH hour logging with ATO fixed rate (67c/hr) and actual cost method comparison
 - **Depreciation Schedule** — asset tracking with ATO effective lives, diminishing value and prime cost methods
@@ -43,3 +44,5 @@ Open [http://localhost:3000](http://localhost:3000).
 Without Supabase configured, all data is stored in browser localStorage. Use Settings > Export Backup to save your data as JSON.
 
 With Supabase configured (`.env.local`), data is stored in Postgres with row-level security per user.
+
+Receipt review progress is remembered per account in this browser; editing a checked expense brings it back for review. Marking an expense personal saves 0% work use and a $0 claim through the normal storage backend while keeping its receipt. Undo is available during the current review session. Depreciating receipts direct you to Assets to change their work use.
