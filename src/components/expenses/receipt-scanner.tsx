@@ -22,7 +22,7 @@ import {
 import { Pill } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
 import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
-import { formatCurrency, calculateTaxPayable } from "@/lib/tax-calculator";
+import { formatCurrency, calculateTaxPayable, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { calculateDiminishingValue, calculatePrimeCost, getDaysInFinancialYear } from "@/lib/depreciation";
 import {
   EXPENSE_CATEGORIES,
@@ -158,6 +158,9 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const isDep = editAmount > INSTANT_DEDUCTION_THRESHOLD;
   const effectiveLife = scanResult?.suggestedEffectiveLife ?? 5;
   const claimableAmount = Math.round(editAmount * (editWorkUse / 100) * 100) / 100;
+  // what actually lands in this year's deductions (0 when the 70c rate covers it)
+  const coveredByFixedRate = isCoveredByFixedRate({ category: editCategory }, state.settings.wfhMethod);
+  const claimsNow = coveredByFixedRate ? 0 : claimableAmount;
 
   // real marginal-rate delta from the current ATO bracket, not a flat guess
   const estimateRefundImpact = useCallback(
@@ -328,7 +331,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     }
 
     const name = editName.trim();
-    const impact = estimateRefundImpact(claimableAmount);
+    const impact = estimateRefundImpact(claimsNow);
 
     if (isDep) {
       const asset: DepreciatingAsset = {
@@ -372,7 +375,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     onExpenseCreated();
   }, [
     editAmount, editName, editDate, editCategory, editWorkUse, editMerchant,
-    claimableAmount, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
+    claimableAmount, claimsNow, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
     editFY, dupWarning, getExpensesForFy, addExpense, addAsset, onExpenseCreated,
     estimateRefundImpact,
   ]);
@@ -693,9 +696,9 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   )}
                 </div>
                 <div className="text-right">
-                  <div className="eyebrow">Deductible</div>
+                  <div className="eyebrow">{coveredByFixedRate ? "Covered by 70c rate" : "Deductible"}</div>
                   <div className="font-serif text-4xl tabular text-gold">
-                    {formatCurrency(claimableAmount)}
+                    {formatCurrency(claimsNow)}
                   </div>
                 </div>
               </div>
@@ -839,8 +842,8 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                       title="Instant write-off"
                       recommended
                       rows={[
-                        ["This FY", formatCurrency(claimableAmount)],
-                        ["Est. refund", `+${formatCurrency(estimateRefundImpact(claimableAmount))}`],
+                        ["This FY", formatCurrency(claimsNow)],
+                        ["Est. refund", `+${formatCurrency(estimateRefundImpact(claimsNow))}`],
                         ["Method", "Full deduction"],
                       ]}
                     />

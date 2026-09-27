@@ -32,6 +32,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { useTax } from "@/context/tax-context";
 import { neonGetExpenseReceipt } from "@/lib/storage-actions";
 import {
@@ -286,8 +287,9 @@ export const ExpenseForm = ({
   };
 
   const fyRange = FY_DATE_RANGES[fy];
+  const coveredByFixedRate = isCoveredByFixedRate({ category }, state.settings.wfhMethod);
   const claimablePreview =
-    claimType === "full"
+    coveredByFixedRate ? 0 : claimType === "full"
       ? (isCarKm ? cappedKm * carRate : parseFloat(amount) || 0) *
         ((parseFloat(workUsePercent) || 0) / 100)
       : 0;
@@ -583,6 +585,13 @@ export const ExpenseForm = ({
                   </div>
                 )}
 
+                {coveredByFixedRate && (
+                  <p className="rounded-lg bg-butter/50 px-4 py-3 text-sm text-plum">
+                    <strong>Covered by your 70c rate.</strong> The fixed rate already
+                    includes internet and phone, so this won’t add to your deductions.
+                    Switch to the actual cost method under WFH hours to claim it.
+                  </p>
+                )}
                 <div className="flex items-center justify-between gap-4 rounded-lg border border-gold/25 bg-gold-soft/20 px-4 py-3">
                   <div className="flex items-center gap-2 text-sm">
                     <Tags className="h-4 w-4 text-gold" />

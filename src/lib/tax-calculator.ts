@@ -15,8 +15,7 @@ import type {
   TaxSummary,
   CategoryBreakdown,
   ExpenseCategory,
-  RentalProperty,
-  RentalTransaction,
+  WfhMethod,
 } from "./types";
 import { EXPENSE_CATEGORIES } from "./constants";
 import { calculateCurrentYearDepreciation } from "./depreciation";
@@ -107,11 +106,21 @@ export const calculateWfhDeductionActualCost = (
   );
 };
 
+// The 70c fixed rate already covers power, internet, phone and stationery, so
+// Internet & Phone expenses can't be claimed on top of it — the single most
+// common WFH adjustment the ATO makes. On the actual-cost method they count.
+export const isCoveredByFixedRate = (
+  expense: Pick<Expense, "category">,
+  wfhMethod: WfhMethod
+) =>
+  wfhMethod === "fixed_rate" && expense.category === "internet_phone";
+
 export const calculateTotalExpenseDeductions = (
-  expenses: Expense[]
+  expenses: Expense[],
+  wfhMethod: WfhMethod
 ): number => {
   return expenses
-    .filter((e) => e.claimType === "full")
+    .filter((e) => e.claimType === "full" && !isCoveredByFixedRate(e, wfhMethod))
     .reduce((sum, e) => sum + e.claimableAmount, 0);
 };
 
@@ -142,7 +151,7 @@ export const calculateTaxSummary = (
   /** Ownership and private-use adjusted rental expenses. */
   rentalDeductions: number = 0
 ): TaxSummary => {
-  const totalFullClaims = calculateTotalExpenseDeductions(expenses);
+  const totalFullClaims = calculateTotalExpenseDeductions(expenses, wfhMethod);
   const totalDepreciationClaims = calculateTotalDepreciationDeductions(
     assets,
     financialYear
@@ -214,12 +223,14 @@ const ASSET_TYPE_TO_CATEGORY: Record<string, ExpenseCategory> = {
 
 export const getCategoryBreakdown = (
   expenses: Expense[],
+  wfhMethod: WfhMethod,
   assets?: DepreciatingAsset[],
   financialYear?: FinancialYear
 ): CategoryBreakdown[] => {
   const map = new Map<ExpenseCategory, { amount: number; count: number }>();
 
   for (const expense of expenses) {
+    if (isCoveredByFixedRate(expense, wfhMethod)) continue;
     const existing = map.get(expense.category) || { amount: 0, count: 0 };
     map.set(expense.category, {
       amount: existing.amount + expense.claimableAmount,
@@ -247,71 +258,6 @@ export const getCategoryBreakdown = (
       count: data.count,
     }))
     .sort((a, b) => b.amount - a.amount);
-};
-
-export const MONTH_LABELS = ["Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May", "Jun"];
-
-// Deductions bucketed per FY month (Jul..Jun). Full-claim expenses and WFH
-// at their entry date; asset depreciation at purchase month (prior-year
-// purchases land in Jul, the start of the FY the claim accrues from).
-export const getMonthlyDeductionTotals = (
-  expenses: Expense[],
-  assets: DepreciatingAsset[],
-  wfhEntries: WfhEntry[],
-  wfhMethod: "fixed_rate" | "actual_cost",
-  financialYear: FinancialYear,
-  rentalProperties: RentalProperty[] = [],
-  rentalTransactions: RentalTransaction[] = []
-): { month: string; key: string; amount: number }[] => {
-  const startYear = Number(financialYear.slice(0, 4));
-  const keys = MONTH_LABELS.map((_, i) => {
-    const m = ((i + 6) % 12) + 1;
-    const y = m >= 7 ? startYear : startYear + 1;
-    return `${y}-${String(m).padStart(2, "0")}`;
-  });
-
-  const totals = new Map(keys.map((k) => [k, 0]));
-  for (const e of expenses) {
-    if (e.claimType !== "full") continue;
-    const k = e.date.slice(0, 7);
-    if (totals.has(k)) totals.set(k, totals.get(k)! + e.claimableAmount);
-  }
-  if (wfhMethod === "fixed_rate") {
-    for (const w of wfhEntries) {
-      const k = w.date.slice(0, 7);
-      if (totals.has(k))
-        totals.set(k, totals.get(k)! + w.hours * WFH_FIXED_RATE_PER_HOUR);
-    }
-  }
-  for (const a of assets) {
-    const yearDeduction = calculateCurrentYearDepreciation(a, financialYear);
-    if (yearDeduction <= 0) continue;
-    const purchaseKey = a.purchaseDate.slice(0, 7);
-    const k = totals.has(purchaseKey) ? purchaseKey : keys[0];
-    totals.set(k, totals.get(k)! + yearDeduction);
-  }
-  const ownership = new Map(
-    rentalProperties.map((property) => [
-      property.id,
-      property.ownershipPercent / 100,
-    ])
-  );
-  for (const transaction of rentalTransactions) {
-    if (transaction.kind !== "expense") continue;
-    const k = transaction.date.slice(0, 7);
-    if (!totals.has(k)) continue;
-    const deduction =
-      transaction.amount *
-      (ownership.get(transaction.propertyId) ?? 1) *
-      (transaction.deductiblePercent / 100);
-    totals.set(k, totals.get(k)! + deduction);
-  }
-
-  return keys.map((key, i) => ({
-    month: MONTH_LABELS[i],
-    key,
-    amount: Math.round(totals.get(key)! * 100) / 100,
-  }));
 };
 
 export const formatCurrency = (amount: number): string => {

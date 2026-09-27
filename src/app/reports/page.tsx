@@ -8,6 +8,7 @@ import { neonGetExpenseReceipt } from "@/lib/storage-actions";
 import {
   formatCurrency,
   getCategoryBreakdown,
+  isCoveredByFixedRate,
   calculateWfhDeductionFixedRate,
   calculateWfhDeductionActualCost,
 } from "@/lib/tax-calculator";
@@ -65,7 +66,7 @@ const ReportsPage = () => {
     );
   }
 
-  const breakdown = getCategoryBreakdown(state.expenses, state.assets, fy);
+  const breakdown = getCategoryBreakdown(state.expenses, state.settings.wfhMethod, state.assets, fy);
   const wfhFixedTotal = calculateWfhDeductionFixedRate(state.wfhEntries);
   const wfhActualTotal = calculateWfhDeductionActualCost(state.wfhActualCosts);
   const totalHours = state.wfhEntries.reduce((s, e) => s + e.hours, 0);
@@ -99,7 +100,7 @@ const ReportsPage = () => {
 
   const handleExportExpenses = () => {
     const header = "Date,Description,Category,Amount,Claim Type,Work Use %,Claimable Amount";
-    const rows = state.expenses.map((e) => `${e.date},"${e.description}",${EXPENSE_CATEGORIES[e.category]?.label || e.category},${e.amount},${e.claimType},${e.workUsePercent},${e.claimableAmount}`);
+    const rows = state.expenses.map((e) => `${e.date},"${e.description}",${EXPENSE_CATEGORIES[e.category]?.label || e.category},${e.amount},${e.claimType},${e.workUsePercent},${isCoveredByFixedRate(e, state.settings.wfhMethod) ? 0 : e.claimableAmount}`);
     downloadCsv(`ledgr-expenses-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
 
@@ -252,10 +253,11 @@ ${
 
       {doubleClaim && (
         <div className="mb-6 rounded-md border border-gold/50 bg-gold/5 p-4 text-[13px]">
-          <strong className="text-gold">Double-claim risk.</strong> You have
-          Internet &amp; Phone expenses while using the 70c fixed rate, which
-          already covers phone, internet, electricity and stationery. Remove
-          those expenses, or switch to the actual cost method.
+          <strong className="text-gold">Internet &amp; Phone isn’t counted.</strong>{" "}
+          You’re using the 70c fixed rate, which already covers phone, internet,
+          power and stationery, so those expenses are left out of your totals and
+          myTax figures. Switch to the actual cost method under WFH hours if
+          you’d rather claim them.
         </div>
       )}
 

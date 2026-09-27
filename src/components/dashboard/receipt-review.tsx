@@ -8,7 +8,7 @@ import { ExpenseForm } from "@/components/expenses/expense-form";
 import { useTax } from "@/context/tax-context";
 import { useLaunchers } from "@/components/layout/app-shell";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
-import { formatCurrency } from "@/lib/tax-calculator";
+import { formatCurrency, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { isAiScanned } from "@/lib/utils";
 import type { Expense } from "@/lib/types";
 
@@ -184,8 +184,8 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
                     <p className="mt-1 text-xs font-medium text-muted-foreground">{new Date(`${top.date}T12:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} · {EXPENSE_CATEGORIES[top.category]?.label ?? top.category}</p>
                   </div>
                 </div>
-                <p className="mt-5 text-xs font-bold text-muted-foreground">{top.claimType === "depreciation" ? "Receipt total · claimed through Assets" : "Recorded deduction"}</p>
-                <p className="mt-1 break-all font-serif text-4xl font-black tabular text-plum">{formatCurrency(top.claimType === "depreciation" ? top.amount : top.claimableAmount)}</p>
+                <p className="mt-5 text-xs font-bold text-muted-foreground">{top.claimType === "depreciation" ? "Receipt total · claimed through Assets" : isCoveredByFixedRate(top, state.settings.wfhMethod) ? "Covered by the 70c rate · not claimed separately" : "Recorded deduction"}</p>
+                <p className="mt-1 break-all font-serif text-4xl font-black tabular text-plum">{formatCurrency(top.claimType === "depreciation" ? top.amount : isCoveredByFixedRate(top, state.settings.wfhMethod) ? 0 : top.claimableAmount)}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{top.workUsePercent === 0 ? "Personal · no deduction" : `${top.workUsePercent}% work use · ${formatCurrency(top.amount)} paid`}</p>
                 <motion.div aria-hidden="true" style={{ opacity: personalOpacity }} className="pointer-events-none absolute inset-0 grid place-items-center rounded-[22px] bg-pink/95"><span className="-rotate-12 rounded-xl border-4 border-plum px-4 py-2 text-2xl font-black text-plum">PERSONAL</span></motion.div>
                 <motion.div aria-hidden="true" style={{ opacity: confirmOpacity }} className="pointer-events-none absolute inset-0 grid place-items-center rounded-[22px] bg-mint/95"><span className="rotate-12 rounded-xl border-4 border-plum px-4 py-2 text-2xl font-black text-plum">LOOKS RIGHT</span></motion.div>

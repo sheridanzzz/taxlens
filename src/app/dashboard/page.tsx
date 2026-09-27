@@ -14,11 +14,11 @@ import { GettingStarted } from "@/components/dashboard/getting-started";
 import { ReceiptReview } from "@/components/dashboard/receipt-review";
 import { useAuth } from "@/context/auth-context";
 import { useTax } from "@/context/tax-context";
-import { formatCurrency, getCategoryBreakdown } from "@/lib/tax-calculator";
+import { formatCurrency, getCategoryBreakdown, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { getMyTaxRows } from "@/lib/mytax";
 import { WFH_FIXED_RATE_PER_HOUR } from "@/lib/constants";
 import { fadeInUp } from "@/lib/animations";
-import type { Expense } from "@/lib/types";
+import type { Expense, WfhMethod } from "@/lib/types";
 
 const DAY = 86_400_000;
 const TINTS = ["bg-butter", "bg-mint", "bg-pink", "bg-sky", "bg-lav"];
@@ -30,8 +30,10 @@ const greeting = () => {
   return "Evening";
 };
 
-const claimNote = (e: Expense) =>
-  e.workUsePercent === 0
+const claimNote = (e: Expense, wfhMethod: WfhMethod) =>
+  isCoveredByFixedRate(e, wfhMethod)
+    ? "Covered by the 70c rate"
+    : e.workUsePercent === 0
     ? "Personal · no deduction"
     : e.claimType === "depreciation"
     ? "Over $300, so it’s depreciated"
@@ -126,13 +128,17 @@ const DashboardPage = () => {
     .reduce((s, e) => s + e.hours, 0);
   const weekClaimed =
     state.expenses
-      .filter((e) => new Date(e.createdAt).getTime() >= weekAgo)
+      .filter(
+        (e) =>
+          new Date(e.createdAt).getTime() >= weekAgo &&
+          !isCoveredByFixedRate(e, state.settings.wfhMethod)
+      )
       .reduce((s, e) => s + e.claimableAmount, 0) +
     (state.settings.wfhMethod === "fixed_rate" ? weekHours * WFH_FIXED_RATE_PER_HOUR : 0);
 
   const missingReceipts = state.expenses.filter((e) => e.workUsePercent > 0 && !e.receiptDataUrl && !e.hasReceipt).length;
   const returnRows = getMyTaxRows(
-    getCategoryBreakdown(state.expenses, state.assets, fy),
+    getCategoryBreakdown(state.expenses, state.settings.wfhMethod, state.assets, fy),
     summary.totalWfhDeduction
   ).map((r) => ({
     code: r.item.match(/\((D\d+)\)/)?.[1] ?? "",
@@ -315,7 +321,7 @@ const DashboardPage = () => {
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[15px] font-bold">{e.description}</span>
                     <span className="block text-[13px] font-medium text-muted-foreground">
-                      {shortDate(e.date)} · {claimNote(e)}
+                      {shortDate(e.date)} · {claimNote(e, state.settings.wfhMethod)}
                     </span>
                   </span>
                   <span className="font-mono text-[15px] font-bold">{formatCurrency(e.amount)}</span>

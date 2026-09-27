@@ -8,6 +8,7 @@ import {
   calculateHelpRepayment,
   calculateMls,
   calculateTaxSummary,
+  getCategoryBreakdown,
 } from "./tax-calculator";
 import {
   calculateCurrentYearDepreciation,
@@ -198,6 +199,23 @@ near(
   1500 + 70 + summary.totalDepreciationClaims,
   "the parts sum to the total"
 );
+
+// ── The 70c fixed rate already covers internet & phone ─────────────
+const internet: Expense = {
+  ...course,
+  id: "i",
+  description: "Home internet",
+  category: "internet_phone",
+  amount: 900,
+  workUsePercent: 50,
+  claimableAmount: 450,
+};
+const onFixedRate = calculateTaxSummary([course, internet], [], [], [], 120000, "2025-26", "fixed_rate");
+near(onFixedRate.totalFullClaims, 1500, "internet isn't claimed on top of the 70c rate");
+const onActualCost = calculateTaxSummary([course, internet], [], [], [], 120000, "2025-26", "actual_cost");
+near(onActualCost.totalFullClaims, 1950, "on actual cost the internet share counts");
+assert.equal(getCategoryBreakdown([internet], "fixed_rate").length, 0, "myTax breakdown leaves it out too");
+near(getCategoryBreakdown([internet], "actual_cost")[0].amount, 450, "and includes it on actual cost");
 assert.ok(
   summary.estimatedTaxSaved > summary.totalDeductions * 0.4,
   "a $120k earner with a HELP debt saves more than 40c per deducted dollar"

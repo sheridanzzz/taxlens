@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/dialog";
 import { useTax } from "@/context/tax-context";
 import { neonGetExpenseReceipt } from "@/lib/storage-actions";
-import { formatCurrency } from "@/lib/tax-calculator";
+import { formatCurrency, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { isAiScanned } from "@/lib/utils";
 import type { Expense } from "@/lib/types";
@@ -94,7 +94,10 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
     }
   };
 
+  const covered = (e: Expense) => isCoveredByFixedRate(e, state.settings.wfhMethod);
   const statusFor = (e: Expense) => {
+    if (covered(e))
+      return { label: "Covered by 70c rate", tone: "muted" as const };
     if (e.workUsePercent === 0)
       return { label: "Personal", tone: "muted" as const };
     if (e.claimType === "depreciation")
@@ -257,7 +260,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                   <div>
                     <span className="eyebrow">Claimable </span>
                     <span className="ml-1 font-mono text-sm tabular">
-                      {formatCurrency(expense.claimableAmount)}
+                      {formatCurrency(covered(expense) ? 0 : expense.claimableAmount)}
                     </span>
                   </div>
                   <div className="flex items-center gap-1">
@@ -359,7 +362,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                       {formatCurrency(expense.amount)}
                     </td>
                     <td className="py-3 text-right font-mono tabular">
-                      {formatCurrency(expense.claimableAmount)}
+                      {formatCurrency(covered(expense) ? 0 : expense.claimableAmount)}
                     </td>
                     <td className="py-3 text-right">
                       <div className="flex justify-end gap-1">
