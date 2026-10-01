@@ -25,9 +25,9 @@ export const neonGetExpenses = async (fy?: FinancialYear): Promise<Expense[]> =>
   return neonDb.getExpenses(userId, fy);
 };
 
-export const neonSaveExpense = async (expense: Expense): Promise<void> => {
+export const neonSaveExpense = async (expense: Expense, asset?: DepreciatingAsset): Promise<void> => {
   const userId = await getUserId();
-  await neonDb.saveExpense(userId, expense);
+  await neonDb.saveExpense(userId, expense, asset);
 };
 
 export const neonDeleteExpense = async (id: string): Promise<void> => {
@@ -146,4 +146,8 @@ export const neonGetSettings = async (): Promise<UserSettings> => {
 export const neonSaveSettings = async (settings: UserSettings): Promise<void> => {
   const userId = await getUserId();
   await neonDb.saveSettings(userId, settings);
+};
+
+export const neonClearAllData = async (): Promise<void> => {
+  await neonDb.clearAllData(await getUserId());
 };

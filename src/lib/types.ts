@@ -44,6 +44,11 @@ export interface Expense {
   claimType: ClaimType;
   workUsePercent: number;
   claimableAmount: number;
+  /** Evidence and asset are saved in one transaction. */
+  assetId?: string;
+  /** Blank identifiers from older records belong to the default car. */
+  carId?: string;
+  kilometres?: number;
   receiptDataUrl?: string;
   /** Cloud mode: list queries omit the receipt payload and set this instead;
    *  fetch the image on demand via neonGetExpenseReceipt. */
@@ -135,6 +140,18 @@ export interface UserSettings {
   hasHelpDebt: boolean;
   /** No hospital cover above the MLS threshold means an extra 1–1.5%. */
   hasPrivateHospitalCover: boolean;
+  taxOptions?: TaxOptions;
+}
+
+export interface TaxOptions {
+  reportableSuperContributions?: number;
+  reportableFringeBenefits?: number;
+  exemptForeignEmploymentIncome?: number;
+  otherNetInvestmentLosses?: number;
+  helpDebtBalance?: number;
+  medicareExempt?: boolean;
+  workingHolidayResident?: boolean;
+  workingHolidayTreatyResident?: boolean;
 }
 
 export type CgtAssetKind = "crypto" | "share";

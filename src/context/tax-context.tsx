@@ -6,6 +6,8 @@ import {
   useReducer,
   useEffect,
   useCallback,
+  useRef,
+  useState,
   type ReactNode,
 } from "react";
 import type {
@@ -42,6 +44,8 @@ interface TaxState {
 
 type TaxAction =
   | { type: "LOAD_ALL"; payload: Omit<TaxState, "loaded"> }
+  | { type: "SET_CLAIMS"; expenses: Expense[]; assets: DepreciatingAsset[] }
+  | { type: "RESET" }
   | { type: "SET_SETTINGS"; payload: UserSettings }
   | { type: "SET_EXPENSES"; payload: Expense[] }
   | { type: "SET_ASSETS"; payload: DepreciatingAsset[] }
@@ -53,6 +57,8 @@ type TaxAction =
 
 const taxReducer = (state: TaxState, action: TaxAction): TaxState => {
   switch (action.type) {
+    case "RESET": return initialState;
+    case "SET_CLAIMS": return { ...state, expenses: action.expenses, assets: action.assets };
     case "LOAD_ALL":
       return { ...action.payload, loaded: true };
     case "SET_SETTINGS":
@@ -80,7 +86,8 @@ interface TaxContextValue {
   state: TaxState;
   summary: TaxSummary;
   updateSettings: (settings: UserSettings) => Promise<void>;
-  addExpense: (expense: Expense) => Promise<void>;
+  addExpense: (expense: Expense, asset?: DepreciatingAsset) => Promise<void>;
+  getSummaryForFy: (fy: FinancialYear) => Promise<TaxSummary>;
   updateExpense: (expense: Expense) => Promise<void>;
   removeExpense: (id: string) => Promise<void>;
   addAsset: (asset: DepreciatingAsset) => Promise<void>;
@@ -139,9 +146,14 @@ const emptySummary: TaxSummary = {
 export const TaxProvider = ({ children }: { children: ReactNode }) => {
   const [state, dispatch] = useReducer(taxReducer, initialState);
   const { user, cloudEnabled } = useAuth();
+  const [loadError, setLoadError] = useState("");
+  const activeFy = useRef(state.settings.financialYear);
+  const generation = useRef(0);
+  const claimsRequest = useRef(0);
 
   const loadAll = useCallback(async () => {
     if (cloudEnabled && !user) return;
+    const request = ++generation.current;
     const settings = await storage.getSettings();
     const fy = settings.financialYear;
     const [
@@ -162,6 +174,9 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         storage.getRentalProperties(),
         storage.getRentalTransactions(fy),
       ]);
+    if (request !== generation.current) return;
+    setLoadError("");
+    activeFy.current = fy;
     dispatch({
       type: "LOAD_ALL",
       payload: {
@@ -178,7 +193,11 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
   }, [user, cloudEnabled]);
 
   useEffect(() => {
-    loadAll();
+    dispatch({ type: "RESET" });
+    void loadAll().catch(() => setLoadError("Could not load your records. Please try again."));
+    // This is a request generation counter, not a DOM ref.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { generation.current++; };
   }, [loadAll]);
 
   const cgt = calculateCgt(
@@ -199,8 +218,9 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         state.settings.annualIncome,
         state.settings.financialYear,
         state.settings.wfhMethod,
-        state.settings.taxResidentStatus === "resident",
+        state.settings.taxResidentStatus,
         {
+          ...state.settings.taxOptions,
           hasHelpDebt: state.settings.hasHelpDebt,
           hasPrivateHospitalCover: state.settings.hasPrivateHospitalCover,
         },
@@ -210,199 +230,172 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
       )
     : emptySummary;
 
-  const updateSettings = useCallback(
-    async (settings: UserSettings) => {
-      await storage.saveSettings(settings);
-      dispatch({ type: "SET_SETTINGS", payload: settings });
-      const fy = settings.financialYear;
-      const [
-        expenses,
-        assets,
-        wfhEntries,
-        wfhActualCosts,
-        rentalTransactions,
-      ] = await Promise.all([
-        storage.getExpenses(fy),
-        storage.getAssets(fy),
-        storage.getWfhEntries(fy),
-        storage.getWfhActualCosts(fy),
-        storage.getRentalTransactions(fy),
-      ]);
-      dispatch({ type: "SET_EXPENSES", payload: expenses });
-      dispatch({ type: "SET_ASSETS", payload: assets });
-      dispatch({ type: "SET_WFH_ENTRIES", payload: wfhEntries });
-      dispatch({ type: "SET_WFH_ACTUAL_COSTS", payload: wfhActualCosts });
-      dispatch({ type: "SET_RENTAL_TRANSACTIONS", payload: rentalTransactions });
-    },
-    []
-  );
+  const updateSettings = useCallback(async (settings: UserSettings) => {
+    await storage.saveSettings(settings);
+    await loadAll();
+  }, [loadAll]);
 
-  const fy = state.settings.financialYear;
+  const refreshClaims = useCallback(async () => {
+    const fy = activeFy.current;
+    const request = ++claimsRequest.current;
+    const account = generation.current;
+    const [expenses, assets] = await Promise.all([storage.getExpenses(fy), storage.getAssets(fy)]);
+    if (activeFy.current === fy && account === generation.current && request === claimsRequest.current)
+      dispatch({ type: "SET_CLAIMS", expenses, assets });
+  }, []);
+
+  const getSummaryForFy = useCallback(async (fy: FinancialYear) => {
+    const [expenses, assets, hours, costs, rentals] = await Promise.all([
+      storage.getExpenses(fy), storage.getAssets(fy), storage.getWfhEntries(fy),
+      storage.getWfhActualCosts(fy), storage.getRentalTransactions(fy),
+    ]);
+    const rent = calculateRentalSummary(state.rentalProperties, rentals);
+    return calculateTaxSummary(expenses, assets, hours, costs, state.settings.annualIncome,
+      fy, state.settings.wfhMethod, state.settings.taxResidentStatus,
+      { ...state.settings.taxOptions, hasHelpDebt: state.settings.hasHelpDebt,
+        hasPrivateHospitalCover: state.settings.hasPrivateHospitalCover },
+      calculateCgt(state.cgtTransactions, fy).netCapitalGain, rent.assessableIncome, rent.deductibleExpenses);
+  }, [state.settings, state.rentalProperties, state.cgtTransactions]);
 
   const addExpense = useCallback(
-    async (expense: Expense) => {
-      await storage.saveExpense(expense);
-      dispatch({ type: "SET_EXPENSES", payload: await storage.getExpenses(fy) });
+    async (expense: Expense, asset?: DepreciatingAsset) => {
+      await storage.saveExpense(expense, asset);
+      await refreshClaims();
     },
-    [fy]
+    [refreshClaims]
   );
 
   const updateExpense = useCallback(
     async (expense: Expense) => {
       await storage.saveExpense(expense);
-      dispatch({ type: "SET_EXPENSES", payload: await storage.getExpenses(fy) });
+      await refreshClaims();
     },
-    [fy]
+    [refreshClaims]
   );
 
   const removeExpense = useCallback(
     async (id: string) => {
       await storage.deleteExpense(id);
-      dispatch({ type: "SET_EXPENSES", payload: await storage.getExpenses(fy) });
+      await refreshClaims();
     },
-    [fy]
+    [refreshClaims]
   );
 
   const addAsset = useCallback(
     async (asset: DepreciatingAsset) => {
       await storage.saveAsset(asset);
-      dispatch({ type: "SET_ASSETS", payload: await storage.getAssets(fy) });
+      await refreshClaims();
     },
-    [fy]
+    [refreshClaims]
   );
 
   const updateAsset = useCallback(
     async (asset: DepreciatingAsset) => {
       await storage.saveAsset(asset);
-      dispatch({ type: "SET_ASSETS", payload: await storage.getAssets(fy) });
+      await refreshClaims();
     },
-    [fy]
+    [refreshClaims]
   );
 
   const removeAsset = useCallback(
     async (id: string) => {
       await storage.deleteAsset(id);
-      dispatch({ type: "SET_ASSETS", payload: await storage.getAssets(fy) });
+      await refreshClaims();
     },
-    [fy]
+    [refreshClaims]
   );
 
   const addWfhEntry = useCallback(
     async (entry: WfhEntry) => {
       await storage.saveWfhEntry(entry);
-      dispatch({ type: "SET_WFH_ENTRIES", payload: await storage.getWfhEntries(fy) });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const addWfhEntries = useCallback(
     async (entries: WfhEntry[]) => {
       await Promise.all(entries.map((e) => storage.saveWfhEntry(e)));
-      dispatch({ type: "SET_WFH_ENTRIES", payload: await storage.getWfhEntries(fy) });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const removeWfhEntry = useCallback(
     async (id: string) => {
       await storage.deleteWfhEntry(id);
-      dispatch({ type: "SET_WFH_ENTRIES", payload: await storage.getWfhEntries(fy) });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const addWfhActualCost = useCallback(
     async (cost: WfhActualCost) => {
       await storage.saveWfhActualCost(cost);
-      dispatch({
-        type: "SET_WFH_ACTUAL_COSTS",
-        payload: await storage.getWfhActualCosts(fy),
-      });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const updateWfhActualCost = useCallback(
     async (cost: WfhActualCost) => {
       await storage.saveWfhActualCost(cost);
-      dispatch({
-        type: "SET_WFH_ACTUAL_COSTS",
-        payload: await storage.getWfhActualCosts(fy),
-      });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const removeWfhActualCost = useCallback(
     async (id: string) => {
       await storage.deleteWfhActualCost(id);
-      dispatch({
-        type: "SET_WFH_ACTUAL_COSTS",
-        payload: await storage.getWfhActualCosts(fy),
-      });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const addCgtTransaction = useCallback(async (tx: CgtTransaction) => {
     await storage.saveCgtTransaction(tx);
-    dispatch({ type: "SET_CGT", payload: await storage.getCgtTransactions() });
-  }, []);
+    await loadAll();
+  }, [loadAll]);
 
   // one refresh for a whole CSV import instead of one per row
   const addCgtTransactions = useCallback(async (txs: CgtTransaction[]) => {
     for (const tx of txs) await storage.saveCgtTransaction(tx);
-    dispatch({ type: "SET_CGT", payload: await storage.getCgtTransactions() });
-  }, []);
+    await loadAll();
+  }, [loadAll]);
 
   const removeCgtTransaction = useCallback(async (id: string) => {
     await storage.deleteCgtTransaction(id);
-    dispatch({ type: "SET_CGT", payload: await storage.getCgtTransactions() });
-  }, []);
+    await loadAll();
+  }, [loadAll]);
 
   const addRentalProperty = useCallback(async (property: RentalProperty) => {
     await storage.saveRentalProperty(property);
-    dispatch({
-      type: "SET_RENTAL_PROPERTIES",
-      payload: await storage.getRentalProperties(),
-    });
-  }, []);
+    await loadAll();
+  }, [loadAll]);
 
   const removeRentalProperty = useCallback(
     async (id: string) => {
       await storage.deleteRentalProperty(id);
-      dispatch({
-        type: "SET_RENTAL_PROPERTIES",
-        payload: await storage.getRentalProperties(),
-      });
-      dispatch({
-        type: "SET_RENTAL_TRANSACTIONS",
-        payload: await storage.getRentalTransactions(fy),
-      });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const addRentalTransaction = useCallback(
     async (transaction: RentalTransaction) => {
       await storage.saveRentalTransaction(transaction);
-      dispatch({
-        type: "SET_RENTAL_TRANSACTIONS",
-        payload: await storage.getRentalTransactions(fy),
-      });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   const removeRentalTransaction = useCallback(
     async (id: string) => {
       await storage.deleteRentalTransaction(id);
-      dispatch({
-        type: "SET_RENTAL_TRANSACTIONS",
-        payload: await storage.getRentalTransactions(fy),
-      });
+      await loadAll();
     },
-    [fy]
+    [loadAll]
   );
 
   return (
@@ -421,6 +414,7 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         removeRentalTransaction,
         updateSettings,
         addExpense,
+        getSummaryForFy,
         updateExpense,
         removeExpense,
         addAsset,
@@ -436,7 +430,9 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
         getExpensesForFy: storage.getExpenses,
       }}
     >
-      {children}
+      {loadError ? <div role="alert" className="m-4 rounded-xl border border-red-300 bg-white p-4 text-sm">
+        <p>{loadError}</p><button className="mt-2 underline" onClick={() => void loadAll().catch(() => setLoadError("Could not load your records. Please try again."))}>Try again</button>
+      </div> : children}
     </TaxContext.Provider>
   );
 };

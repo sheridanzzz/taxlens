@@ -3,7 +3,8 @@ import {
   MEDICARE_LEVY_RATE,
   WFH_FIXED_RATE_PER_HOUR,
   MLS_TIERS,
-  HELP_MARGINAL,
+  HELP_THRESHOLDS,
+  MEDICARE_LOW_INCOME_THRESHOLD,
   HELP_2024_25_BANDS,
 } from "./constants";
 import type {
@@ -16,75 +17,115 @@ import type {
   CategoryBreakdown,
   ExpenseCategory,
   WfhMethod,
+  UserSettings,
+  TaxOptions,
 } from "./types";
+import { applyCarClaimCaps } from "./expense-claims";
 import { EXPENSE_CATEGORIES } from "./constants";
 import { calculateCurrentYearDepreciation } from "./depreciation";
 
 /** Extra liabilities that also move when deductions move. */
-export interface LiabilityOptions {
+export interface LiabilityOptions extends TaxOptions {
   hasHelpDebt?: boolean;
   hasPrivateHospitalCover?: boolean;
+  netRentalLoss?: number;
 }
+
+type Residency = boolean | UserSettings["taxResidentStatus"];
+const residentRates = (status: Residency, options: LiabilityOptions) =>
+  status === true || status === "resident" ||
+  (status === "working_holiday" && !!options.workingHolidayResident && !!options.workingHolidayTreatyResident);
+
+export const calculateLowIncomeTaxOffset = (income: number): number => {
+  if (income <= 37500) return 700;
+  if (income <= 45000) return 700 - (income - 37500) * 0.05;
+  return Math.max(0, 325 - (income - 45000) * 0.015);
+};
+
+export const calculateMedicareLevy = (income: number, fy: FinancialYear): number =>
+  Math.max(0, Math.min(income * MEDICARE_LEVY_RATE,
+    (income - MEDICARE_LOW_INCOME_THRESHOLD[fy]) * 0.1));
+
+const investmentAddbacks = (o: LiabilityOptions) => Math.max(0, o.netRentalLoss ?? 0) +
+  Math.max(0, o.otherNetInvestmentLosses ?? 0);
+const commonAddbacks = (o: LiabilityOptions) => investmentAddbacks(o) +
+  Math.max(0, o.reportableFringeBenefits ?? 0) + Math.max(0, o.reportableSuperContributions ?? 0);
 
 /** Medicare levy surcharge — 0 with hospital cover or under the tier 1 floor. */
 export const calculateMls = (
   taxableIncome: number,
   financialYear: FinancialYear,
-  hasPrivateHospitalCover: boolean
+  hasPrivateHospitalCover: boolean,
+  incomeForThreshold: number = taxableIncome
 ): number => {
   if (hasPrivateHospitalCover) return 0;
-  const tier = MLS_TIERS[financialYear].find((t) => taxableIncome > t.over);
+  const tier = MLS_TIERS[financialYear].find((t) => incomeForThreshold > t.over);
   return tier ? taxableIncome * tier.rate : 0;
 };
 
 /** Compulsory HELP/HECS repayment for the year. */
 export const calculateHelpRepayment = (
   taxableIncome: number,
-  financialYear: FinancialYear
+  financialYear: FinancialYear,
+  debtBalance: number = Infinity
 ): number => {
   if (financialYear === "2024-25") {
     const band = HELP_2024_25_BANDS.find((b) => taxableIncome > b.over);
-    return band ? taxableIncome * band.rate : 0;
+    return Math.min(Math.max(0, debtBalance), band ? taxableIncome * band.rate : 0);
   }
   // marginal system: rate applies only to income above each step
-  return HELP_MARGINAL.marginal.reduce((sum, step, i, steps) => {
-    const ceiling = i === 0 ? Infinity : steps[i - 1].over;
-    const inStep = Math.min(taxableIncome, ceiling) - step.over;
-    return sum + (inStep > 0 ? inStep * step.rate : 0);
-  }, 0);
+  const { minimum, upper } = HELP_THRESHOLDS[financialYear];
+  const marginal = Math.max(0, Math.min(taxableIncome, upper) - minimum) * 0.15 +
+    Math.max(0, taxableIncome - upper) * 0.17;
+  return Math.min(marginal, Math.max(0, taxableIncome) * 0.1, Math.max(0, debtBalance));
 };
 
 export const calculateTaxPayable = (
   taxableIncome: number,
   financialYear: FinancialYear,
-  isResident: boolean = true,
+  isResident: Residency = true,
   options: LiabilityOptions = {}
 ): number => {
-  if (taxableIncome <= 0) return 0;
+  taxableIncome = Math.max(0, taxableIncome);
 
-  const brackets = TAX_BRACKETS[financialYear];
+  const useResidentRates = residentRates(isResident, options);
+  const standardWhm = isResident === "working_holiday" && !useResidentRates;
+  const brackets = useResidentRates ? TAX_BRACKETS[financialYear] : standardWhm ? [
+    { min: 1, max: 45000, rate: 0.15, base: 0 },
+    { min: 45001, max: 135000, rate: 0.3, base: 6750 },
+    { min: 135001, max: 190000, rate: 0.37, base: 33750 },
+    { min: 190001, max: Infinity, rate: 0.45, base: 54100 },
+  ] : [
+    { min: 1, max: 135000, rate: 0.3, base: 0 },
+    { min: 135001, max: 190000, rate: 0.37, base: 40500 },
+    { min: 190001, max: Infinity, rate: 0.45, base: 60850 },
+  ];
   let tax = 0;
 
   for (const bracket of brackets) {
-    if (taxableIncome >= bracket.min) {
-      if (taxableIncome <= bracket.max) {
+    if (taxableIncome <= bracket.max) {
         tax = bracket.base + (taxableIncome - bracket.min + 1) * bracket.rate;
         break;
-      }
     }
   }
 
-  if (isResident && taxableIncome > 18200) {
-    tax += taxableIncome * MEDICARE_LEVY_RATE;
+  if (useResidentRates) tax = Math.max(0, tax - calculateLowIncomeTaxOffset(taxableIncome));
+
+  const medicareResident = useResidentRates ||
+    (isResident === "working_holiday" && !!options.workingHolidayResident);
+  if (medicareResident && !options.medicareExempt) {
+    tax += calculateMedicareLevy(taxableIncome, financialYear);
     tax += calculateMls(
-      taxableIncome,
+      taxableIncome + Math.max(0, options.reportableFringeBenefits ?? 0),
       financialYear,
-      !!options.hasPrivateHospitalCover
+      !!options.hasPrivateHospitalCover,
+      taxableIncome + commonAddbacks(options)
     );
   }
 
   if (options.hasHelpDebt) {
-    tax += calculateHelpRepayment(taxableIncome, financialYear);
+    tax += calculateHelpRepayment(taxableIncome + commonAddbacks(options) +
+      Math.max(0, options.exemptForeignEmploymentIncome ?? 0), financialYear, options.helpDebtBalance);
   }
 
   return Math.round(tax * 100) / 100;
@@ -119,7 +160,7 @@ export const calculateTotalExpenseDeductions = (
   expenses: Expense[],
   wfhMethod: WfhMethod
 ): number => {
-  return expenses
+  return applyCarClaimCaps(expenses)
     .filter((e) => e.claimType === "full" && !isCoveredByFixedRate(e, wfhMethod))
     .reduce((sum, e) => sum + e.claimableAmount, 0);
 };
@@ -142,7 +183,7 @@ export const calculateTaxSummary = (
   annualIncome: number,
   financialYear: FinancialYear,
   wfhMethod: "fixed_rate" | "actual_cost",
-  isResident: boolean = true,
+  isResident: Residency = true,
   options: LiabilityOptions = {},
   /** Already netted and discounted — see lib/cgt.ts. Adds to taxable income. */
   netCapitalGain: number = 0,
@@ -152,6 +193,7 @@ export const calculateTaxSummary = (
   rentalDeductions: number = 0
 ): TaxSummary => {
   const totalFullClaims = calculateTotalExpenseDeductions(expenses, wfhMethod);
+  const liabilityOptions = { ...options, netRentalLoss: Math.max(0, rentalDeductions - rentalIncome) };
   const totalDepreciationClaims = calculateTotalDepreciationDeductions(
     assets,
     financialYear
@@ -179,7 +221,7 @@ export const calculateTaxSummary = (
     taxableIncome,
     financialYear,
     isResident,
-    options
+    liabilityOptions
   );
   const taxPayableWithoutDeductions = calculateTaxPayable(
     grossIncome,
@@ -229,7 +271,7 @@ export const getCategoryBreakdown = (
 ): CategoryBreakdown[] => {
   const map = new Map<ExpenseCategory, { amount: number; count: number }>();
 
-  for (const expense of expenses) {
+  for (const expense of applyCarClaimCaps(expenses)) {
     if (isCoveredByFixedRate(expense, wfhMethod)) continue;
     const existing = map.get(expense.category) || { amount: 0, count: 0 };
     map.set(expense.category, {

@@ -3,8 +3,9 @@
 import { Download, FileText, Printer } from "lucide-react";
 import { motion } from "motion/react";
 import { Section, Kpi, Card } from "@/components/ledgr/primitives";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
-import { neonGetExpenseReceipt } from "@/lib/storage-actions";
+import { getExpenseReceipt } from "@/lib/storage";
 import {
   formatCurrency,
   getCategoryBreakdown,
@@ -56,6 +57,7 @@ const Row = ({ label, value, bold }: { label: string; value: string; bold?: bool
 
 const ReportsPage = () => {
   const { state, summary, cgt } = useTax();
+  const action = useAsyncAction();
   const fy = state.settings.financialYear;
 
   if (!state.loaded) {
@@ -100,13 +102,13 @@ const ReportsPage = () => {
 
   const handleExportExpenses = () => {
     const header = "Date,Description,Category,Amount,Claim Type,Work Use %,Claimable Amount";
-    const rows = state.expenses.map((e) => `${e.date},"${e.description}",${EXPENSE_CATEGORIES[e.category]?.label || e.category},${e.amount},${e.claimType},${e.workUsePercent},${isCoveredByFixedRate(e, state.settings.wfhMethod) ? 0 : e.claimableAmount}`);
+    const rows = state.expenses.map((e) => `${e.date},"${e.description.replace(/"/g, '""')}",${EXPENSE_CATEGORIES[e.category]?.label || e.category},${e.amount},${e.claimType},${e.workUsePercent},${isCoveredByFixedRate(e, state.settings.wfhMethod) ? 0 : e.claimableAmount}`);
     downloadCsv(`ledgr-expenses-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
 
   const handleExportWfh = () => {
     const header = "Date,Hours";
-    const rows = state.wfhEntries.sort((a, b) => a.date.localeCompare(b.date)).map((e) => `${e.date},${e.hours}`);
+    const rows = [...state.wfhEntries].sort((a, b) => a.date.localeCompare(b.date)).map((e) => `${e.date},${e.hours}`);
     const footer = ["", `Total Hours,${totalHours}`, `Fixed Rate Deduction (${WFH_FIXED_RATE_PER_HOUR * 100}c/hr),${wfhFixedTotal}`, `Actual Cost Deduction,${wfhActualTotal}`, `Active Method,${state.settings.wfhMethod === "fixed_rate" ? "Fixed Rate" : "Actual Cost"}`];
     downloadCsv(`ledgr-wfh-FY${fy}.csv`, [header, ...rows, ...footer].join("\n"));
   };
@@ -116,7 +118,7 @@ const ReportsPage = () => {
     const rows = state.assets.map((a) => {
       const deduction = calculateCurrentYearDepreciation(a, fy);
       const remaining = calculateRemainingValue(a, fy);
-      return `"${a.name}",${ASSET_EFFECTIVE_LIVES[a.assetType]?.label || a.assetType},${a.purchaseDate},${a.purchasePrice},${a.effectiveLifeYears},${a.depreciationMethod},${a.workUsePercent},${deduction},${remaining}`;
+      return `"${a.name.replace(/"/g, '""')}",${ASSET_EFFECTIVE_LIVES[a.assetType]?.label || a.assetType},${a.purchaseDate},${a.purchasePrice},${a.effectiveLifeYears},${a.depreciationMethod},${a.workUsePercent},${deduction},${remaining}`;
     });
     downloadCsv(`ledgr-depreciation-FY${fy}.csv`, [header, ...rows].join("\n"));
   };
@@ -126,7 +128,7 @@ const ReportsPage = () => {
       "Asset,Acquired,Disposed,Quantity,Cost base,Proceeds,Gain/Loss,Held (days),50% discount";
     const rows = cgt.disposals.map(
       (d) =>
-        `${d.asset},${d.unmatched ? "" : d.acquiredDate},${d.disposedDate},${d.quantity},${d.costBase},${d.proceeds},${d.gain},${d.holdingDays},${d.discountable ? "yes" : "no"}`
+        `"${d.asset.replace(/"/g, '""')}",${d.unmatched ? "" : d.acquiredDate},${d.disposedDate},${d.quantity},${d.costBase},${d.proceeds},${d.gain},${d.holdingDays},${d.discountable ? "yes" : "no"}`
     );
     const footer = [
       "",
@@ -157,7 +159,7 @@ const ReportsPage = () => {
         (transaction.kind === "expense"
           ? transaction.deductiblePercent / 100
           : 1);
-      return `${transaction.date},"${property?.address ?? "Unknown property"}",${transaction.kind},${transaction.category},"${transaction.description}",${transaction.amount},${ownership},${transaction.deductiblePercent},${taxAmount}`;
+      return `${transaction.date},"${(property?.address ?? "Unknown property").replace(/"/g, '""')}",${transaction.kind},${transaction.category},"${transaction.description.replace(/"/g, '""')}",${transaction.amount},${ownership},${transaction.deductiblePercent},${taxAmount}`;
     });
     const footer = [
       "",
@@ -171,7 +173,7 @@ const ReportsPage = () => {
     );
   };
 
-  const handleReceiptPack = async () => {
+  const handleReceiptPack = () => action.run(async () => {
     const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-AU");
     const byDate = [...state.expenses].sort((a, b) => a.date.localeCompare(b.date));
     // cloud lists carry only a flag — pull the actual images for the pack
@@ -181,7 +183,7 @@ const ReportsPage = () => {
         .map(async (e) => ({
           ...e,
           receiptDataUrl:
-            e.receiptDataUrl ?? (await neonGetExpenseReceipt(e.id)) ?? undefined,
+            e.receiptDataUrl ?? (await getExpenseReceipt(e.id)) ?? undefined,
         }))
     ).then((list) => list.filter((e) => e.receiptDataUrl));
     const missing = byDate.filter((e) => !e.receiptDataUrl && !e.hasReceipt);
@@ -204,7 +206,7 @@ const ReportsPage = () => {
 <button onclick="window.print()">Print / Save as PDF</button>
 ${withReceipt
   .map(
-    (e) => `<figure><figcaption><strong>${escapeHtml(e.description)}</strong> — ${fmt(e.date)} · $${e.amount.toFixed(2)} · ${escapeHtml(EXPENSE_CATEGORIES[e.category]?.label || e.category)} · ${e.workUsePercent}% work use</figcaption><img src="${e.receiptDataUrl}" alt="Receipt"></figure>`
+    (e) => `<figure><figcaption><strong>${escapeHtml(e.description)}</strong> — ${fmt(e.date)} · $${e.amount.toFixed(2)} · ${escapeHtml(EXPENSE_CATEGORIES[e.category]?.label || e.category)} · ${e.workUsePercent}% work use</figcaption>${e.receiptDataUrl?.startsWith("data:application/pdf;") ? `<a href="${escapeHtml(e.receiptDataUrl)}" download="receipt-${e.id}.pdf">Download original PDF receipt</a>` : `<img src="${escapeHtml(e.receiptDataUrl ?? "")}" alt="Receipt">`}</figure>`
   )
   .join("")}
 ${
@@ -218,8 +220,10 @@ ${
 }
 </body></html>`;
 
-    window.open(URL.createObjectURL(new Blob([html], { type: "text/html" })), "_blank");
-  };
+    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+    window.open(url, "_blank", "noopener");
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  });
 
   const EXPORTS = [
     { label: "Tax summary (CSV)", detail: "Full overview + myTax items", handler: handleExportTaxSummary, disabled: false, icon: FileText },
@@ -237,6 +241,7 @@ ${
       animate={fadeInUp.animate}
       transition={fadeInUp.transition}
     >
+      {action.error && <p role="alert" className="mb-4 text-sm text-destructive">{action.error}</p>}
       <Section
         eyebrow="Ready for myTax"
         title="Your return"
@@ -396,7 +401,7 @@ ${
               <button
                 key={exp.label}
                 onClick={exp.handler}
-                disabled={exp.disabled}
+                disabled={exp.disabled || action.busy}
                 className="surface flex items-center justify-between p-4 text-left hover:border-gold/60 disabled:cursor-not-allowed disabled:opacity-40"
                 aria-label={`Export ${exp.label}`}
               >

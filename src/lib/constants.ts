@@ -1,9 +1,20 @@
-import { toLocalDate } from "./utils";
 import type {
   AssetType,
+  Expense,
   ExpenseCategory,
   FinancialYear,
 } from "./types";
+
+// Plain helpers live here, not in utils.ts, so this file (and everything the
+// iOS app shares from src/lib) stays free of web-only dependencies.
+
+// YYYY-MM-DD in the user's own timezone. toISOString() is UTC, which is still
+// yesterday in Australia until 10–11am — so local dates must never go through it.
+export const toLocalDate = (d: Date = new Date()) => d.toLocaleDateString("en-CA")
+
+// the receipt scanner stamps notes with "AI scan:" — single source of truth
+// for the AI-scanned markers across dashboard, expenses KPI, and table rows
+export const isAiScanned = (e: Pick<Expense, "notes">) => e.notes?.startsWith("AI scan:") ?? false
 
 export const INSTANT_DEDUCTION_THRESHOLD = 300;
 
@@ -146,6 +157,22 @@ export const TAX_BRACKETS: Record<FinancialYear, TaxBracket[]> = {
 
 export const MEDICARE_LEVY_RATE = 0.02;
 
+// Medicare Levy Act 1986; the current legislated threshold remains the
+// provisional 2026-27 threshold until the next annual amendment is enacted.
+export const MEDICARE_LOW_INCOME_THRESHOLD: Record<FinancialYear, number> = {
+  "2024-25": 27222,
+  "2025-26": 28011,
+  "2026-27": 28011,
+};
+
+// HESA s154-20 caps the marginal result at 10% of repayment income.
+// 2026-27 indexed amounts: government notification C2026G00249, April 2026.
+export const HELP_THRESHOLDS: Record<FinancialYear, { minimum: number; upper: number }> = {
+  "2024-25": { minimum: 54435, upper: 159664 },
+  "2025-26": { minimum: 67000, upper: 125000 },
+  "2026-27": { minimum: 69528, upper: 129717 },
+};
+
 /**
  * Medicare levy surcharge, singles thresholds on taxable income.
  * ponytail: singles only — family thresholds are ~2x and need a partner/
@@ -165,12 +192,11 @@ export const MLS_TIERS: Record<FinancialYear, { over: number; rate: number }[]> 
     { over: 118000, rate: 0.0125 },
     { over: 101000, rate: 0.01 },
   ],
-  // ponytail: 2026-27 indexation not published yet — reusing 2025-26.
-  // Update the three numbers when the ATO releases them.
+  // Department of Health / privatehealth.gov.au, 2026-27 thresholds.
   "2026-27": [
-    { over: 158000, rate: 0.015 },
-    { over: 118000, rate: 0.0125 },
-    { over: 101000, rate: 0.01 },
+    { over: 164000, rate: 0.015 },
+    { over: 123000, rate: 0.0125 },
+    { over: 105000, rate: 0.01 },
   ],
 };
 
@@ -180,13 +206,6 @@ export const MLS_TIERS: Record<FinancialYear, { over: number; rate: number }[]> 
  * 2025-26 onward is the marginal system (Cutting Student Debt reforms):
  * nothing under the threshold, then a rate on the income above each step.
  */
-export const HELP_MARGINAL: Record<string, { over: number; rate: number }[]> = {
-  marginal: [
-    { over: 125000, rate: 0.17 },
-    { over: 67000, rate: 0.15 },
-  ],
-};
-
 export const HELP_2024_25_BANDS: { over: number; rate: number }[] = [
   { over: 159663, rate: 0.1 },
   { over: 150626, rate: 0.095 },
@@ -210,12 +229,12 @@ export const HELP_2024_25_BANDS: { over: number; rate: number }[] = [
 
 /**
  * Cents-per-kilometre rate for work car use (myTax D1), capped at 5,000 km.
- * ponytail: 2026-27 rate not published — reusing 88c. One number to update.
+ * 2026-27: ATO Cents per Kilometre Deduction Rate Determination 2026.
  */
 export const CAR_RATE_PER_KM: Record<FinancialYear, number> = {
   "2024-25": 0.88,
   "2025-26": 0.88,
-  "2026-27": 0.88,
+  "2026-27": 0.91,
 };
 
 export const CAR_KM_CAP = 5000;

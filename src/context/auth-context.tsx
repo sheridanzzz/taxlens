@@ -25,36 +25,47 @@ const SupabaseAuthInner = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  const [authError, setAuthError] = useState("");
   useEffect(() => {
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
     const init = async () => {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      setUser(user);
-      setLoading(false);
-
-      const {
-        data: { subscription },
-      } = supabase.auth.onAuthStateChange((_event, session) => {
-        setUser(session?.user ?? null);
-        setLoading(false);
-      });
-
-      return () => subscription.unsubscribe();
+      try {
+        const { createClient } = await import("@/lib/supabase/client");
+        if (disposed) return;
+        const supabase = createClient();
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+          if (disposed) return;
+          setUser(session?.user ?? null);
+          setLoading(false);
+        });
+        unsubscribe = () => subscription.unsubscribe();
+        const { data, error } = await supabase.auth.getUser();
+        if (disposed) return;
+        if (error) throw error;
+        setUser(data.user);
+      } catch {
+        if (!disposed) setAuthError("Could not verify your session. Reload to try again.");
+      } finally {
+        if (!disposed) setLoading(false);
+      }
     };
-
-    init();
+    void init();
+    return () => { disposed = true; unsubscribe?.(); };
   }, []);
 
   const signOut = useCallback(async () => {
-    const { createClient } = await import("@/lib/supabase/client");
-    const supabase = createClient();
-    await supabase.auth.signOut();
-    setUser(null);
-    window.location.href = "/login";
+    try {
+      const { createClient } = await import("@/lib/supabase/client");
+      const { error } = await createClient().auth.signOut();
+      if (error) throw error;
+      setUser(null);
+      // Clear authenticated page and provider state after sign-out.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = "/login";
+    } catch {
+      setAuthError("Could not sign out. Please try again.");
+    }
   }, []);
 
   const mapped = user ? { id: user.id, email: user.email ?? "" } : null;
@@ -63,6 +74,7 @@ const SupabaseAuthInner = ({ children }: { children: ReactNode }) => {
     <AuthContext.Provider
       value={{ user: mapped, loading, cloudEnabled: true, signOut }}
     >
+      {authError && <p role="alert" className="m-4 text-sm text-destructive">{authError} <button className="underline" onClick={() => window.location.reload()}>Reload</button></p>}
       {children}
     </AuthContext.Provider>
   );

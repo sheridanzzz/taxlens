@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check": "tsc src/lib/tax.check.ts --outDir .check --module commonjs --target es2022 --moduleResolution node --esModuleInterop --skipLibCheck && node .check/tax.check.js"
+    "check": "tsc src/lib/tax.check.ts --outDir .check --module commonjs --target es2022 --moduleResolution node --esModuleInterop --skipLibCheck && node .check/tax.check.js && node scripts/storage.check.mjs",
+    "postinstall": "node scripts/prepare-pdf-worker.mjs",
+    "predev": "node scripts/prepare-pdf-worker.mjs",
+    "prebuild": "node scripts/prepare-pdf-worker.mjs"
   },
   "dependencies": {
     "@ai-sdk/google": "^3.0.82",
@@ -24,7 +27,7 @@
     "date-fns": "^4.1.0",
     "lucide-react": "^1.7.0",
     "motion": "^12.38.0",
-    "next": "16.2.1",
+    "next": "^16.3.7",
     "next-auth": "^5.0.0-beta.31",
     "next-themes": "^0.4.6",
     "pdfjs-dist": "^6.0.227",
@@ -38,13 +41,14 @@
     "uuid": "^13.0.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@types/uuid": "^10.0.0",
     "eslint": "^9",
-    "eslint-config-next": "16.2.1",
+    "eslint-config-next": "^16.3.7",
     "tailwindcss": "^4",
     "typescript": "^5"
   }

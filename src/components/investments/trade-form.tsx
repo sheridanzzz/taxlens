@@ -1,7 +1,7 @@
 "use client";
 
 import { toLocalDate } from "@/lib/utils";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import type { CgtAssetKind, CgtTransaction } from "@/lib/types";
@@ -32,6 +33,8 @@ const today = () => toLocalDate();
 
 export const TradeForm = ({ open, onOpenChange, editing }: TradeFormProps) => {
   const { addCgtTransaction } = useTax();
+  const action = useAsyncAction();
+  const recordId = useRef(editing?.id ?? uuidv4());
 
   // seeded once on mount — the page remounts this per trade rather than
   // syncing props into state with an effect
@@ -52,8 +55,9 @@ export const TradeForm = ({ open, onOpenChange, editing }: TradeFormProps) => {
     e.preventDefault();
     if (!asset.trim() || qty <= 0 || price <= 0) return;
 
+    await action.run(async () => {
     await addCgtTransaction({
-      id: editing?.id ?? uuidv4(),
+      id: recordId.current,
       kind,
       asset: asset.trim().toUpperCase(),
       side,
@@ -64,16 +68,18 @@ export const TradeForm = ({ open, onOpenChange, editing }: TradeFormProps) => {
       createdAt: editing?.createdAt ?? new Date().toISOString(),
     });
     onOpenChange(false);
+    });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !action.busy && onOpenChange(next)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>{editing ? "Edit trade" : "Add trade"}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="trade-kind">Type</Label>
@@ -174,10 +180,10 @@ export const TradeForm = ({ open, onOpenChange, editing }: TradeFormProps) => {
           </p>
 
           <div className="flex justify-end gap-2 pt-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button type="button" variant="outline" disabled={action.busy} onClick={() => onOpenChange(false)}>
               Cancel
             </Button>
-            <Button type="submit">{editing ? "Update" : "Add trade"}</Button>
+            <Button type="submit" disabled={action.busy}>{editing ? "Update" : "Add trade"}</Button>
           </div>
         </form>
       </DialogContent>

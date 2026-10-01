@@ -13,6 +13,8 @@ import type {
   RentalTransaction,
 } from "./types";
 import { DEFAULT_SETTINGS, FY_DATE_RANGES } from "./constants";
+import { applyCarClaimCaps, findLinkedAsset } from "./expense-claims";
+import { validateExpense, validateAsset, validateSettings, validateWfhEntry, validateWfhActualCost, validateCgtTransaction, validateRentalProperty, validateRentalTransaction, validateBackup } from "./validation";
 
 const KEYS = {
   expenses: "taxlens_expenses",
@@ -29,7 +31,8 @@ const getItem = <T>(key: string, fallback: T): T => {
   if (typeof window === "undefined") return fallback;
   try {
     const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
+    const value = raw ? JSON.parse(raw) : fallback;
+    return Array.isArray(fallback) && !Array.isArray(value) ? fallback : value;
   } catch {
     return fallback;
   }
@@ -40,29 +43,65 @@ const setItem = <T>(key: string, value: T): void => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
-export const getExpenses = (fy?: FinancialYear): Expense[] => {
-  const all = getItem<Expense[]>(KEYS.expenses, []);
-  if (!fy) return all;
-  return all.filter((e) => e.financialYear === fy);
+const commit = (values: Record<string, unknown>): void => {
+  const before = Object.keys(values).map((key) => [key, localStorage.getItem(key)] as const);
+  try {
+    for (const [key, value] of Object.entries(values)) setItem(key, value);
+  } catch (error) {
+    for (const [key, value] of before) {
+      if (value === null) localStorage.removeItem(key);
+      else localStorage.setItem(key, value);
+    }
+    throw error;
+  }
 };
 
-export const saveExpense = (expense: Expense): void => {
+export const getExpenses = (fy?: FinancialYear): Expense[] => {
   const all = getItem<Expense[]>(KEYS.expenses, []);
+  const assets = getItem<DepreciatingAsset[]>(KEYS.assets, []);
+  const linked = all.map((e) => e.claimType === "depreciation" && !e.assetId ?
+    { ...e, assetId: findLinkedAsset(e, assets, all)?.id } : e);
+  return applyCarClaimCaps(fy ? linked.filter((e) => e.financialYear === fy) : linked);
+};
+
+export const saveExpense = (expense: Expense, asset?: DepreciatingAsset): void => {
+  expense = validateExpense(expense);
+  const all = getItem<Expense[]>(KEYS.expenses, []);
+  let assets = getItem<DepreciatingAsset[]>(KEYS.assets, []);
   const idx = all.findIndex((e) => e.id === expense.id);
+  const oldAssetId = idx >= 0 ? findLinkedAsset(all[idx], assets, all)?.id ??
+    (all[idx].claimType === "depreciation" ? expense.assetId : undefined) : undefined;
+  if (expense.claimType === "depreciation") {
+    const linked = assets.find((a) => a.id === expense.assetId);
+    const candidate = asset ?? (linked && { ...linked, name: expense.description,
+      purchaseDate: expense.date, purchasePrice: expense.amount, workUsePercent: expense.workUsePercent,
+      financialYear: expense.financialYear });
+    if (!candidate || candidate.id !== expense.assetId) throw new Error("Select the asset linked to this receipt.");
+    validateAsset(candidate);
+    if (candidate.name !== expense.description || candidate.purchaseDate !== expense.date ||
+        candidate.purchasePrice !== expense.amount || candidate.workUsePercent !== expense.workUsePercent ||
+        candidate.financialYear !== expense.financialYear) throw new Error("Asset and receipt details must match.");
+    if (all.some((e) => e.id !== expense.id && e.assetId === candidate.id))
+      throw new Error("This asset already has a receipt record.");
+    assets = [...assets.filter((a) => a.id !== candidate.id), candidate];
+  } else expense = { ...expense, assetId: undefined };
+  if (oldAssetId && oldAssetId !== expense.assetId) assets = assets.filter((a) => a.id !== oldAssetId);
+  if (idx >= 0 && expense.hasReceipt && expense.receiptDataUrl === undefined)
+    expense = { ...expense, receiptDataUrl: all[idx].receiptDataUrl };
   if (idx >= 0) {
     all[idx] = expense;
   } else {
     all.push(expense);
   }
-  setItem(KEYS.expenses, all);
+  commit({ [KEYS.expenses]: all, [KEYS.assets]: assets });
 };
 
 export const deleteExpense = (id: string): void => {
   const all = getItem<Expense[]>(KEYS.expenses, []);
-  setItem(
-    KEYS.expenses,
-    all.filter((e) => e.id !== id)
-  );
+  const expense = all.find((e) => e.id === id);
+  const assetId = expense && findLinkedAsset(expense, getAssets(), all)?.id;
+  commit({ [KEYS.expenses]: all.filter((e) => e.id !== id),
+    [KEYS.assets]: getItem<DepreciatingAsset[]>(KEYS.assets, []).filter((a) => a.id !== assetId) });
 };
 
 // see storage-neon.getAssets — depreciation runs past the year of purchase
@@ -73,22 +112,29 @@ export const getAssets = (fy?: FinancialYear): DepreciatingAsset[] => {
 };
 
 export const saveAsset = (asset: DepreciatingAsset): void => {
+  validateAsset(asset);
   const all = getItem<DepreciatingAsset[]>(KEYS.assets, []);
+  const previous = [...all];
+  const rawExpenses = getItem<Expense[]>(KEYS.expenses, []);
   const idx = all.findIndex((a) => a.id === asset.id);
   if (idx >= 0) {
     all[idx] = asset;
   } else {
     all.push(asset);
   }
-  setItem(KEYS.assets, all);
+  const expenses = rawExpenses.map((e) => findLinkedAsset(e, previous, rawExpenses)?.id === asset.id ? {
+    ...e, assetId: asset.id, description: asset.name, amount: asset.purchasePrice, date: asset.purchaseDate,
+    financialYear: asset.financialYear, workUsePercent: asset.workUsePercent, claimableAmount: 0,
+  } : e);
+  commit({ [KEYS.assets]: all, [KEYS.expenses]: expenses });
 };
 
 export const deleteAsset = (id: string): void => {
   const all = getItem<DepreciatingAsset[]>(KEYS.assets, []);
-  setItem(
-    KEYS.assets,
-    all.filter((a) => a.id !== id)
-  );
+  const expenses = getItem<Expense[]>(KEYS.expenses, []);
+  commit({ [KEYS.assets]: all.filter((a) => a.id !== id),
+    [KEYS.expenses]: expenses.map((e) => findLinkedAsset(e, all, expenses)?.id === id ?
+      { ...e, assetId: undefined, claimType: "full", workUsePercent: 0, claimableAmount: 0 } : e) });
 };
 
 export const getWfhEntries = (fy?: FinancialYear): WfhEntry[] => {
@@ -98,6 +144,7 @@ export const getWfhEntries = (fy?: FinancialYear): WfhEntry[] => {
 };
 
 export const saveWfhEntry = (entry: WfhEntry): void => {
+  validateWfhEntry(entry);
   const all = getItem<WfhEntry[]>(KEYS.wfhEntries, []);
   const idx = all.findIndex((e) => e.id === entry.id);
   if (idx >= 0) {
@@ -123,6 +170,7 @@ export const getWfhActualCosts = (fy?: FinancialYear): WfhActualCost[] => {
 };
 
 export const saveWfhActualCost = (cost: WfhActualCost): void => {
+  validateWfhActualCost(cost);
   const all = getItem<WfhActualCost[]>(KEYS.wfhActualCosts, []);
   const idx = all.findIndex((c) => c.id === cost.id);
   if (idx >= 0) {
@@ -148,6 +196,7 @@ export const getCgtTransactions = (): CgtTransaction[] =>
   getItem<CgtTransaction[]>(KEYS.cgt, []);
 
 export const saveCgtTransaction = (tx: CgtTransaction): void => {
+  validateCgtTransaction(tx);
   const all = getItem<CgtTransaction[]>(KEYS.cgt, []);
   const idx = all.findIndex((t) => t.id === tx.id);
   if (idx >= 0) all[idx] = tx;
@@ -166,6 +215,7 @@ export const getRentalProperties = (): RentalProperty[] =>
   getItem<RentalProperty[]>(KEYS.rentalProperties, []);
 
 export const saveRentalProperty = (property: RentalProperty): void => {
+  validateRentalProperty(property);
   const all = getRentalProperties();
   const index = all.findIndex((item) => item.id === property.id);
   if (index >= 0) all[index] = property;
@@ -174,16 +224,8 @@ export const saveRentalProperty = (property: RentalProperty): void => {
 };
 
 export const deleteRentalProperty = (id: string): void => {
-  setItem(
-    KEYS.rentalProperties,
-    getRentalProperties().filter((property) => property.id !== id)
-  );
-  setItem(
-    KEYS.rentalTransactions,
-    getItem<RentalTransaction[]>(KEYS.rentalTransactions, []).filter(
-      (transaction) => transaction.propertyId !== id
-    )
-  );
+  commit({ [KEYS.rentalProperties]: getRentalProperties().filter((property) => property.id !== id),
+    [KEYS.rentalTransactions]: getRentalTransactions().filter((transaction) => transaction.propertyId !== id) });
 };
 
 export const getRentalTransactions = (
@@ -196,6 +238,7 @@ export const getRentalTransactions = (
 export const saveRentalTransaction = (
   transaction: RentalTransaction
 ): void => {
+  validateRentalTransaction(transaction);
   const all = getItem<RentalTransaction[]>(KEYS.rentalTransactions, []);
   const index = all.findIndex((item) => item.id === transaction.id);
   if (index >= 0) all[index] = transaction;
@@ -218,7 +261,7 @@ export const getSettings = (): UserSettings => ({
 });
 
 export const saveSettings = (settings: UserSettings): void => {
-  setItem(KEYS.settings, settings);
+  setItem(KEYS.settings, validateSettings(settings));
 };
 
 export const exportAllData = (): string => {
@@ -238,17 +281,14 @@ export const exportAllData = (): string => {
 
 export const importAllData = (json: string): boolean => {
   try {
-    const data = JSON.parse(json);
-    if (data.expenses) setItem(KEYS.expenses, data.expenses);
-    if (data.assets) setItem(KEYS.assets, data.assets);
-    if (data.wfhEntries) setItem(KEYS.wfhEntries, data.wfhEntries);
-    if (data.wfhActualCosts) setItem(KEYS.wfhActualCosts, data.wfhActualCosts);
-    if (data.cgtTransactions) setItem(KEYS.cgt, data.cgtTransactions);
-    if (data.rentalProperties)
-      setItem(KEYS.rentalProperties, data.rentalProperties);
-    if (data.rentalTransactions)
-      setItem(KEYS.rentalTransactions, data.rentalTransactions);
-    if (data.settings) setItem(KEYS.settings, data.settings);
+    const data = validateBackup(json);
+    const values: Record<string, unknown> = {};
+    const keys = { expenses: KEYS.expenses, assets: KEYS.assets, wfhEntries: KEYS.wfhEntries,
+      wfhActualCosts: KEYS.wfhActualCosts, cgtTransactions: KEYS.cgt,
+      rentalProperties: KEYS.rentalProperties, rentalTransactions: KEYS.rentalTransactions, settings: KEYS.settings };
+    for (const [field, key] of Object.entries(keys))
+      if (field in data) values[key] = data[field as keyof typeof data];
+    commit(values);
     return true;
   } catch {
     return false;

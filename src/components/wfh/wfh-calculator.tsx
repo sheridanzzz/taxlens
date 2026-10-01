@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Plus, Trash2, Info } from "lucide-react";
 import { motion } from "motion/react";
@@ -14,6 +14,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import {
   calculateWfhDeductionFixedRate,
@@ -38,6 +39,8 @@ export const WfhCalculator = () => {
     removeWfhActualCost,
     updateSettings,
   } = useTax();
+  const action = useAsyncAction();
+  const recordId = useRef(uuidv4());
   const [newCategory, setNewCategory] = useState("");
   const [newCost, setNewCost] = useState("");
   const [newPercent, setNewPercent] = useState("30");
@@ -51,24 +54,29 @@ export const WfhCalculator = () => {
   const activeMethod = state.settings.wfhMethod;
   const fixedIsBetter = fixedRateDeduction >= actualCostDeduction;
 
-  const handleAddCost = async () => {
+  const handleAddCost = () => action.run(async () => {
     if (!newCategory.trim() || !newCost) return;
+    const percent = parseFloat(newPercent);
+    const amount = parseFloat(newCost);
+    if (!Number.isFinite(percent) || percent < 0 || percent > 100 || !Number.isFinite(amount) || amount <= 0)
+      throw new Error("Enter a positive cost and work use between 0 and 100%.");
     const cost: WfhActualCost = {
-      id: uuidv4(),
+      id: recordId.current,
       category: newCategory.trim(),
       annualCost: parseFloat(newCost),
-      workUsePercent: parseFloat(newPercent) || 30,
+      workUsePercent: percent,
       financialYear: state.settings.financialYear,
     };
     await addWfhActualCost(cost);
     setNewCategory("");
     setNewCost("");
     setNewPercent("30");
-  };
+    recordId.current = uuidv4();
+  });
 
-  const handleMethodToggle = async (method: "fixed_rate" | "actual_cost") => {
+  const handleMethodToggle = (method: "fixed_rate" | "actual_cost") => action.run(async () => {
     await updateSettings({ ...state.settings, wfhMethod: method });
-  };
+  });
 
   const methods = [
     {
@@ -89,6 +97,7 @@ export const WfhCalculator = () => {
 
   return (
     <div className="space-y-4">
+      {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
@@ -188,7 +197,7 @@ export const WfhCalculator = () => {
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 shrink-0 text-destructive hover:text-destructive"
-                onClick={async () => await removeWfhActualCost(cost.id)}
+                onClick={() => action.run(() => removeWfhActualCost(cost.id))} disabled={action.busy}
                 aria-label={`Remove ${cost.category}`}
               >
                 <Trash2 className="h-3.5 w-3.5" />
@@ -241,7 +250,7 @@ export const WfhCalculator = () => {
                 <Input
                   id="cost-percent"
                   type="number"
-                  min="1"
+                  min="0"
                   max="100"
                   placeholder="Work %"
                   value={newPercent}
@@ -252,7 +261,7 @@ export const WfhCalculator = () => {
               <Button
                 size="sm"
                 onClick={handleAddCost}
-                disabled={!newCategory.trim() || !newCost}
+                disabled={action.busy || !newCategory.trim() || !newCost}
                 className="w-full"
               >
                 <Plus className="mr-1 h-3.5 w-3.5" />

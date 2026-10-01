@@ -11,8 +11,11 @@ import type {
   RentalTransaction,
 } from "./types";
 import { DEFAULT_SETTINGS, FY_DATE_RANGES } from "./constants";
+import { applyCarClaimCaps } from "./expense-claims";
+import { validateExpense, validateAsset, validateSettings, validateWfhEntry, validateWfhActualCost, validateCgtTransaction, validateRentalProperty, validateRentalTransaction } from "./validation";
 
 type Row = Record<string, unknown>;
+const timestamp = (value: unknown): string => new Date(value as string).toISOString();
 
 const toExpense = (r: Row): Expense => ({
   id: r.id as string,
@@ -23,11 +26,14 @@ const toExpense = (r: Row): Expense => ({
   claimType: r.claim_type as Expense["claimType"],
   workUsePercent: Number(r.work_use_percent),
   claimableAmount: Number(r.claimable_amount),
+  assetId: (r.asset_id as string) || undefined,
+  carId: (r.car_id as string) || undefined,
+  kilometres: r.kilometres == null ? undefined : Number(r.kilometres),
   receiptDataUrl: (r.receipt_data_url as string) || undefined,
   hasReceipt: Boolean(r.has_receipt ?? r.receipt_data_url),
   notes: (r.notes as string) || undefined,
   financialYear: r.financial_year as FinancialYear,
-  createdAt: r.created_at as string,
+  createdAt: timestamp(r.created_at),
 });
 
 const toAsset = (r: Row): DepreciatingAsset => ({
@@ -40,7 +46,7 @@ const toAsset = (r: Row): DepreciatingAsset => ({
   depreciationMethod: r.depreciation_method as DepreciatingAsset["depreciationMethod"],
   workUsePercent: Number(r.work_use_percent),
   financialYear: r.financial_year as FinancialYear,
-  createdAt: r.created_at as string,
+  createdAt: timestamp(r.created_at),
 });
 
 const toWfhEntry = (r: Row): WfhEntry => ({
@@ -64,7 +70,7 @@ const toRentalProperty = (r: Row): RentalProperty => ({
   ownershipPercent: Number(r.ownership_percent),
   acquiredDate: (r.acquired_date as string) || undefined,
   notes: (r.notes as string) || undefined,
-  createdAt: r.created_at as string,
+  createdAt: timestamp(r.created_at),
 });
 
 const toRentalTransaction = (r: Row): RentalTransaction => ({
@@ -78,7 +84,7 @@ const toRentalTransaction = (r: Row): RentalTransaction => ({
   deductiblePercent: Number(r.deductible_percent),
   financialYear: r.financial_year as FinancialYear,
   notes: (r.notes as string) || undefined,
-  createdAt: r.created_at as string,
+  createdAt: timestamp(r.created_at),
 });
 
 const toSettings = (r: Row): UserSettings => ({
@@ -91,7 +97,12 @@ const toSettings = (r: Row): UserSettings => ({
   depreciationMethod: r.depreciation_method as UserSettings["depreciationMethod"],
   hasHelpDebt: Boolean(r.has_help_debt),
   hasPrivateHospitalCover: Boolean(r.has_private_hospital_cover),
+  taxOptions: (r.tax_options as UserSettings["taxOptions"]) ?? {},
 });
+
+// Every ON CONFLICT (id) upsert below ends in WHERE <table>.user_id =
+// EXCLUDED.user_id: an id that belongs to someone else must never let the
+// caller overwrite that person's row. The conflicting write is a no-op.
 
 // ── Expenses ───────────────────────────────────────────────────────
 
@@ -100,7 +111,7 @@ const toSettings = (r: Row): UserSettings => ({
 // just off the hot path; move to blob storage if they outgrow Postgres.
 const EXPENSE_LIST_COLS = `id, user_id, date, description, amount, category,
   claim_type, work_use_percent, claimable_amount, notes, financial_year,
-  created_at, (receipt_data_url IS NOT NULL AND receipt_data_url <> '') AS has_receipt`;
+  created_at, asset_id, car_id, kilometres, (receipt_data_url IS NOT NULL AND receipt_data_url <> '') AS has_receipt`;
 
 export const getExpenses = async (userId: string, fy?: FinancialYear): Promise<Expense[]> => {
   const db = sql();
@@ -113,7 +124,7 @@ export const getExpenses = async (userId: string, fy?: FinancialYear): Promise<E
         `SELECT ${EXPENSE_LIST_COLS} FROM expenses WHERE user_id = $1 ORDER BY date DESC`,
         [userId]
       );
-  return (rows as Row[]).map(toExpense);
+  return applyCarClaimCaps((rows as Row[]).map(toExpense));
 };
 
 export const getExpenseReceipt = async (
@@ -126,24 +137,14 @@ export const getExpenseReceipt = async (
   return (rows[0]?.receipt_data_url as string) || null;
 };
 
-export const saveExpense = async (userId: string, e: Expense): Promise<void> => {
-  const db = sql();
-  // an expense loaded from a list carries hasReceipt but no payload — keep
-  // the stored image in that case instead of nulling it on edit
-  const keepStored = e.receiptDataUrl === undefined && !!e.hasReceipt;
-  await db`INSERT INTO expenses (id, user_id, date, description, amount, category, claim_type, work_use_percent, claimable_amount, receipt_data_url, notes, financial_year, created_at)
-     VALUES (${e.id}, ${userId}, ${e.date}, ${e.description}, ${e.amount}, ${e.category}, ${e.claimType}, ${e.workUsePercent}, ${e.claimableAmount}, ${e.receiptDataUrl ?? null}, ${e.notes ?? null}, ${e.financialYear}, ${e.createdAt})
-     ON CONFLICT (id) DO UPDATE SET
-       date=EXCLUDED.date, description=EXCLUDED.description, amount=EXCLUDED.amount,
-       category=EXCLUDED.category, claim_type=EXCLUDED.claim_type, work_use_percent=EXCLUDED.work_use_percent,
-       claimable_amount=EXCLUDED.claimable_amount,
-       receipt_data_url=CASE WHEN ${keepStored} THEN expenses.receipt_data_url ELSE EXCLUDED.receipt_data_url END,
-       notes=EXCLUDED.notes, financial_year=EXCLUDED.financial_year`;
+export const saveExpense = async (userId: string, e: Expense, asset?: DepreciatingAsset): Promise<void> => {
+  e = validateExpense(e);
+  if (asset) validateAsset(asset);
+  await sql()`SELECT ledger_save_expense(${userId}::uuid, ${JSON.stringify(e)}::jsonb, ${asset ? JSON.stringify(asset) : null}::jsonb)`;
 };
 
 export const deleteExpense = async (userId: string, id: string): Promise<void> => {
-  const db = sql();
-  await db`DELETE FROM expenses WHERE id = ${id} AND user_id = ${userId}`;
+  await sql()`SELECT ledger_delete_expense(${userId}::uuid, ${id}::uuid)`;
 };
 
 // ── Assets ─────────────────────────────────────────────────────────
@@ -159,20 +160,13 @@ export const getAssets = async (userId: string, fy?: FinancialYear): Promise<Dep
   return rows.map(toAsset);
 };
 
-export const saveAsset = async (userId: string, a: DepreciatingAsset): Promise<void> => {
-  const db = sql();
-  await db`INSERT INTO assets (id, user_id, name, asset_type, purchase_date, purchase_price, effective_life_years, depreciation_method, work_use_percent, financial_year, created_at)
-     VALUES (${a.id}, ${userId}, ${a.name}, ${a.assetType}, ${a.purchaseDate}, ${a.purchasePrice}, ${a.effectiveLifeYears}, ${a.depreciationMethod}, ${a.workUsePercent}, ${a.financialYear}, ${a.createdAt})
-     ON CONFLICT (id) DO UPDATE SET
-       name=EXCLUDED.name, asset_type=EXCLUDED.asset_type, purchase_date=EXCLUDED.purchase_date,
-       purchase_price=EXCLUDED.purchase_price, effective_life_years=EXCLUDED.effective_life_years,
-       depreciation_method=EXCLUDED.depreciation_method, work_use_percent=EXCLUDED.work_use_percent,
-       financial_year=EXCLUDED.financial_year`;
+export const saveAsset = async (userId: string, asset: DepreciatingAsset): Promise<void> => {
+  validateAsset(asset);
+  await sql()`SELECT ledger_save_asset(${userId}::uuid, ${JSON.stringify(asset)}::jsonb)`;
 };
 
 export const deleteAsset = async (userId: string, id: string): Promise<void> => {
-  const db = sql();
-  await db`DELETE FROM assets WHERE id = ${id} AND user_id = ${userId}`;
+  await sql()`SELECT ledger_delete_asset(${userId}::uuid, ${id}::uuid)`;
 };
 
 // ── WFH Entries ────────────────────────────────────────────────────
@@ -186,10 +180,13 @@ export const getWfhEntries = async (userId: string, fy?: FinancialYear): Promise
 };
 
 export const saveWfhEntry = async (userId: string, e: WfhEntry): Promise<void> => {
+  validateWfhEntry(e);
   const db = sql();
-  await db`INSERT INTO wfh_entries (id, user_id, date, hours, financial_year)
+  const rows = await db`INSERT INTO wfh_entries (id, user_id, date, hours, financial_year)
      VALUES (${e.id}, ${userId}, ${e.date}, ${e.hours}, ${e.financialYear})
-     ON CONFLICT (id) DO UPDATE SET date=EXCLUDED.date, hours=EXCLUDED.hours, financial_year=EXCLUDED.financial_year`;
+     ON CONFLICT (id) DO UPDATE SET date=EXCLUDED.date, hours=EXCLUDED.hours, financial_year=EXCLUDED.financial_year
+     WHERE wfh_entries.user_id = EXCLUDED.user_id RETURNING id`;
+  if (!rows.length) throw new Error("Not authorized to update this record.");
 };
 
 export const deleteWfhEntry = async (userId: string, id: string): Promise<void> => {
@@ -208,10 +205,13 @@ export const getWfhActualCosts = async (userId: string, fy?: FinancialYear): Pro
 };
 
 export const saveWfhActualCost = async (userId: string, c: WfhActualCost): Promise<void> => {
+  validateWfhActualCost(c);
   const db = sql();
-  await db`INSERT INTO wfh_actual_costs (id, user_id, category, annual_cost, work_use_percent, financial_year)
+  const rows = await db`INSERT INTO wfh_actual_costs (id, user_id, category, annual_cost, work_use_percent, financial_year)
      VALUES (${c.id}, ${userId}, ${c.category}, ${c.annualCost}, ${c.workUsePercent}, ${c.financialYear})
-     ON CONFLICT (id) DO UPDATE SET category=EXCLUDED.category, annual_cost=EXCLUDED.annual_cost, work_use_percent=EXCLUDED.work_use_percent, financial_year=EXCLUDED.financial_year`;
+     ON CONFLICT (id) DO UPDATE SET category=EXCLUDED.category, annual_cost=EXCLUDED.annual_cost, work_use_percent=EXCLUDED.work_use_percent, financial_year=EXCLUDED.financial_year
+     WHERE wfh_actual_costs.user_id = EXCLUDED.user_id RETURNING id`;
+  if (!rows.length) throw new Error("Not authorized to update this record.");
 };
 
 export const deleteWfhActualCost = async (userId: string, id: string): Promise<void> => {
@@ -231,7 +231,7 @@ const toCgtTransaction = (r: Row): CgtTransaction => ({
   unitPrice: Number(r.unit_price),
   fee: Number(r.fee),
   notes: (r.notes as string) || undefined,
-  createdAt: r.created_at as string,
+  createdAt: timestamp(r.created_at),
 });
 
 // never FY-filtered: FIFO matching needs the whole history
@@ -242,12 +242,15 @@ export const getCgtTransactions = async (userId: string): Promise<CgtTransaction
 };
 
 export const saveCgtTransaction = async (userId: string, t: CgtTransaction): Promise<void> => {
+  validateCgtTransaction(t);
   const db = sql();
-  await db`INSERT INTO cgt_transactions (id, user_id, kind, asset, side, date, quantity, unit_price, fee, notes, created_at)
+  const rows = await db`INSERT INTO cgt_transactions (id, user_id, kind, asset, side, date, quantity, unit_price, fee, notes, created_at)
      VALUES (${t.id}, ${userId}, ${t.kind}, ${t.asset}, ${t.side}, ${t.date}, ${t.quantity}, ${t.unitPrice}, ${t.fee}, ${t.notes ?? null}, ${t.createdAt})
      ON CONFLICT (id) DO UPDATE SET
        kind=EXCLUDED.kind, asset=EXCLUDED.asset, side=EXCLUDED.side, date=EXCLUDED.date,
-       quantity=EXCLUDED.quantity, unit_price=EXCLUDED.unit_price, fee=EXCLUDED.fee, notes=EXCLUDED.notes`;
+       quantity=EXCLUDED.quantity, unit_price=EXCLUDED.unit_price, fee=EXCLUDED.fee, notes=EXCLUDED.notes
+     WHERE cgt_transactions.user_id = EXCLUDED.user_id RETURNING id`;
+  if (!rows.length) throw new Error("Not authorized to update this record.");
 };
 
 export const deleteCgtTransaction = async (userId: string, id: string): Promise<void> => {
@@ -270,14 +273,17 @@ export const saveRentalProperty = async (
   userId: string,
   property: RentalProperty
 ): Promise<void> => {
+  validateRentalProperty(property);
   const db = sql();
-  await db`INSERT INTO rental_properties
+  const rows = await db`INSERT INTO rental_properties
     (id, user_id, address, ownership_percent, acquired_date, notes, created_at)
     VALUES (${property.id}, ${userId}, ${property.address}, ${property.ownershipPercent},
       ${property.acquiredDate ?? null}, ${property.notes ?? null}, ${property.createdAt})
     ON CONFLICT (id) DO UPDATE SET
       address=EXCLUDED.address, ownership_percent=EXCLUDED.ownership_percent,
-      acquired_date=EXCLUDED.acquired_date, notes=EXCLUDED.notes`;
+      acquired_date=EXCLUDED.acquired_date, notes=EXCLUDED.notes
+    WHERE rental_properties.user_id = EXCLUDED.user_id RETURNING id`;
+  if (!rows.length) throw new Error("Not authorized to update this record.");
 };
 
 export const deleteRentalProperty = async (
@@ -285,8 +291,6 @@ export const deleteRentalProperty = async (
   id: string
 ): Promise<void> => {
   const db = sql();
-  await db`DELETE FROM rental_transactions
-    WHERE property_id = ${id} AND user_id = ${userId}`;
   await db`DELETE FROM rental_properties WHERE id = ${id} AND user_id = ${userId}`;
 };
 
@@ -308,8 +312,9 @@ export const saveRentalTransaction = async (
   userId: string,
   transaction: RentalTransaction
 ): Promise<void> => {
+  validateRentalTransaction(transaction);
   const db = sql();
-  await db`INSERT INTO rental_transactions
+  const rows = await db`INSERT INTO rental_transactions
     (id, user_id, property_id, date, kind, category, description, amount,
       deductible_percent, financial_year, notes, created_at)
     VALUES (${transaction.id}, ${userId}, ${transaction.propertyId},
@@ -321,7 +326,9 @@ export const saveRentalTransaction = async (
       property_id=EXCLUDED.property_id, date=EXCLUDED.date, kind=EXCLUDED.kind,
       category=EXCLUDED.category, description=EXCLUDED.description,
       amount=EXCLUDED.amount, deductible_percent=EXCLUDED.deductible_percent,
-      financial_year=EXCLUDED.financial_year, notes=EXCLUDED.notes`;
+      financial_year=EXCLUDED.financial_year, notes=EXCLUDED.notes
+    WHERE rental_transactions.user_id = EXCLUDED.user_id RETURNING id`;
+  if (!rows.length) throw new Error("Not authorized to update this record.");
 };
 
 export const deleteRentalTransaction = async (
@@ -342,12 +349,31 @@ export const getSettings = async (userId: string): Promise<UserSettings> => {
 };
 
 export const saveSettings = async (userId: string, s: UserSettings): Promise<void> => {
+  validateSettings(s);
   const db = sql();
-  await db`INSERT INTO user_settings (user_id, financial_year, annual_income, occupation, tax_resident_status, default_work_use_percent, wfh_method, depreciation_method, has_help_debt, has_private_hospital_cover)
-     VALUES (${userId}, ${s.financialYear}, ${s.annualIncome}, ${s.occupation}, ${s.taxResidentStatus}, ${s.defaultWorkUsePercent}, ${s.wfhMethod}, ${s.depreciationMethod}, ${s.hasHelpDebt}, ${s.hasPrivateHospitalCover})
+  await db`INSERT INTO user_settings (user_id, financial_year, annual_income, occupation, tax_resident_status, default_work_use_percent, wfh_method, depreciation_method, has_help_debt, has_private_hospital_cover, tax_options)
+     VALUES (${userId}, ${s.financialYear}, ${s.annualIncome}, ${s.occupation}, ${s.taxResidentStatus}, ${s.defaultWorkUsePercent}, ${s.wfhMethod}, ${s.depreciationMethod}, ${s.hasHelpDebt}, ${s.hasPrivateHospitalCover}, ${JSON.stringify(s.taxOptions ?? {})}::jsonb)
      ON CONFLICT (user_id) DO UPDATE SET
        financial_year=EXCLUDED.financial_year, annual_income=EXCLUDED.annual_income, occupation=EXCLUDED.occupation,
        tax_resident_status=EXCLUDED.tax_resident_status, default_work_use_percent=EXCLUDED.default_work_use_percent,
        wfh_method=EXCLUDED.wfh_method, depreciation_method=EXCLUDED.depreciation_method,
-       has_help_debt=EXCLUDED.has_help_debt, has_private_hospital_cover=EXCLUDED.has_private_hospital_cover`;
+       has_help_debt=EXCLUDED.has_help_debt, has_private_hospital_cover=EXCLUDED.has_private_hospital_cover, tax_options=EXCLUDED.tax_options`;
+};
+
+// ── Account ────────────────────────────────────────────────────────
+
+// expenses, assets, wfh_* and user_settings cascade from users; the CGT and
+// rental tables have no FK to users, so they're cleared explicitly first.
+export const deleteUser = async (userId: string): Promise<void> => {
+  const db = sql();
+  await db.transaction([
+    db`DELETE FROM cgt_transactions WHERE user_id = ${userId}`,
+    db`DELETE FROM rental_transactions WHERE user_id = ${userId}`,
+    db`DELETE FROM rental_properties WHERE user_id = ${userId}`,
+    db`DELETE FROM users WHERE id = ${userId}`,
+  ]);
+};
+
+export const clearAllData = async (userId: string): Promise<void> => {
+  await sql()`SELECT ledger_clear_data(${userId}::uuid)`;
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import {
   ASSET_EFFECTIVE_LIVES,
@@ -47,6 +48,8 @@ const AssetFormFields = ({
   editingAsset,
 }: AssetFormProps) => {
   const { state, addAsset, updateAsset } = useTax();
+  const action = useAsyncAction();
+  const recordId = useRef(editingAsset?.id ?? uuidv4());
 
   const [name, setName] = useState(editingAsset?.name ?? ASSET_EFFECTIVE_LIVES.laptop.label);
   const [assetType, setAssetType] = useState<AssetType>(editingAsset?.assetType ?? "laptop");
@@ -75,6 +78,7 @@ const AssetFormFields = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    await action.run(async () => {
     const numPrice = parseFloat(purchasePrice);
     const numWorkUse = parseFloat(workUsePercent);
     const numLife = parseFloat(effectiveLife);
@@ -83,7 +87,7 @@ const AssetFormFields = ({
         !Number.isFinite(numLife) || numLife < 1) return;
 
     const asset: DepreciatingAsset = {
-      id: editingAsset?.id || uuidv4(),
+      id: recordId.current,
       name: name.trim(),
       assetType,
       purchaseDate,
@@ -102,10 +106,11 @@ const AssetFormFields = ({
     }
 
     onOpenChange(false);
+    });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !action.busy && onOpenChange(next)}>
       <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>
@@ -114,6 +119,7 @@ const AssetFormFields = ({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <div className="space-y-2">
             <Label htmlFor="asset-type">Asset Type</Label>
             <Select
@@ -268,11 +274,12 @@ const AssetFormFields = ({
             <Button
               type="button"
               variant="outline"
+              disabled={action.busy}
               onClick={() => onOpenChange(false)}
             >
               Cancel
             </Button>
-            <Button type="submit">
+            <Button type="submit" disabled={action.busy}>
               {editingAsset ? "Update" : "Add Asset"}
             </Button>
           </div>

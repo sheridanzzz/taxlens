@@ -16,6 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import { fadeInUp } from "@/lib/animations";
@@ -33,6 +34,7 @@ const fmtQty = (n: number) =>
 
 const InvestmentsPage = () => {
   const { state, cgt, removeCgtTransaction } = useTax();
+  const action = useAsyncAction();
   const [formOpen, setFormOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
   const [editing, setEditing] = useState<CgtTransaction | null>(null);
@@ -244,7 +246,7 @@ const InvestmentsPage = () => {
               </div>
               <div className="space-y-2 text-[13px]">
                 {cgt.holdings.map((h) => (
-                  <div key={h.asset} className="flex items-baseline justify-between">
+                  <div key={`${h.kind}:${h.asset}`} className="flex items-baseline justify-between">
                     <span>
                       {h.asset}{" "}
                       <span className="text-muted-foreground">
@@ -344,12 +346,17 @@ const InvestmentsPage = () => {
               your gains for other years may move too.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={async () => {
-                if (deleteId) await removeCgtTransaction(deleteId);
-                setDeleteId(null);
+              disabled={action.busy}
+              onClick={(event) => {
+                event.preventDefault();
+                void action.run(async () => {
+                  if (deleteId) await removeCgtTransaction(deleteId);
+                  setDeleteId(null);
+                });
               }}
             >
               Delete

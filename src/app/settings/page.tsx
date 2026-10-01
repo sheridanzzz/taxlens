@@ -40,6 +40,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import { useAuth } from "@/context/auth-context";
 import { FINANCIAL_YEARS } from "@/lib/constants";
@@ -52,6 +53,7 @@ import type {
   FinancialYear,
   DepreciationMethod,
   WfhMethod,
+  TaxOptions,
 } from "@/lib/types";
 
 const RESIDENCY_LABELS: Record<string, string> = {
@@ -88,6 +90,7 @@ const InfoTip = ({ content }: InfoTipProps) => (
 const SettingsPage = () => {
   const { state, updateSettings, refreshData } = useTax();
   const { user, signOut, cloudEnabled } = useAuth();
+  const action = useAsyncAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
@@ -110,6 +113,7 @@ const SettingsPage = () => {
     state.settings.depreciationMethod
   );
   const [helpDebt, setHelpDebt] = useState(state.settings.hasHelpDebt);
+  const [taxOptions, setTaxOptions] = useState<TaxOptions>(state.settings.taxOptions ?? {});
   const [privateCover, setPrivateCover] = useState(
     state.settings.hasPrivateHospitalCover
   );
@@ -127,26 +131,29 @@ const SettingsPage = () => {
     setDepMethod(state.settings.depreciationMethod);
     setHelpDebt(state.settings.hasHelpDebt);
     setPrivateCover(state.settings.hasPrivateHospitalCover);
+    setTaxOptions(state.settings.taxOptions ?? {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.loaded]);
 
-  const handleSave = async () => {
+  const handleSave = () => action.run(async () => {
     await updateSettings({
-      annualIncome: parseFloat(income) || 0,
+      ...state.settings,
+      annualIncome: Number(income),
       occupation,
       financialYear: fy,
       taxResidentStatus: residency,
-      defaultWorkUsePercent: parseFloat(defaultWorkUse) || 100,
+      defaultWorkUsePercent: Number(defaultWorkUse),
       wfhMethod,
       depreciationMethod: depMethod,
       hasHelpDebt: helpDebt,
       hasPrivateHospitalCover: privateCover,
+      taxOptions,
     });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  };
+  });
 
-  const handleExport = async () => {
+  const handleExport = () => action.run(async () => {
     const data = await exportAllData();
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
@@ -155,32 +162,26 @@ const SettingsPage = () => {
     a.download = `ledgr-backup-${toLocalDate()}.json`;
     a.click();
     URL.revokeObjectURL(url);
-  };
+  });
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const json = ev.target?.result as string;
-      const success = await importAllData(json);
-      if (success) {
-        await refreshData();
-        setImportError("");
-      } else {
-        setImportError("Invalid backup file format.");
-      }
-    };
-    reader.readAsText(file);
+    void action.run(async () => {
+      const success = await importAllData(await file.text());
+      if (!success) throw new Error("Could not import this backup. Check the file and storage connection, then retry.");
+      await refreshData();
+      setImportError("");
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleClearAll = async () => {
+  const handleClearAll = () => action.run(async () => {
     await clearAllData();
     await refreshData();
     setClearDialogOpen(false);
-  };
+  });
 
   if (!state.loaded) {
     return (
@@ -197,8 +198,10 @@ const SettingsPage = () => {
       <section>
         <h1 className="font-serif text-3xl leading-tight md:text-[40px]">Settings</h1>
         <p className="mt-2 text-sm text-muted-foreground">Your tax profile, preferences and data.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Estimates assume a single adult and a full tax year. Family thresholds, senior offsets and part-year residency need separate assessment. The 2026–27 Medicare threshold uses current law until the annual update.</p>
       </section>
 
+      {!clearDialogOpen && action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
       <div
         className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-surface-2/60 p-1"
         role="tablist"
@@ -370,6 +373,38 @@ const SettingsPage = () => {
                 </SelectContent>
               </Select>
             </div>
+            <details className="space-y-3 rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-sm">Repayment income and exemptions</summary>
+              <p className="text-xs text-muted-foreground">Rental losses are added back automatically. Enter other reportable amounts once; these affect HELP and surcharge thresholds.</p>
+              {([
+                ["reportableSuperContributions", "Reportable super contributions"],
+                ["reportableFringeBenefits", "Reportable fringe benefits"],
+                ["otherNetInvestmentLosses", "Other net investment losses"],
+                ["exemptForeignEmploymentIncome", "Exempt foreign employment income"],
+                ["helpDebtBalance", "Remaining HELP debt (optional)"],
+              ] as const).map(([key, label]) => (
+                <div key={key} className="space-y-1">
+                  <Label htmlFor={`tax-${key}`} className="text-xs">{label} ($)</Label>
+                  <Input id={`tax-${key}`} type="number" min="0" step="0.01" value={taxOptions[key] ?? ""}
+                    onChange={(e) => setTaxOptions({ ...taxOptions, [key]: e.target.value === "" ? undefined : Number(e.target.value) })} />
+                </div>
+              ))}
+              <div className="flex items-center justify-between gap-3">
+                <Label htmlFor="tax-medicare-exempt" className="text-xs">Eligible for full Medicare levy exemption</Label>
+                <Switch id="tax-medicare-exempt" checked={!!taxOptions.medicareExempt} onCheckedChange={(value) => setTaxOptions({ ...taxOptions, medicareExempt: value })} />
+              </div>
+              {residency === "working_holiday" && <>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="tax-whm-resident" className="text-xs">Australian tax resident while on working holiday visa</Label>
+                  <Switch id="tax-whm-resident" checked={!!taxOptions.workingHolidayResident} onCheckedChange={(value) => setTaxOptions({ ...taxOptions, workingHolidayResident: value, workingHolidayTreatyResident: value ? taxOptions.workingHolidayTreatyResident : false })} />
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="tax-whm-treaty" className="text-xs">Resident eligible for treaty non-discrimination rates</Label>
+                  <Switch id="tax-whm-treaty" disabled={!taxOptions.workingHolidayResident} checked={!!taxOptions.workingHolidayTreatyResident} onCheckedChange={(value) => setTaxOptions({ ...taxOptions, workingHolidayTreatyResident: value })} />
+                </div>
+                <p className="text-xs text-muted-foreground">Treaty rates require both Australian tax residency and an eligible nationality. Confirm eligibility with the ATO.</p>
+              </>}
+            </details>
           </CardContent>
         </Card>
 
@@ -458,7 +493,7 @@ const SettingsPage = () => {
                 <Label htmlFor="settings-help-debt" className="text-xs">
                   HELP / HECS debt
                 </Label>
-                <InfoTip content="Your compulsory repayment is worked out on taxable income, so deductions cut it too. From FY 2025-26 it's 15% of income above $67,000 and 17% above $125,000 — that can be worth more than the tax saving itself." />
+                <InfoTip content="HELP uses repayment income: taxable income plus reportable amounts and net investment losses. Marginal repayments are capped at 10% of repayment income and the remaining debt; thresholds depend on the financial year." />
               </div>
               <Switch
                 id="settings-help-debt"
@@ -481,7 +516,12 @@ const SettingsPage = () => {
               />
             </div>
 
-            <Button onClick={handleSave} className="mt-2 w-full" size="sm">
+
+          </CardContent>
+        </Card>
+      </div>
+
+      {activeTab !== "data" && (<Button onClick={handleSave} disabled={action.busy} className="mt-2 w-full" size="sm">
               {saved ? (
                 <>
                   <CheckCircle className="mr-1.5 h-3.5 w-3.5" />
@@ -493,10 +533,7 @@ const SettingsPage = () => {
                   Save Settings
                 </>
               )}
-            </Button>
-          </CardContent>
-        </Card>
-      </div>
+            </Button>)}
 
       <Card
         className={`border-border/50 ${activeTab === "data" ? "" : "hidden"}`}
@@ -553,9 +590,10 @@ const SettingsPage = () => {
               exporting a backup first.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleClearAll}>
+            <AlertDialogAction disabled={action.busy} onClick={(event) => { event.preventDefault(); void handleClearAll(); }}>
               Clear Everything
             </AlertDialogAction>
           </AlertDialogFooter>

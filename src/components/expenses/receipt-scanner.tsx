@@ -23,13 +23,14 @@ import { Pill } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
 import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
 import { formatCurrency, calculateTaxPayable, isCoveredByFixedRate } from "@/lib/tax-calculator";
-import { calculateDiminishingValue, calculatePrimeCost, getDaysInFinancialYear } from "@/lib/depreciation";
+import { calculateDiminishingValue, calculatePrimeCost, calculateCurrentYearDepreciation, getDaysInFinancialYear } from "@/lib/depreciation";
 import {
   EXPENSE_CATEGORIES,
-  INSTANT_DEDUCTION_THRESHOLD,
+  ASSET_EFFECTIVE_LIVES,
   FINANCIAL_YEARS,
   getFinancialYearForDate,
 } from "@/lib/constants";
+import { mustDepreciate } from "@/lib/expense-claims";
 import type {
   Expense,
   ReceiptScanResult,
@@ -60,10 +61,11 @@ const STAGES = [
 
 const renderPdfToImage = async (file: File): Promise<{ base64: string; mimeType: string }> => {
   const pdfjsLib = await import("pdfjs-dist");
-  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
 
   const arrayBuffer = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const loadingTask = pdfjsLib.getDocument({ data: arrayBuffer });
+  const pdf = await loadingTask.promise;
   const page = await pdf.getPage(1);
 
   const scale = MAX_IMAGE_DIMENSION / Math.max(page.view[2], page.view[3]);
@@ -77,6 +79,7 @@ const renderPdfToImage = async (file: File): Promise<{ base64: string; mimeType:
   await page.render({ canvas, canvasContext: ctx, viewport }).promise;
 
   const dataUrl = canvas.toDataURL("image/jpeg", JPEG_QUALITY);
+  await loadingTask.destroy();
   return { base64: dataUrl.split(",")[1], mimeType: "image/jpeg" };
 };
 
@@ -125,7 +128,7 @@ const calcFirstYearDepreciation = (
 };
 
 export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: ReceiptScannerProps) => {
-  const { state, summary, addExpense, addAsset, getExpensesForFy } = useTax();
+  const { state, summary, addExpense, getExpensesForFy, getSummaryForFy } = useTax();
 
   const [step, setStep] = useState<ScanStep>("entry");
   const [stageIndex, setStageIndex] = useState(0);
@@ -147,6 +150,12 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const [editFY, setEditFY] = useState<FinancialYear>(state.settings.financialYear);
   const [dupWarning, setDupWarning] = useState<string | null>(null);
 
+  const [receiptDataUrl, setReceiptDataUrl] = useState<string>();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [savedDeduction, setSavedDeduction] = useState(0);
+  const saveLock = useRef(false);
+  const recordId = useRef(uuidv4());
   const [savedDestination, setSavedDestination] = useState<"expenses" | "assets">("expenses");
   const [savedName, setSavedName] = useState("");
   const [refundImpact, setRefundImpact] = useState(0);
@@ -155,19 +164,26 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  const isDep = editAmount > INSTANT_DEDUCTION_THRESHOLD;
-  const effectiveLife = scanResult?.suggestedEffectiveLife ?? 5;
+  const isDep = mustDepreciate(editAmount, editCategory);
+  const assetType = scanResult?.suggestedAssetType ?? "other";
+  const effectiveLife = Math.max(1, scanResult?.suggestedEffectiveLife ?? ASSET_EFFECTIVE_LIVES[assetType].years);
   const claimableAmount = Math.round(editAmount * (editWorkUse / 100) * 100) / 100;
   // what actually lands in this year's deductions (0 when the 70c rate covers it)
   const coveredByFixedRate = isCoveredByFixedRate({ category: editCategory }, state.settings.wfhMethod);
-  const claimsNow = coveredByFixedRate ? 0 : claimableAmount;
+  const claimsNow = isDep ? calculateCurrentYearDepreciation({
+    id: recordId.current, name: editName, assetType, purchaseDate: editDate,
+    purchasePrice: editAmount, effectiveLifeYears: effectiveLife, depreciationMethod: editDepMethod,
+    workUsePercent: editWorkUse, financialYear: editFY, createdAt: "",
+  }, editFY) : coveredByFixedRate ? 0 : claimableAmount;
 
   // real marginal-rate delta from the current ATO bracket, not a flat guess
   const estimateRefundImpact = useCallback(
     (claimable: number) => {
-      if (claimable <= 0) return 0;
-      const isResident = state.settings.taxResidentStatus === "resident";
+      if (claimable <= 0 || editFY !== state.settings.financialYear) return 0;
+      const isResident = state.settings.taxResidentStatus;
       const opts = {
+        ...state.settings.taxOptions,
+        netRentalLoss: Math.max(0, -summary.netRentalResult),
         hasHelpDebt: state.settings.hasHelpDebt,
         hasPrivateHospitalCover: state.settings.hasPrivateHospitalCover,
       };
@@ -184,10 +200,18 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
       state.settings.hasHelpDebt,
       state.settings.hasPrivateHospitalCover,
       summary.taxableIncome,
+      summary.netRentalResult,
+      editFY,
+      state.settings.taxOptions,
     ]
   );
 
+  const beforeSave = useRef<{ fy: FinancialYear; summary: typeof summary } | null>(null);
   const handleReset = useCallback(() => {
+    beforeSave.current = null;
+    recordId.current = uuidv4();
+    setReceiptDataUrl(undefined);
+    setSaveError("");
     setStep("entry");
     setPendingFile(null);
     setScanInput(null);
@@ -201,6 +225,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   }, []);
 
   const handleClose = useCallback(() => {
+    if (saveLock.current) return;
     onOpenChange(false);
     setTimeout(handleReset, 200);
   }, [onOpenChange, handleReset]);
@@ -253,6 +278,13 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
       setPendingFile({ name: file.name, kind });
       setIsPdf(kind === "pdf");
       setPreviewUrl(kind === "pdf" ? null : `data:${mimeType};base64,${base64}`);
+      const receipt = kind === "pdf" ? await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = () => reject(new Error("Could not read PDF."));
+        reader.readAsDataURL(file);
+      }) : `data:${mimeType};base64,${base64}`;
+      setReceiptDataUrl(receipt);
       setScanInput({ base64, mimeType });
     } catch {
       setErrorMessage("Could not read file. Please try a different format.");
@@ -313,98 +345,55 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     setStep("review");
   }, []);
 
-  const handleSaveExpense = useCallback(async () => {
-    if (isNaN(editAmount) || editAmount <= 0 || !editName.trim()) return;
-
-    // same amount + date already on file → warn once; a second click saves
-    // anyway. Checked against the TARGET FY's stored expenses — state only
-    // holds the active FY, and scanned receipts often belong to the prior one.
-    if (!dupWarning) {
+  const save = useCallback(async (personal: boolean) => {
+    if (saveLock.current) return;
+    saveLock.current = true;
+    setSaving(true);
+    setSaveError("");
+    try {
+      if (!Number.isFinite(editAmount) || editAmount <= 0 || !editName.trim())
+        throw new Error("Enter an item name and a positive amount.");
+      if (!personal && editCategory === "car_km")
+        throw new Error("Add car kilometres with the expense form so the annual limit can be tracked.");
       const pool = await getExpensesForFy(editFY);
-      const dup = pool.find(
-        (x) => x.amount === editAmount && x.date === editDate
-      );
-      if (dup) {
-        setDupWarning(dup.description);
-        return;
-      }
-    }
-
-    const name = editName.trim();
-    const impact = estimateRefundImpact(claimsNow);
-
-    if (isDep) {
-      const asset: DepreciatingAsset = {
-        id: uuidv4(),
-        name,
-        assetType: scanResult?.suggestedAssetType ?? "other",
-        purchaseDate: editDate,
-        purchasePrice: editAmount,
-        effectiveLifeYears: effectiveLife,
-        depreciationMethod: editDepMethod,
-        workUsePercent: editWorkUse,
-        financialYear: editFY,
-        createdAt: new Date().toISOString(),
-      };
-      await addAsset(asset);
-      setSavedDestination("assets");
-    } else {
+      const duplicate = pool.find((e) => e.id !== recordId.current && e.amount === editAmount && e.date === editDate);
+      if (!dupWarning && duplicate) { setDupWarning(duplicate.description); return; }
+      if (!beforeSave.current || beforeSave.current.fy !== editFY)
+        beforeSave.current = { fy: editFY, summary: await getSummaryForFy(editFY) };
+      const before = beforeSave.current.summary;
+      const asset: DepreciatingAsset | undefined = !personal && isDep ? {
+        id: recordId.current, name: editName.trim(), assetType,
+        purchaseDate: editDate, purchasePrice: editAmount, effectiveLifeYears: effectiveLife,
+        depreciationMethod: editDepMethod, workUsePercent: editWorkUse,
+        financialYear: editFY, createdAt: new Date().toISOString(),
+      } : undefined;
       const expense: Expense = {
-        id: uuidv4(),
-        date: editDate,
-        description: name,
-        amount: editAmount,
-        category: editCategory,
-        claimType: "full",
-        workUsePercent: editWorkUse,
-        claimableAmount,
-        receiptDataUrl: previewUrl ?? undefined,
-        notes: scanResult
-          ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}`
-          : undefined,
-        financialYear: editFY,
-        createdAt: new Date().toISOString(),
+        id: recordId.current, date: editDate, description: editName.trim(), amount: editAmount,
+        category: personal ? "other" : editCategory,
+        claimType: asset ? "depreciation" : "full", assetId: asset?.id,
+        workUsePercent: personal ? 0 : editWorkUse, claimableAmount: personal || asset ? 0 : claimableAmount,
+        receiptDataUrl, financialYear: editFY, createdAt: new Date().toISOString(),
+        notes: scanResult ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}` : undefined,
       };
-      await addExpense(expense);
-      setSavedDestination("expenses");
+      await addExpense(expense, asset);
+      const after = await getSummaryForFy(editFY);
+      setSavedDestination(asset ? "assets" : "expenses");
+      setSavedName(expense.description);
+      setSavedDeduction(Math.round((after.totalDeductions - before.totalDeductions) * 100) / 100);
+      setRefundImpact(Math.round((before.taxPayable - after.taxPayable) * 100) / 100);
+      setStep("saved");
+      onExpenseCreated();
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Could not save. Your receipt is still here; please try again.");
+    } finally {
+      saveLock.current = false;
+      setSaving(false);
     }
-
-    setSavedName(name);
-    setRefundImpact(impact);
-    setStep("saved");
-    onExpenseCreated();
-  }, [
-    editAmount, editName, editDate, editCategory, editWorkUse, editMerchant,
-    claimableAmount, claimsNow, effectiveLife, editDepMethod, isDep, previewUrl, scanResult,
-    editFY, dupWarning, getExpensesForFy, addExpense, addAsset, onExpenseCreated,
-    estimateRefundImpact,
-  ]);
-
-  const handleSaveAsPersonal = useCallback(async () => {
-    const name = editName.trim() || "Personal expense";
-    const expense: Expense = {
-      id: uuidv4(),
-      date: editDate,
-      description: name,
-      amount: editAmount,
-      category: "other",
-      claimType: "full",
-      workUsePercent: 0,
-      claimableAmount: 0,
-      receiptDataUrl: previewUrl ?? undefined,
-      notes: scanResult
-        ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}`
-        : undefined,
-      financialYear: editFY,
-      createdAt: new Date().toISOString(),
-    };
-    await addExpense(expense);
-    setSavedDestination("expenses");
-    setSavedName(name);
-    setRefundImpact(0);
-    setStep("saved");
-    onExpenseCreated();
-  }, [editName, editDate, editAmount, editMerchant, previewUrl, scanResult, editFY, addExpense, onExpenseCreated]);
+  }, [editAmount, editName, editDate, editCategory, editWorkUse, editMerchant, editFY, dupWarning,
+    getExpensesForFy, getSummaryForFy, assetType, effectiveLife, editDepMethod, isDep,
+    claimableAmount, receiptDataUrl, scanResult, addExpense, onExpenseCreated]);
+  const handleSaveExpense = () => void save(false);
+  const handleSaveAsPersonal = () => void save(true);
 
   if (!open) return null;
 
@@ -465,6 +454,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
         </div>
 
         <div className="p-4 pb-8 sm:p-6 md:p-8">
+          {saveError && <p role="alert" className="mb-4 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-800">{saveError}</p>}
           {step === "entry" && (
             <div>
               <div className="mb-6">
@@ -802,7 +792,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   <div className="grid gap-3 md:grid-cols-2">
                     {(() => {
                       // ATO pro-rates year one from the purchase date, not a full 365 days
-                      const daysHeld = getDaysInFinancialYear(editDate, editFY) || 365;
+                      const daysHeld = getDaysInFinancialYear(editDate, editFY) ;
                       const dim = calcFirstYearDepreciation(editAmount, effectiveLife, "diminishing", editWorkUse, daysHeld);
                       const prime = calcFirstYearDepreciation(editAmount, effectiveLife, "prime_cost", editWorkUse, daysHeld);
                       return (
@@ -874,10 +864,10 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                 </button>
                 <button
                   onClick={handleSaveExpense}
-                  disabled={!editName.trim() || editAmount <= 0}
+                  disabled={saving || !editName.trim() || editAmount <= 0}
                   className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  {dupWarning ? "Save anyway" : isDep ? "Save as asset" : "Save expense"}
+                  {saving ? "Saving…" : dupWarning ? "Save anyway" : isDep ? "Save as asset" : "Save expense"}
                   <ArrowUpRight className="h-3.5 w-3.5" />
                 </button>
               </div>
@@ -931,10 +921,11 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                     Override → mark deductible
                   </button>
                   <button
+                    disabled={saving}
                     onClick={handleSaveAsPersonal}
                     className="inline-flex h-9 items-center gap-2 rounded-md bg-gold px-4 text-sm text-primary-foreground hover:opacity-90"
                   >
-                    Save as personal
+                    {saving ? "Saving…" : "Save as personal"}
                   </button>
                 </div>
               </div>
@@ -982,8 +973,8 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
 
               <div className="mt-6 grid grid-cols-2 gap-3 text-left">
                 <div className="surface p-4">
-                  <div className="eyebrow">Deductible added</div>
-                  <div className="mt-1 font-serif text-2xl tabular">{formatCurrency(claimableAmount)}</div>
+                  <div className="eyebrow">Added this year</div>
+                  <div className="mt-1 font-serif text-2xl tabular">{formatCurrency(step === "saved" ? savedDeduction : claimsNow)}</div>
                 </div>
                 <div className="surface p-4">
                   <div className="eyebrow">Est. refund impact</div>

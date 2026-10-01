@@ -20,6 +20,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { LedgrLogo } from "@/components/LedgrLogo";
 
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import { useAuth } from "@/context/auth-context";
 import { useLaunchers } from "./app-shell";
@@ -31,6 +32,7 @@ interface HeaderProps {
 }
 
 export const Header = ({ onMenuClick }: HeaderProps) => {
+  const action = useAsyncAction();
   const { state, updateSettings } = useTax();
   const { user, signOut, cloudEnabled } = useAuth();
   const { openScanner, openExpenseForm } = useLaunchers();
@@ -53,13 +55,13 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
     return () => window.removeEventListener("keydown", focusSearch);
   }, []);
 
-  const handleFinancialYearChange = async (value: string | null) => {
+  const handleFinancialYearChange = (value: string | null) => action.run(async () => {
     if (!value) return;
     await updateSettings({
       ...state.settings,
       financialYear: value as FinancialYear,
     });
-  };
+  });
 
   const handleSearch = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -109,6 +111,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
 
       <div className="ml-auto flex items-center gap-1.5 sm:gap-2">
       <Select
+        disabled={action.busy}
         value={state.settings.financialYear}
         onValueChange={handleFinancialYearChange}
       >
@@ -181,6 +184,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
         </DropdownMenu>
       )}
       </div>
+      {action.error && <p role="alert" className="absolute left-3 right-3 top-full rounded-lg border border-border bg-surface p-3 text-sm text-destructive">{action.error}</p>}
     </header>
   );
 };

@@ -17,7 +17,7 @@ import type { Expense } from "@/lib/types";
 // the normal expense store, so they also update totals, exports and cloud data.
 const fingerprint = (e: Expense) => JSON.stringify([
   e.id, e.date, e.description, e.amount, e.category, e.claimType,
-  e.workUsePercent, e.claimableAmount, e.notes,
+  e.workUsePercent, e.claimableAmount, e.notes, e.assetId, e.carId, e.kilometres,
 ]);
 const readReviews = (key: string): string[] => {
   try {
@@ -76,13 +76,13 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
     }
   };
 
-  const decide = async (decision: Decision) => {
+  const decide = async (decision: Decision, keyboard = false) => {
     if (!top || lock.current || editing) return;
-    if (Date.now() - lastDecisionAt.current < 300) {
+    if (!keyboard && Date.now() - lastDecisionAt.current < 300) {
       void animate(x, 0, { duration: reducedMotion ? 0 : 0.18 });
       return;
     }
-    if (decision === "personal" && top.claimType === "depreciation") {
+    if (decision === "personal" && top.claimType === "depreciation" && !top.assetId) {
       setError("This receipt has a separate asset record. Update its work use in Assets so the depreciation changes too.");
       void animate(x, 0, { duration: 0.18 });
       return;
@@ -172,7 +172,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
                   if (event.target !== event.currentTarget || event.repeat || event.altKey || event.ctrlKey || event.metaKey) return;
                   if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
                     event.preventDefault();
-                    void decide(event.key === "ArrowLeft" ? "personal" : "confirm");
+                    void decide(event.key === "ArrowLeft" ? "personal" : "confirm", true);
                   }
                 }}
                 className="relative min-h-[215px] cursor-grab select-none rounded-[22px] border border-border bg-surface p-5 active:cursor-grabbing focus-visible:outline-offset-[-4px]"

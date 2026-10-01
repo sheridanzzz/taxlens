@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useRef, useState, useMemo } from "react";
 import { Upload, AlertTriangle, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -16,6 +16,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import {
@@ -46,6 +47,7 @@ interface CsvImportProps {
 
 export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
   const { addCgtTransactions } = useTax();
+  const action = useAsyncAction();
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [headers, setHeaders] = useState<string[]>([]);
@@ -53,9 +55,12 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
   const [mapping, setMapping] = useState<Partial<Record<CsvField, number>>>({});
   const [kind, setKind] = useState<CgtAssetKind>("crypto");
   const [fileName, setFileName] = useState("");
-  const [saving, setSaving] = useState(false);
+  const saving = action.busy;
+  const [rowIds, setRowIds] = useState<string[]>([]);
 
   const reset = () => {
+    action.clearError();
+    setRowIds([]);
     setHeaders([]);
     setRows([]);
     setMapping({});
@@ -66,32 +71,35 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const parsed = parseCsv(await file.text());
-    if (parsed.length < 2) return;
-    setFileName(file.name);
-    setHeaders(parsed[0]);
-    setRows(parsed.slice(1));
-    setMapping(guessMapping(parsed[0]));
+    await action.run(async () => {
+      const parsed = parseCsv(await file.text());
+      if (parsed.length < 2) throw new Error("Choose a CSV with a header and at least one trade.");
+      setFileName(file.name);
+      setHeaders(parsed[0]);
+      setRows(parsed.slice(1));
+      setRowIds(parsed.slice(1).map(() => crypto.randomUUID()));
+      setMapping(guessMapping(parsed[0]));
+    });
   };
 
-  const preview: CsvImportRow[] = rows.length
-    ? buildTransactions(rows, mapping, kind)
-    : [];
+  const preview: CsvImportRow[] = useMemo(() => rows.length
+    ? buildTransactions(rows, mapping, kind).map((row, index) => row.transaction
+      ? { ...row, transaction: { ...row.transaction, id: rowIds[index] } } : row)
+    : [], [rows, mapping, kind, rowIds]);
   const valid = preview.filter((r) => r.transaction);
   const skipped = preview.filter((r) => !r.transaction);
 
-  const handleImport = async () => {
-    setSaving(true);
+  const handleImport = () => action.run(async () => {
     await addCgtTransactions(valid.map((r) => r.transaction!));
-    setSaving(false);
     reset();
     onOpenChange(false);
-  };
+  });
 
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
+        if (saving) return;
         if (!next) reset();
         onOpenChange(next);
       }}
@@ -101,6 +109,7 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
           <DialogTitle>Import trades from CSV</DialogTitle>
         </DialogHeader>
 
+        {action.error && <p role="alert" className="text-sm text-destructive">{action.error} Retry to finish importing; already saved rows will be updated.</p>}
         {headers.length === 0 ? (
           <div className="space-y-4">
             <p className="text-[13px] text-muted-foreground">
@@ -113,10 +122,12 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
               type="file"
               accept=".csv,text/csv"
               onChange={handleFile}
+              disabled={saving}
               className="hidden"
               id="cgt-csv"
             />
             <button
+              disabled={saving}
               onClick={() => fileRef.current?.click()}
               className="flex w-full flex-col items-center gap-2 rounded-lg border border-dashed border-border py-10 text-sm text-muted-foreground hover:border-gold/60"
             >
@@ -131,6 +142,7 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
                 {fileName} · {rows.length} rows
               </p>
               <button
+                disabled={saving}
                 onClick={reset}
                 className="text-[13px] text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
@@ -140,7 +152,7 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
 
             <div className="space-y-2">
               <Label htmlFor="csv-kind">These are</Label>
-              <Select value={kind} onValueChange={(v) => setKind(v as CgtAssetKind)}>
+              <Select disabled={saving} value={kind} onValueChange={(v) => setKind(v as CgtAssetKind)}>
                 <SelectTrigger id="csv-kind">
                   <span>{kind === "crypto" ? "Crypto trades" : "Share trades"}</span>
                 </SelectTrigger>
@@ -161,6 +173,7 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
                     )}
                   </Label>
                   <Select
+                    disabled={saving}
                     value={mapping[field] === undefined ? UNMAPPED : String(mapping[field])}
                     onValueChange={(v) =>
                       setMapping((m) => ({
@@ -250,7 +263,7 @@ export const CsvImport = ({ open, onOpenChange }: CsvImportProps) => {
                 )}
               </div>
               <div className="flex gap-2">
-                <Button variant="outline" onClick={() => onOpenChange(false)}>
+                <Button variant="outline" disabled={saving} onClick={() => { reset(); onOpenChange(false); }}>
                   Cancel
                 </Button>
                 <Button

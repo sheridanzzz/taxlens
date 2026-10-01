@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { AssetForm } from "@/components/assets/asset-form";
 import { DepreciationChart } from "@/components/assets/depreciation-chart";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency } from "@/lib/tax-calculator";
 import {
@@ -30,6 +31,7 @@ const AssetsPage = () => {
   const { state, removeAsset } = useTax();
   const [formOpen, setFormOpen] = useState(false);
   const [editingAsset, setEditingAsset] = useState<DepreciatingAsset | null>(null);
+  const action = useAsyncAction();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -43,12 +45,12 @@ const AssetsPage = () => {
     if (!open) setEditingAsset(null);
   };
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = () => action.run(async () => {
     if (deleteId) {
       await removeAsset(deleteId);
       setDeleteId(null);
     }
-  };
+  });
 
   if (!state.loaded) {
     return (
@@ -77,7 +79,7 @@ const AssetsPage = () => {
     >
       <Section
         title="Assets"
-        description="Anything over $300 is spread over its effective life. We work out each year’s share."
+        description="Eligible equipment over $300 is spread over its effective life. We work out each year’s share."
         action={
           <button
             onClick={() => setFormOpen(true)}
@@ -234,9 +236,10 @@ const AssetsPage = () => {
               schedule will be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>
+            <AlertDialogAction disabled={action.busy} onClick={(event) => { event.preventDefault(); void handleConfirmDelete(); }}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

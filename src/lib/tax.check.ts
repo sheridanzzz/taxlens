@@ -15,7 +15,9 @@ import {
   getDepreciationSchedule,
 } from "./depreciation";
 import { hashPassword, verifyPassword } from "./password";
-import { calculateCgt } from "./cgt";
+import { applyCarClaimCaps, mustDepreciate } from "./expense-claims";
+import { validateExpense, validateSettings } from "./validation";
+import { calculateCgt, isDiscountHoldingPeriod } from "./cgt";
 import { calculateRentalSummary } from "./rental";
 import { buildTransactions, guessMapping, parseCsv } from "./csv";
 import {
@@ -47,8 +49,8 @@ near(
 );
 near(
   calculateTaxPayable(45000, "2025-26", true, { hasPrivateHospitalCover: true }),
-  5188,
-  "$45k FY2025-26 = $4,288 tax + $900 Medicare"
+  4863,
+  "$45k FY2025-26 = $4,288 tax - $325 LITO + $900 Medicare"
 );
 near(calculateTaxPayable(18200, "2025-26"), 0, "tax-free threshold");
 
@@ -523,3 +525,66 @@ const passwordChecks = async () => {
 };
 
 passwordChecks().then(() => console.log("tax + password checks passed"));
+
+// Regression: fractional incomes must cross bracket boundaries continuously.
+assert.equal(calculateTaxPayable(45000.5, "2025-26", true, { hasPrivateHospitalCover: true }), 4863.17);
+assert.equal(calculateTaxPayable(135000.5, "2025-26", true, { hasPrivateHospitalCover: true }), 33988.2);
+assert.equal(calculateTaxPayable(26000, "2024-25", true), 548);
+assert.equal(calculateTaxPayable(28011, "2025-26", true), 869.76);
+assert.equal(calculateTaxPayable(50000, "2025-26", "non_resident"), 15000);
+assert.equal(calculateTaxPayable(50000, "2025-26", "working_holiday"), 8250);
+assert.equal(calculateTaxPayable(50000, "2025-26", "working_holiday", { workingHolidayResident: true }), 9250);
+assert.equal(calculateTaxPayable(50000, "2025-26", "working_holiday", { workingHolidayResident: true, workingHolidayTreatyResident: true }),
+  calculateTaxPayable(50000, "2025-26", "resident"));
+assert.equal(calculateHelpRepayment(200000, "2025-26"), 20000);
+assert.equal(calculateHelpRepayment(200000, "2025-26", 123), 123);
+assert.equal(calculateHelpRepayment(69528, "2026-27"), 0);
+assert.equal(calculateHelpRepayment(129717, "2026-27"), 9028.35);
+assert.equal(calculateMls(104000, "2026-27", false), 0);
+assert.equal(calculateMls(120000, "2026-27", false), 1200);
+const gearedHelp = calculateTaxSummary([], [], [], [], 120000, "2025-26", "fixed_rate", true,
+  { hasHelpDebt: true, hasPrivateHospitalCover: true }, 0, 10000, 15000);
+assert.equal(Math.round((gearedHelp.taxPayable - negativelyGeared.taxPayable) * 100) / 100, 7950,
+  "net rental losses are added back for HELP rather than reducing repayments");
+assert.equal(calculateTaxPayable(100000, "2025-26", true,
+  { hasHelpDebt: true, hasPrivateHospitalCover: true, reportableSuperContributions: 10000 }) -
+  calculateTaxPayable(100000, "2025-26", true, { hasPrivateHospitalCover: true }), 6450);
+
+const car = (id: string, values: Partial<Expense> = {}): Expense => ({ ...course, id,
+  category: "car_km", amount: 3520, claimableAmount: 3520, kilometres: 4000, carId: "ABC123", ...values });
+assert.equal(applyCarClaimCaps([car("a"), car("b")]).reduce((n,e) => n+e.claimableAmount,0), 4400);
+assert.equal(applyCarClaimCaps([car("a"), car("b", { carId: "SECOND" })]).reduce((n,e) => n+e.claimableAmount,0), 7040);
+assert.equal(applyCarClaimCaps([car("a", { workUsePercent: 0 }), car("b")])[1].claimableAmount, 3520);
+assert.equal(applyCarClaimCaps([car("a", { kilometres: undefined }), car("b", { kilometres: undefined })])[1].claimableAmount, 880);
+assert.equal(calculateTaxSummary([car("a"), car("b")], [], [], [], 120000, "2025-26", "fixed_rate").totalFullClaims, 4400);
+assert.equal(CAR_RATE_PER_KM["2026-27"], 0.91);
+assert.equal(mustDepreciate(1500, "professional_development"), false);
+assert.equal(mustDepreciate(1500, "software_subscriptions"), false);
+assert.equal(mustDepreciate(1500, "computer_equipment"), true);
+assert.equal(mustDepreciate(300, "computer_equipment"), false);
+assert.equal(validateExpense({ ...course, workUsePercent: 0 }).claimableAmount, 0);
+assert.throws(() => validateExpense({ ...course, workUsePercent: 101 }));
+assert.throws(() => validateExpense({ ...course, date: "2025-02-30" }));
+assert.throws(() => validateExpense({ ...course, receiptDataUrl: "javascript:alert(1)" }));
+assert.equal(validateSettings({ financialYear: "2025-26", annualIncome: 0, occupation: "",
+  taxResidentStatus: "resident", defaultWorkUsePercent: 0, wfhMethod: "fixed_rate", depreciationMethod: "diminishing",
+  hasHelpDebt: false, hasPrivateHospitalCover: false }).defaultWorkUsePercent, 0);
+
+assert.equal(isDiscountHoldingPeriod("2023-03-01", "2024-02-29"), false);
+assert.equal(isDiscountHoldingPeriod("2023-03-01", "2024-03-01"), false);
+assert.equal(isDiscountHoldingPeriod("2023-03-01", "2024-03-02"), true);
+assert.equal(isDiscountHoldingPeriod("2024-02-29", "2025-02-28"), false);
+assert.equal(isDiscountHoldingPeriod("2024-02-29", "2025-03-01"), true);
+const separateKinds = calculateCgt([
+  trade({ id: "crypto-buy", date: "2024-08-01", side: "buy", unitPrice: 10 }),
+  trade({ id: "share-buy", date: "2024-08-01", side: "buy", unitPrice: 100, kind: "share" }),
+  trade({ id: "share-sell", date: "2025-09-01", side: "sell", unitPrice: 150, kind: "share" }),
+], "2025-26");
+assert.equal(separateKinds.netCapitalGain, 25);
+assert.equal(separateKinds.holdings.find(h => h.kind === "crypto")?.quantity, 1);
+assert.equal(calculateCgt([trade({ date: "2025-08-01", side: "buy", quantity: 0.00001234 })], "2025-26").holdings[0].quantity, 0.00001234);
+console.log("Bug regression checks passed.");
+
+assert.equal(calculateTaxPayable(70000, "2025-26", true, { reportableFringeBenefits: 40000 }) -
+  calculateTaxPayable(70000, "2025-26", true, { reportableFringeBenefits: 40000, hasPrivateHospitalCover: true }), 1100,
+  "MLS applies to taxable income plus reportable fringe benefits, once the threshold is exceeded");

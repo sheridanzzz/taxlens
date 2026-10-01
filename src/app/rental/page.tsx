@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { v4 as uuidv4 } from "uuid";
 import { motion } from "motion/react";
 import {
@@ -39,6 +39,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
 import {
   RENTAL_CATEGORIES,
@@ -67,6 +68,9 @@ const RentalPage = () => {
     addRentalTransaction,
     removeRentalTransaction,
   } = useTax();
+  const action = useAsyncAction();
+  const propertyRecordId = useRef(uuidv4());
+  const transactionRecordId = useRef(uuidv4());
   const [propertyOpen, setPropertyOpen] = useState(false);
   const [transactionOpen, setTransactionOpen] = useState(false);
   const [deletePropertyId, setDeletePropertyId] = useState<string | null>(null);
@@ -123,10 +127,11 @@ const RentalPage = () => {
 
   const handleAddProperty = async (event: React.FormEvent) => {
     event.preventDefault();
+    await action.run(async () => {
     const percent = Math.min(100, Math.max(0, Number(ownership)));
     if (!address.trim() || percent <= 0) return;
     const property: RentalProperty = {
-      id: uuidv4(),
+      id: propertyRecordId.current,
       address: address.trim(),
       ownershipPercent: percent,
       acquiredDate: acquiredDate || undefined,
@@ -139,14 +144,17 @@ const RentalPage = () => {
     setAcquiredDate("");
     setPropertyNotes("");
     setPropertyOpen(false);
+    propertyRecordId.current = uuidv4();
+    });
   };
 
   const handleAddTransaction = async (event: React.FormEvent) => {
     event.preventDefault();
+    await action.run(async () => {
     const numericAmount = Number(amount);
     if (!propertyId || !description.trim() || numericAmount <= 0 || !date) return;
     const transaction: RentalTransaction = {
-      id: uuidv4(),
+      id: transactionRecordId.current,
       propertyId,
       date,
       kind,
@@ -164,6 +172,8 @@ const RentalPage = () => {
     };
     await addRentalTransaction(transaction);
     setTransactionOpen(false);
+    transactionRecordId.current = uuidv4();
+    });
   };
 
   const propertyById = new Map(
@@ -394,7 +404,7 @@ const RentalPage = () => {
         </>
       )}
 
-      <Dialog open={propertyOpen} onOpenChange={setPropertyOpen}>
+      <Dialog open={propertyOpen} onOpenChange={(open) => !action.busy && setPropertyOpen(open)}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">
@@ -406,6 +416,7 @@ const RentalPage = () => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddProperty} className="space-y-4">
+            {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
             <div className="space-y-2">
               <Label htmlFor="rental-address">Property address</Label>
               <Input
@@ -461,12 +472,13 @@ const RentalPage = () => {
               <Button
                 type="button"
                 variant="outline"
+                disabled={action.busy}
                 onClick={() => setPropertyOpen(false)}
               >
                 Cancel
               </Button>
               <Button
-                type="submit"
+                type="submit" disabled={action.busy}
                 className="bg-gold text-primary-foreground hover:bg-gold/90"
               >
                 Add property
@@ -476,7 +488,7 @@ const RentalPage = () => {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={transactionOpen} onOpenChange={setTransactionOpen}>
+      <Dialog open={transactionOpen} onOpenChange={(open) => !action.busy && setTransactionOpen(open)}>
         <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="font-serif text-2xl">
@@ -488,6 +500,7 @@ const RentalPage = () => {
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAddTransaction} className="space-y-4">
+            {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
             <div className="grid grid-cols-2 gap-2 rounded-lg border border-border bg-surface-2 p-1">
               {(["income", "expense"] as RentalTransactionKind[]).map(
                 (option) => (
@@ -629,12 +642,13 @@ const RentalPage = () => {
               <Button
                 type="button"
                 variant="outline"
+                disabled={action.busy}
                 onClick={() => setTransactionOpen(false)}
               >
                 Cancel
               </Button>
               <Button
-                type="submit"
+                type="submit" disabled={action.busy}
                 className="bg-gold text-primary-foreground hover:bg-gold/90"
               >
                 Add {kind}
@@ -646,7 +660,7 @@ const RentalPage = () => {
 
       <AlertDialog
         open={!!deletePropertyId}
-        onOpenChange={(open) => !open && setDeletePropertyId(null)}
+        onOpenChange={(open) => !open && !action.busy && setDeletePropertyId(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -656,13 +670,17 @@ const RentalPage = () => {
               be permanently removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={action.busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={async () => {
-                if (deletePropertyId)
-                  await removeRentalProperty(deletePropertyId);
-                setDeletePropertyId(null);
+              disabled={action.busy}
+              onClick={(event) => {
+                event.preventDefault();
+                void action.run(async () => {
+                  if (deletePropertyId) await removeRentalProperty(deletePropertyId);
+                  setDeletePropertyId(null);
+                });
               }}
             >
               Delete property
@@ -673,7 +691,7 @@ const RentalPage = () => {
 
       <AlertDialog
         open={!!deleteTransactionId}
-        onOpenChange={(open) => !open && setDeleteTransactionId(null)}
+        onOpenChange={(open) => !open && !action.busy && setDeleteTransactionId(null)}
       >
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -683,13 +701,17 @@ const RentalPage = () => {
               {state.settings.financialYear}.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={action.busy}>Cancel</AlertDialogCancel>
             <AlertDialogAction
-              onClick={async () => {
-                if (deleteTransactionId)
-                  await removeRentalTransaction(deleteTransactionId);
-                setDeleteTransactionId(null);
+              disabled={action.busy}
+              onClick={(event) => {
+                event.preventDefault();
+                void action.run(async () => {
+                  if (deleteTransactionId) await removeRentalTransaction(deleteTransactionId);
+                  setDeleteTransactionId(null);
+                });
               }}
             >
               Delete entry

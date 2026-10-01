@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { v4 as uuidv4 } from "uuid";
 import {
   CalendarRange,
@@ -19,8 +19,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
-import { FY_DATE_RANGES } from "@/lib/constants";
+import { FY_DATE_RANGES, getDefaultDateForFinancialYear } from "@/lib/constants";
 import type { WfhEntry } from "@/lib/types";
 
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
@@ -47,10 +48,20 @@ const toDateString = (d: Date): string => {
 
 export const WfhCalendar = () => {
   const { state, addWfhEntry, addWfhEntries, removeWfhEntry } = useTax();
+  const action = useAsyncAction();
+  const recordIds = useRef(new Map<string, string>());
+  const idForDate = (date: string) => {
+    if (!recordIds.current.has(date)) recordIds.current.set(date, uuidv4());
+    return recordIds.current.get(date)!;
+  };
   const [currentMonth, setCurrentMonth] = useState(() => {
-    const now = new Date();
+    const now = new Date(getDefaultDateForFinancialYear(state.settings.financialYear) + "T00:00:00");
     return { year: now.getFullYear(), month: now.getMonth() };
   });
+  useEffect(() => {
+    const date = new Date(getDefaultDateForFinancialYear(state.settings.financialYear) + "T00:00:00");
+    setCurrentMonth({ year: date.getFullYear(), month: date.getMonth() });
+  }, [state.settings.financialYear]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [hours, setHours] = useState("8");
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -60,7 +71,7 @@ export const WfhCalendar = () => {
   const [bulkHours, setBulkHours] = useState("8");
   // Mon..Sun, weekdays on by default
   const [bulkDays, setBulkDays] = useState([true, true, true, true, true, false, false]);
-  const [bulkSaving, setBulkSaving] = useState(false);
+  const bulkSaving = action.busy;
 
   const entryMap = useMemo(() => {
     const map = new Map<string, WfhEntry>();
@@ -104,34 +115,30 @@ export const WfhCalendar = () => {
     setDialogOpen(true);
   };
 
-  const handleSave = async () => {
+  const handleSave = () => action.run(async () => {
     if (!selectedDate) return;
     const numHours = parseFloat(hours);
     if (isNaN(numHours) || numHours <= 0 || numHours > 24) return;
 
     const existing = entryMap.get(selectedDate);
-    if (existing) {
-      await removeWfhEntry(existing.id);
-    }
-
     const entry: WfhEntry = {
-      id: uuidv4(),
+      id: existing?.id ?? idForDate(selectedDate),
       date: selectedDate,
       hours: numHours,
       financialYear: state.settings.financialYear,
     };
     await addWfhEntry(entry);
     setDialogOpen(false);
-  };
+  });
 
-  const handleRemove = async () => {
+  const handleRemove = () => action.run(async () => {
     if (!selectedDate) return;
     const existing = entryMap.get(selectedDate);
     if (existing) {
       await removeWfhEntry(existing.id);
     }
     setDialogOpen(false);
-  };
+  });
 
   const fyRange = FY_DATE_RANGES[state.settings.financialYear];
   // parse as local midnight — bare ISO dates parse as UTC and shift the
@@ -164,23 +171,21 @@ export const WfhCalendar = () => {
     setBulkOpen(true);
   };
 
-  const handleBulkSave = async () => {
+  const handleBulkSave = () => action.run(async () => {
     const numHours = parseFloat(bulkHours);
     if (isNaN(numHours) || numHours <= 0 || numHours > 24) return;
     const targets = bulkTargets();
     if (targets.length === 0) return;
-    setBulkSaving(true);
     await addWfhEntries(
       targets.map((date) => ({
-        id: uuidv4(),
+        id: idForDate(date),
         date,
         hours: numHours,
         financialYear: state.settings.financialYear,
       }))
     );
-    setBulkSaving(false);
     setBulkOpen(false);
-  };
+  });
 
   const totalHours = state.wfhEntries.reduce((sum, e) => sum + e.hours, 0);
   const totalDays = state.wfhEntries.length;
@@ -266,7 +271,7 @@ export const WfhCalendar = () => {
           })}
         </div>
 
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <Dialog open={dialogOpen} onOpenChange={(open) => !action.busy && setDialogOpen(open)}>
           <DialogContent className="sm:max-w-sm">
             <DialogHeader>
               <DialogTitle>
@@ -279,6 +284,7 @@ export const WfhCalendar = () => {
               </DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
               <div className="space-y-2">
                 <Label htmlFor="wfh-hours">Hours worked from home</Label>
                 <Input
@@ -296,7 +302,7 @@ export const WfhCalendar = () => {
                   <Button
                     variant="destructive"
                     size="sm"
-                    onClick={handleRemove}
+                    onClick={handleRemove} disabled={action.busy}
                   >
                     <Trash2 className="mr-2 h-3.5 w-3.5" />
                     Remove
@@ -312,7 +318,7 @@ export const WfhCalendar = () => {
                   >
                     Cancel
                   </Button>
-                  <Button size="sm" onClick={handleSave}>
+                  <Button size="sm" onClick={handleSave} disabled={action.busy}>
                     <Plus className="mr-2 h-3.5 w-3.5" />
                     {entryMap.get(selectedDate || "") ? "Update" : "Log"}
                   </Button>
@@ -322,12 +328,13 @@ export const WfhCalendar = () => {
           </DialogContent>
         </Dialog>
 
-        <Dialog open={bulkOpen} onOpenChange={setBulkOpen}>
+        <Dialog open={bulkOpen} onOpenChange={(open) => !action.busy && setBulkOpen(open)}>
           <DialogContent className="sm:max-w-md">
             <DialogHeader>
               <DialogTitle>Bulk log WFH days</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
+              {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="bulk-from">From</Label>

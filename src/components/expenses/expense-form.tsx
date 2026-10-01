@@ -34,7 +34,8 @@ import {
 } from "@/components/ui/tooltip";
 import { isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { useTax } from "@/context/tax-context";
-import { neonGetExpenseReceipt } from "@/lib/storage-actions";
+import { getExpenseReceipt } from "@/lib/storage";
+import { findLinkedAsset, mustDepreciate as needsDepreciation } from "@/lib/expense-claims";
 import {
   ASSET_EFFECTIVE_LIVES,
   CAR_KM_CAP,
@@ -83,7 +84,7 @@ export const ExpenseForm = ({
   onOpenChange,
   editingExpense,
 }: ExpenseFormProps) => {
-  const { state, addExpense, updateExpense, addAsset } = useTax();
+  const { state, addExpense } = useTax();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const savingRef = useRef(false);
   const [saving, setSaving] = useState(false);
@@ -103,8 +104,17 @@ export const ExpenseForm = ({
   const [fy, setFy] = useState<FinancialYear>(state.settings.financialYear);
   // distinguishes "user removed the receipt" from "payload not hydrated yet"
   const [receiptRemoved, setReceiptRemoved] = useState(false);
+  const [assetId, setAssetId] = useState<string | undefined>();
+  const [carId, setCarId] = useState("DEFAULT");
+  const recordId = useRef(uuidv4());
+  const monthlyIds = useRef(new Map<string, string>());
 
   function resetForm() {
+    recordId.current = uuidv4();
+    monthlyIds.current.clear();
+    setAssetId(undefined);
+    setCarId("DEFAULT");
+    setKilometres("");
     setSaveError("");
     setDescription("");
     setAmount("");
@@ -123,11 +133,14 @@ export const ExpenseForm = ({
 
   // Car expenses are rate × km, not a receipt total. Keep amount in sync.
   const carRate = CAR_RATE_PER_KM[fy];
-  const cappedKm = Math.min(parseFloat(kilometres) || 0, CAR_KM_CAP);
+  const enteredKm = Math.max(0, parseFloat(kilometres) || 0);
+  const cappedKm = Math.min(enteredKm, CAR_KM_CAP);
   const isCarKm = category === "car_km";
 
   /* Form state intentionally follows the record selected by the parent dialog. */
   useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
     if (editingExpense) {
       setDescription(editingExpense.description);
       setAmount(editingExpense.amount.toString());
@@ -139,22 +152,28 @@ export const ExpenseForm = ({
       setReceiptDataUrl(editingExpense.receiptDataUrl);
       setFy(editingExpense.financialYear);
       setReceiptRemoved(false);
+      const linked = findLinkedAsset(editingExpense, state.assets, state.expenses);
+      setAssetId(linked?.id ?? editingExpense.assetId);
+      setAssetType(linked?.assetType ?? "laptop");
+      setCarId(editingExpense.carId ?? "DEFAULT");
+      setKilometres(editingExpense.category === "car_km" ?
+        String(editingExpense.kilometres ?? editingExpense.amount / CAR_RATE_PER_KM[editingExpense.financialYear]) : "");
       // cloud list rows carry a flag, not the image — hydrate it for editing
       if (!editingExpense.receiptDataUrl && editingExpense.hasReceipt) {
-        neonGetExpenseReceipt(editingExpense.id).then(
-          (data) => data && setReceiptDataUrl(data)
-        );
+        void getExpenseReceipt(editingExpense.id).then((data) => {
+          if (!cancelled && data) setReceiptDataUrl(data);
+        }).catch(() => { if (!cancelled) setSaveError("Could not load the receipt. Your saved receipt will be kept."); });
       }
     } else {
       resetForm();
     }
+    return () => { cancelled = true; };
     // resetForm is deliberately recreated with the current FY defaults.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editingExpense, open]);
 
   const mustDepreciate =
-    parseFloat(amount) > INSTANT_DEDUCTION_THRESHOLD &&
-    DEPRECIABLE_CATEGORIES.includes(category);
+    needsDepreciation(parseFloat(amount), category);
 
   const handleAmountChange = (value: string) => {
     setAmount(value);
@@ -205,28 +224,24 @@ export const ExpenseForm = ({
 
   const saveForm = async () => {
 
-    const numAmount = isCarKm ? cappedKm * carRate : parseFloat(amount);
+    const numAmount = isCarKm ? enteredKm * carRate : parseFloat(amount);
     const numWorkUse = parseFloat(workUsePercent);
     if (isNaN(numAmount) || numAmount <= 0) return;
 
-    // A depreciating item deducts nothing as an expense row — the deduction is
-    // calculated on the asset register. Register it, and keep the expense row
-    // as the receipt/evidence record (claimable stays $0, so no double count).
-    // ponytail: one-way link — editing the expense later won't move the asset.
-    if (claimType === "depreciation" && !editingExpense) {
-      await addAsset({
-        id: uuidv4(),
-        name: description.trim(),
-        assetType,
-        purchaseDate: date,
-        purchasePrice: numAmount,
-        effectiveLifeYears: ASSET_EFFECTIVE_LIVES[assetType].years,
-        depreciationMethod: state.settings.depreciationMethod,
-        workUsePercent: numWorkUse,
-        financialYear: fy,
-        createdAt: new Date().toISOString(),
-      } satisfies DepreciatingAsset);
-    }
+    if (!Number.isFinite(numWorkUse) || numWorkUse < 0 || numWorkUse > 100)
+      throw new Error("Work use must be between 0% and 100%.");
+    if (editingExpense?.claimType === "depreciation" && !assetId)
+      throw new Error("Select the existing asset linked to this receipt before saving.");
+    const id = editingExpense?.id ?? recordId.current;
+    const existingAsset = state.assets.find((a) => a.id === assetId);
+    const asset: DepreciatingAsset | undefined = claimType === "depreciation" ? {
+      id: assetId ?? id, name: description.trim(), assetType, purchaseDate: date,
+      purchasePrice: numAmount,
+      effectiveLifeYears: existingAsset?.assetType === assetType ? existingAsset.effectiveLifeYears : ASSET_EFFECTIVE_LIVES[assetType].years,
+      depreciationMethod: existingAsset?.depreciationMethod ?? state.settings.depreciationMethod,
+      workUsePercent: numWorkUse, financialYear: fy,
+      createdAt: existingAsset?.createdAt ?? new Date().toISOString(),
+    } : undefined;
 
     const claimableAmount =
       claimType === "full"
@@ -234,7 +249,7 @@ export const ExpenseForm = ({
         : 0;
 
     const expense: Expense = {
-      id: editingExpense?.id || uuidv4(),
+      id,
       date,
       description: description.trim(),
       amount: numAmount,
@@ -242,6 +257,9 @@ export const ExpenseForm = ({
       claimType,
       workUsePercent: numWorkUse,
       claimableAmount,
+      assetId: asset?.id ?? (editingExpense?.claimType === "depreciation" ? assetId : undefined),
+      carId: isCarKm ? carId.trim() || "DEFAULT" : undefined,
+      kilometres: isCarKm ? enteredKm : undefined,
       receiptDataUrl,
       hasReceipt: !receiptRemoved && !!editingExpense?.hasReceipt,
       notes: notes.trim() || undefined,
@@ -250,20 +268,21 @@ export const ExpenseForm = ({
     };
 
     if (editingExpense) {
-      await updateExpense(expense);
-    } else if (monthly && claimType === "full") {
+      await addExpense(expense, asset);
+    } else if (monthly && claimType === "full" && !isCarKm) {
       const dates = monthlyDates(date, fy);
       for (let i = 0; i < dates.length; i++) {
+        if (!monthlyIds.current.has(dates[i])) monthlyIds.current.set(dates[i], i === 0 ? expense.id : uuidv4());
         await addExpense({
           ...expense,
-          id: i === 0 ? expense.id : uuidv4(),
+          id: monthlyIds.current.get(dates[i])!,
           date: dates[i],
           // receipt on the first entry only — one invoice is the evidence
           receiptDataUrl: i === 0 ? receiptDataUrl : undefined,
         });
       }
     } else {
-      await addExpense(expense);
+      await addExpense(expense, asset);
     }
 
     onOpenChange(false);
@@ -290,12 +309,12 @@ export const ExpenseForm = ({
   const coveredByFixedRate = isCoveredByFixedRate({ category }, state.settings.wfhMethod);
   const claimablePreview =
     coveredByFixedRate ? 0 : claimType === "full"
-      ? (isCarKm ? cappedKm * carRate : parseFloat(amount) || 0) *
+      ? (isCarKm ? enteredKm * carRate : parseFloat(amount) || 0) *
         ((parseFloat(workUsePercent) || 0) / 100)
       : 0;
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(next) => !savingRef.current && onOpenChange(next)}>
       <DialogContent className="flex max-h-[min(94dvh,920px)] w-full flex-col gap-0 overflow-hidden rounded-xl border border-border bg-popover p-0 sm:max-w-2xl">
         <DialogHeader className="shrink-0 border-b border-border px-5 py-5 pr-14 sm:px-7">
           <div className="mb-1 flex items-center gap-2 text-gold">
@@ -363,8 +382,7 @@ export const ExpenseForm = ({
                           type="number"
                           step="1"
                           min="1"
-                          max={CAR_KM_CAP}
-                          placeholder="0"
+                                                    placeholder="0"
                           value={kilometres}
                           onChange={(e) => setKilometres(e.target.value)}
                           required
@@ -436,7 +454,7 @@ export const ExpenseForm = ({
                     </p>
                   </div>
 
-                  {!editingExpense && claimType === "full" && (
+                  {!editingExpense && claimType === "full" && !isCarKm && (
                     <label className="flex min-h-10 cursor-pointer items-center gap-2 rounded-lg border border-border px-3 text-sm text-muted-foreground hover:bg-surface-2">
                       <input
                         type="checkbox"
@@ -499,6 +517,18 @@ export const ExpenseForm = ({
                   </Select>
                 </div>
 
+                {isCarKm && <div className="space-y-2">
+                  <Label htmlFor="expense-car-id">Car identifier</Label>
+                  <Input id="expense-car-id" value={carId} onChange={(e) => setCarId(e.target.value)} placeholder="Registration or nickname" required />
+                  <p className="text-xs text-muted-foreground">Use the same identifier for every trip in this car. The 5,000 km limit is shared across the financial year.</p>
+                </div>}
+                {editingExpense?.claimType === "depreciation" && !editingExpense.assetId && <div className="space-y-2">
+                  <Label htmlFor="expense-linked-asset">Linked asset</Label>
+                  <select id="expense-linked-asset" className="h-10 w-full rounded-md border border-border bg-surface px-3 text-sm" value={assetId ?? ""} onChange={(e) => setAssetId(e.target.value || undefined)} required>
+                    <option value="">Select the existing asset</option>
+                    {state.assets.map((a) => <option key={a.id} value={a.id}>{a.name} · ${a.purchasePrice.toFixed(2)}</option>)}
+                  </select>
+                </div>}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <div className="flex items-center gap-1">
@@ -558,7 +588,7 @@ export const ExpenseForm = ({
                   </div>
                 </div>
 
-                {claimType === "depreciation" && !editingExpense && (
+                {claimType === "depreciation" && (
                   <div className="space-y-2">
                     <Label htmlFor="expense-asset-type">Asset type</Label>
                     <Select
@@ -578,7 +608,7 @@ export const ExpenseForm = ({
                     </Select>
                     {mustDepreciate && (
                       <p className="text-xs text-muted-foreground">
-                        This will also be added to Assets so its deduction can be
+                        This will be saved with its linked asset so its deduction can be
                         tracked across financial years.
                       </p>
                     )}
@@ -697,6 +727,7 @@ export const ExpenseForm = ({
               <Button
                 type="button"
                 variant="outline"
+                disabled={saving}
                 onClick={() => onOpenChange(false)}
                 className="flex-1 sm:flex-none"
               >

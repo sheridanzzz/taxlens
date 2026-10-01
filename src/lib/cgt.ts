@@ -13,7 +13,13 @@ import { FY_DATE_RANGES } from "./constants";
  */
 
 /** A CGT event must happen more than 12 months after acquisition to discount. */
-const DISCOUNT_HOLDING_DAYS = 365;
+export const isDiscountHoldingPeriod = (acquired: string, disposed: string) => {
+  const anniversary = new Date(`${acquired}T00:00:00Z`);
+  const month = anniversary.getUTCMonth();
+  anniversary.setUTCFullYear(anniversary.getUTCFullYear() + 1);
+  if (anniversary.getUTCMonth() !== month) anniversary.setUTCDate(0);
+  return disposed > anniversary.toISOString().slice(0, 10);
+};
 const DISCOUNT_RATE = 0.5;
 
 const DAY_MS = 86_400_000;
@@ -103,7 +109,8 @@ export const matchDisposals = (
   const disposals: CgtDisposal[] = [];
 
   for (const tx of ordered) {
-    const key = tx.asset.toUpperCase();
+    const symbol = tx.asset.trim().toUpperCase();
+    const key = `${tx.kind}:${symbol}`;
     kinds.set(key, tx.kind);
     if (!parcels.has(key)) parcels.set(key, []);
     const queue = parcels.get(key)!;
@@ -133,7 +140,7 @@ export const matchDisposals = (
       const gain = proceeds - costBase;
 
       disposals.push({
-        asset: key,
+        asset: symbol,
         kind: tx.kind,
         acquiredDate: parcel?.date ?? tx.date,
         disposedDate: tx.date,
@@ -142,7 +149,7 @@ export const matchDisposals = (
         costBase: round(costBase),
         gain: round(gain),
         holdingDays,
-        discountable: !!parcel && holdingDays > DISCOUNT_HOLDING_DAYS && gain > 0,
+        discountable: !!parcel && isDiscountHoldingPeriod(parcel.date, tx.date) && gain > 0,
         unmatched: !parcel,
       });
 
@@ -158,9 +165,9 @@ export const matchDisposals = (
     const quantity = queue.reduce((s, p) => s + p.quantity, 0);
     if (quantity <= 1e-12) continue;
     holdings.push({
-      asset,
+      asset: asset.slice(asset.indexOf(":") + 1),
       kind: kinds.get(asset) ?? "crypto",
-      quantity: round(quantity),
+      quantity,
       costBase: round(queue.reduce((s, p) => s + p.quantity * p.unitCost, 0)),
     });
   }

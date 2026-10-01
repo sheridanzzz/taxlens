@@ -34,8 +34,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
-import { neonGetExpenseReceipt } from "@/lib/storage-actions";
+import { getExpenseReceipt } from "@/lib/storage";
 import { formatCurrency, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { isAiScanned } from "@/lib/utils";
@@ -60,6 +61,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
   const [search, setSearch] = useState(initialSearch);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const action = useAsyncAction();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null);
 
@@ -87,12 +89,12 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-  const handleConfirmDelete = async () => {
+  const handleConfirmDelete = () => action.run(async () => {
     if (deleteId) {
       await removeExpense(deleteId);
       setDeleteId(null);
     }
-  };
+  });
 
   const covered = (e: Expense) => isCoveredByFixedRate(e, state.settings.wfhMethod);
   const statusFor = (e: Expense) => {
@@ -116,14 +118,16 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
     setStatusFilter("all");
   };
 
-  const openReceipt = async (expense: Expense) => {
+  const openReceipt = (expense: Expense) => action.run(async () => {
     setReceiptUrl(
-      expense.receiptDataUrl ?? (await neonGetExpenseReceipt(expense.id))
+      expense.receiptDataUrl ?? (await getExpenseReceipt(expense.id))
     );
-  };
+    if (!expense.receiptDataUrl && !expense.hasReceipt) throw new Error("Receipt not found.");
+  });
 
   return (
     <div className="surface overflow-hidden">
+      {!deleteId && action.error && <p role="alert" className="p-4 text-sm text-destructive">{action.error}</p>}
       <div className="border-b border-border p-4 sm:p-5">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
         <div className="relative min-w-[200px] flex-1">
@@ -269,6 +273,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                         variant="ghost"
                         size="sm"
                         className="h-9 px-2.5"
+                        aria-label={`View receipt for ${expense.description}`}
                         onClick={() => openReceipt(expense)}
                       >
                         <Receipt className="mr-1.5 h-3.5 w-3.5 text-gold" />
@@ -342,7 +347,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                             size="icon"
                             className="h-6 w-6"
                             onClick={() => openReceipt(expense)}
-                            aria-label="View receipt"
+                            aria-label={`View receipt for ${expense.description}`}
                           >
                             <Receipt className="h-3.5 w-3.5 text-gold" />
                           </Button>
@@ -407,9 +412,10 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
               removed.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleConfirmDelete}>
+            <AlertDialogAction disabled={action.busy} onClick={(event) => { event.preventDefault(); void handleConfirmDelete(); }}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>
@@ -424,7 +430,11 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
           <DialogHeader>
             <DialogTitle>Receipt</DialogTitle>
           </DialogHeader>
-          {receiptUrl && (
+          {receiptUrl?.startsWith("data:application/pdf;") ? (
+            <a href={receiptUrl} download="receipt.pdf" className="text-sm underline">Download original PDF receipt</a>
+          ) : receiptUrl && (
+            // Stored receipt data URLs do not benefit from remote image optimization.
+            // eslint-disable-next-line @next/next/no-img-element
             <img
               src={receiptUrl}
               alt="Receipt"
