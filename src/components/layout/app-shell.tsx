@@ -7,6 +7,7 @@ import { Header } from "./header";
 import { ExpenseForm } from "@/components/expenses/expense-form";
 import { ReceiptScanner } from "@/components/expenses/receipt-scanner";
 import { useAuth } from "@/context/auth-context";
+import { useTax } from "@/context/tax-context";
 
 const SHELL_BYPASS_PATHS = ["/login", "/signup", "/"];
 
@@ -33,6 +34,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading, cloudEnabled } = useAuth();
+  const { state } = useTax();
 
   useEffect(() => {
     if (
@@ -48,7 +50,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
   if (SHELL_BYPASS_PATHS.includes(pathname)) return <>{children}</>;
 
   if (cloudEnabled) {
-    if (loading || !user) {
+    if (loading || !user || !state.loaded) {
       return (
         <div className="flex h-screen items-center justify-center">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-gold border-t-transparent" />

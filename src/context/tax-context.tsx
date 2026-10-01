@@ -245,17 +245,20 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
   }, []);
 
   const getSummaryForFy = useCallback(async (fy: FinancialYear) => {
-    const [expenses, assets, hours, costs, rentals] = await Promise.all([
+    // Read a complete snapshot so an in-flight save never uses initial or stale
+    // profile values while the account's records are still loading.
+    const [expenses, assets, hours, costs, rentals, settings, properties, trades] = await Promise.all([
       storage.getExpenses(fy), storage.getAssets(fy), storage.getWfhEntries(fy),
-      storage.getWfhActualCosts(fy), storage.getRentalTransactions(fy),
+      storage.getWfhActualCosts(fy), storage.getRentalTransactions(fy), storage.getSettings(),
+      storage.getRentalProperties(), storage.getCgtTransactions(),
     ]);
-    const rent = calculateRentalSummary(state.rentalProperties, rentals);
-    return calculateTaxSummary(expenses, assets, hours, costs, state.settings.annualIncome,
-      fy, state.settings.wfhMethod, state.settings.taxResidentStatus,
-      { ...state.settings.taxOptions, hasHelpDebt: state.settings.hasHelpDebt,
-        hasPrivateHospitalCover: state.settings.hasPrivateHospitalCover },
-      calculateCgt(state.cgtTransactions, fy).netCapitalGain, rent.assessableIncome, rent.deductibleExpenses);
-  }, [state.settings, state.rentalProperties, state.cgtTransactions]);
+    const rent = calculateRentalSummary(properties, rentals);
+    return calculateTaxSummary(expenses, assets, hours, costs, settings.annualIncome,
+      fy, settings.wfhMethod, settings.taxResidentStatus,
+      { ...settings.taxOptions, hasHelpDebt: settings.hasHelpDebt,
+        hasPrivateHospitalCover: settings.hasPrivateHospitalCover },
+      calculateCgt(trades, fy).netCapitalGain, rent.assessableIncome, rent.deductibleExpenses);
+  }, []);
 
   const addExpense = useCallback(
     async (expense: Expense, asset?: DepreciatingAsset) => {
