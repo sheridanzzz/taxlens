@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { decode } from "next-auth/jwt";
 import { getBearerUserId } from "@/lib/mobile-auth";
+import { currentNeonSession } from "@/lib/session-version";
 
 // /api/mobile routes check the iOS app's bearer token themselves
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth/callback", "/api/auth", "/api/mobile"];
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/forgot-password", "/reset-password", "/auth/callback", "/api/auth", "/api/mobile"];
 
 export const proxy = async (request: NextRequest) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -27,7 +28,7 @@ export const proxy = async (request: NextRequest) => {
     if (raw) {
       try {
         const decoded = await decode({ token: raw, secret: process.env.AUTH_SECRET!, salt: cookieName });
-        hasSession = !!decoded;
+        hasSession = !!decoded && await currentNeonSession(decoded.id, decoded.sessionVersion);
       } catch {
         hasSession = false;
       }

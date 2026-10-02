@@ -1,7 +1,8 @@
 import { useState } from "react";
-import { KeyboardAvoidingView, Pressable, ScrollView, View } from "react-native";
+import { KeyboardAvoidingView, Linking, Pressable, ScrollView, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { useStore } from "@/lib/store";
+import { API_URL } from "@/lib/api";
 import { colors } from "@/lib/theme";
 import { Button, Card, Field, T } from "@/components/ui";
 
@@ -80,6 +81,18 @@ export default function SignIn() {
             <T accessibilityRole="alert" color={colors.negative}>
               {error}
             </T>
+          )}
+          {!signup && (
+            // ponytail: reset happens on the web; the emailed link opens there anyway.
+            <Pressable
+              accessibilityRole="link"
+              onPress={() => Linking.openURL(`${API_URL}/forgot-password`)}
+              style={{ alignSelf: "flex-end", paddingVertical: 4 }}
+            >
+              <T w="bold" color={colors.tangerineInk}>
+                Forgot password?
+              </T>
+            </Pressable>
           )}
           <Button
             title={signup ? "Create account" : "Sign in"}

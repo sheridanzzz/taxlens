@@ -22,5 +22,5 @@ export async function POST(request: Request) {
       { status: 401 }
     );
   }
-  return NextResponse.json({ token: await issueMobileToken(user), user });
+  return NextResponse.json({ token: await issueMobileToken(user), user: { id: user.id, email: user.email } });
 }

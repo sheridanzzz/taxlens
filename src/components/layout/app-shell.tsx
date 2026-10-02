@@ -9,7 +9,7 @@ import { ReceiptScanner } from "@/components/expenses/receipt-scanner";
 import { useAuth } from "@/context/auth-context";
 import { useTax } from "@/context/tax-context";
 
-const SHELL_BYPASS_PATHS = ["/login", "/signup", "/"];
+const SHELL_BYPASS_PATHS = ["/login", "/signup", "/forgot-password", "/reset-password", "/"];
 
 /**
  * Scanning a receipt or adding an expense is a thing you do *from* wherever you

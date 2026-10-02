@@ -144,6 +144,10 @@ const LoginPage = () => {
                 </div>
               </div>
 
+              <Link href="/forgot-password" className="block text-right text-sm text-primary underline">
+                Forgot password?
+              </Link>
+
               {error && (
                 <p className="text-xs text-destructive" role="alert">
                   {error}

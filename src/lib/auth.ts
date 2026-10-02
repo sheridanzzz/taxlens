@@ -1,6 +1,7 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { sql, isNeonConfigured } from "@/lib/neon";
+import { currentNeonSession } from "./session-version";
 import {
   hashPassword,
   verifyPassword,
@@ -11,7 +12,7 @@ import {
  *  web session below and the iOS app's token endpoint (api/mobile/token). */
 export const authorizeCredentials = async (
   credentials: Partial<Record<"email" | "password" | "action", unknown>>
-): Promise<{ id: string; email: string } | null> => {
+): Promise<{ id: string; email: string; sessionVersion: number } | null> => {
   if (!isNeonConfigured()) return null;
 
   const email = credentials.email as string;
@@ -27,12 +28,12 @@ export const authorizeCredentials = async (
     const existing = await db`SELECT id FROM users WHERE email = ${email}`;
     if (existing.length > 0) return null;
 
-    const result = await db`INSERT INTO users (email, password_hash) VALUES (${email}, ${await hashPassword(password)}) RETURNING id, email`;
+    const result = await db`INSERT INTO users (email, password_hash) VALUES (${email}, ${await hashPassword(password)}) RETURNING id, email, session_version`;
     if (!result[0]) return null;
-    return { id: result[0].id as string, email: result[0].email as string };
+    return { id: result[0].id as string, email: result[0].email as string, sessionVersion: Number(result[0].session_version) };
   }
 
-  const rows = await db`SELECT id, email, password_hash FROM users WHERE email = ${email}`;
+  const rows = await db`SELECT id, email, password_hash, session_version FROM users WHERE email = ${email}`;
   if (!rows[0]) return null;
 
   const { ok, needsUpgrade } = await verifyPassword(
@@ -45,7 +46,7 @@ export const authorizeCredentials = async (
     await db`UPDATE users SET password_hash = ${await hashPassword(password)} WHERE id = ${rows[0].id as string}`;
   }
 
-  return { id: rows[0].id as string, email: rows[0].email as string };
+  return { id: rows[0].id as string, email: rows[0].email as string, sessionVersion: Number(rows[0].session_version) };
 };
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -62,9 +63,12 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   ],
   session: { strategy: "jwt" },
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
         token.id = user.id;
+        token.sessionVersion = "sessionVersion" in user ? user.sessionVersion : 0;
+      } else if (!(await currentNeonSession(token.id, token.sessionVersion))) {
+        return null;
       }
       return token;
     },
