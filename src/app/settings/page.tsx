@@ -13,6 +13,7 @@ import {
   UserRound,
   SlidersHorizontal,
   Database,
+  Plug,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { useAsyncAction } from "@/hooks/use-async-action";
+import { AirtailConnector } from "@/components/settings/airtail-connector";
 import { useTax } from "@/context/tax-context";
 import { useAuth } from "@/context/auth-context";
 import { FINANCIAL_YEARS } from "@/lib/constants";
@@ -95,9 +97,13 @@ const SettingsPage = () => {
   const [saved, setSaved] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [importError, setImportError] = useState("");
-  const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "data">(
+  const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "data" | "connections">(
     "profile"
   );
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has("airtail")) queueMicrotask(() => setActiveTab("connections"));
+  }, []);
 
   const [income, setIncome] = useState(state.settings.annualIncome.toString());
   const [occupation, setOccupation] = useState(state.settings.occupation);
@@ -211,6 +217,7 @@ const SettingsPage = () => {
           { id: "profile", label: "Profile", icon: UserRound },
           { id: "preferences", label: "Preferences", icon: SlidersHorizontal },
           { id: "data", label: "Data & account", icon: Database },
+          { id: "connections", label: "Connections", icon: Plug },
         ].map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -218,7 +225,7 @@ const SettingsPage = () => {
             role="tab"
             aria-selected={activeTab === id}
             onClick={() =>
-              setActiveTab(id as "profile" | "preferences" | "data")
+              setActiveTab(id as "profile" | "preferences" | "data" | "connections")
             }
             className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-4 text-sm transition-colors ${
               activeTab === id
@@ -231,6 +238,8 @@ const SettingsPage = () => {
           </button>
         ))}
       </div>
+
+      {activeTab === "connections" && <AirtailConnector />}
 
       {cloudEnabled && activeTab === "profile" ? (
         <Card className="border-border/50">
@@ -521,7 +530,7 @@ const SettingsPage = () => {
         </Card>
       </div>
 
-      {activeTab !== "data" && (<Button onClick={handleSave} disabled={action.busy} className="mt-2 w-full" size="sm">
+      {(activeTab === "profile" || activeTab === "preferences") && (<Button onClick={handleSave} disabled={action.busy} className="mt-2 w-full" size="sm">
               {saved ? (
                 <>
                   <CheckCircle className="mr-1.5 h-3.5 w-3.5" />

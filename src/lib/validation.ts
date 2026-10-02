@@ -21,8 +21,8 @@ export const validateExpense = (e: Expense): Expense => {
   number(e.amount, 0.01); number(e.workUsePercent, 0, 100);
   if (e.kilometres !== undefined) number(e.kilometres, 0);
   if (e.receiptDataUrl !== undefined &&
-      (!/^data:(image\/(png|jpeg|jpg|webp|gif)|application\/pdf);base64,/.test(e.receiptDataUrl) || e.receiptDataUrl.length > 20_000_000))
-    throw new Error("Use a supported image or PDF receipt under 15 MB.");
+      (!/^data:(image\/(png|jpeg|jpg|webp|gif)|application\/pdf|message\/rfc822);base64,/.test(e.receiptDataUrl) || e.receiptDataUrl.length > 20_000_000))
+    throw new Error("Use a supported image, PDF or original receipt email under 15 MB.");
   return { ...e, description: e.description.trim(),
     claimableAmount: e.claimType === "full" ? Math.round(e.amount * e.workUsePercent) / 100 : 0 };
 };

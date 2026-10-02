@@ -11,6 +11,7 @@ Every Aussie tax deduction, tracked. Built for software engineers and remote wor
 - **Depreciation Schedule** — asset tracking with ATO effective lives, diminishing value and prime cost methods
 - **Reports** — exportable tax summary, expenses, WFH log, and depreciation schedule as CSV
 - **Settings** — income details, financial year, data export/import backup
+- **Airtail connector** — connect an existing Airtail account, retrieve synced Gmail/Yahoo receipt emails and attachments, and review each expense before saving. Original MIME emails are retained with their attachments.
 
 ## ATO Rules Built In
 
@@ -76,3 +77,5 @@ npm audit
 `npm run check` covers the tax regressions and runs actual PostgreSQL migration, ownership, rollback and receipt-preservation scenarios in an in-memory PGlite database. It does not connect to a live database. The installed PDF.js worker is copied into `public/` during install, development and builds so PDF parsing does not depend on a third-party CDN.
 
 See [calculation scope and source rates](docs/calculation-scope.md) for the supported assumptions and remaining tax-model limitations.
+
+See [Airtail connector setup](docs/airtail-connector.md) for migration 006, app URL configuration, local checks and the live Gmail/Yahoo test procedure.

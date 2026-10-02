@@ -22,6 +22,8 @@ import {
 import { Pill } from "@/components/ledgr/primitives";
 import { useTax } from "@/context/tax-context";
 import { scanReceiptViaServer, type ScanInput } from "@/lib/receipt-ai";
+import type { ImportedReceipt } from "@/lib/airtail-import";
+import { getExpenses } from "@/lib/storage";
 import { formatCurrency, calculateTaxPayable, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { calculateDiminishingValue, calculatePrimeCost, calculateCurrentYearDepreciation, getDaysInFinancialYear } from "@/lib/depreciation";
 import {
@@ -38,6 +40,7 @@ import type {
   DepreciationMethod,
   DepreciatingAsset,
   FinancialYear,
+  AssetType,
 } from "@/lib/types";
 
 type ScanStep = "entry" | "scanning" | "review" | "review-notclaimable" | "error" | "saved";
@@ -47,6 +50,7 @@ interface ReceiptScannerProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onExpenseCreated: () => void;
+  initialReceipt?: ImportedReceipt;
 }
 
 const MAX_IMAGE_DIMENSION = 1536;
@@ -127,10 +131,10 @@ const calcFirstYearDepreciation = (
   return Math.round(raw * (workUsePercent / 100) * 100) / 100;
 };
 
-export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: ReceiptScannerProps) => {
+export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated, initialReceipt }: ReceiptScannerProps) => {
   const { state, summary, addExpense, getExpensesForFy, getSummaryForFy } = useTax();
 
-  const [step, setStep] = useState<ScanStep>("entry");
+  const [step, setStep] = useState<ScanStep>(initialReceipt ? "review" : "entry");
   const [stageIndex, setStageIndex] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const [pendingFile, setPendingFile] = useState<FileMeta | null>(null);
@@ -140,22 +144,24 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const [scanResult, setScanResult] = useState<ReceiptScanResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
 
-  const [editName, setEditName] = useState("");
-  const [editMerchant, setEditMerchant] = useState("");
-  const [editAmount, setEditAmount] = useState(0);
-  const [editDate, setEditDate] = useState("");
+  const [editName, setEditName] = useState(initialReceipt?.description ?? "");
+  const [editMerchant, setEditMerchant] = useState(initialReceipt?.merchant ?? "");
+  const [editAmount, setEditAmount] = useState(initialReceipt?.amount ?? 0);
+  const [editDate, setEditDate] = useState(initialReceipt?.date ?? "");
   const [editCategory, setEditCategory] = useState<ExpenseCategory>("other");
-  const [editWorkUse, setEditWorkUse] = useState(100);
+  const [editWorkUse, setEditWorkUse] = useState(initialReceipt ? 0 : 100);
   const [editDepMethod, setEditDepMethod] = useState<DepreciationMethod>("diminishing");
-  const [editFY, setEditFY] = useState<FinancialYear>(state.settings.financialYear);
+  const [editAssetType, setEditAssetType] = useState<AssetType | null>(null);
+  const [editEffectiveLife, setEditEffectiveLife] = useState<number | null>(null);
+  const [editFY, setEditFY] = useState<FinancialYear>(initialReceipt ? getFinancialYearForDate(initialReceipt.date) ?? state.settings.financialYear : state.settings.financialYear);
   const [dupWarning, setDupWarning] = useState<string | null>(null);
 
-  const [receiptDataUrl, setReceiptDataUrl] = useState<string>();
+  const [receiptDataUrl, setReceiptDataUrl] = useState<string | undefined>(initialReceipt?.receiptDataUrl);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
   const [savedDeduction, setSavedDeduction] = useState(0);
   const saveLock = useRef(false);
-  const recordId = useRef(uuidv4());
+  const recordId = useRef(initialReceipt?.id ?? uuidv4());
   const [savedDestination, setSavedDestination] = useState<"expenses" | "assets">("expenses");
   const [savedName, setSavedName] = useState("");
   const [refundImpact, setRefundImpact] = useState(0);
@@ -165,8 +171,8 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
   const dialogRef = useRef<HTMLDivElement>(null);
 
   const isDep = mustDepreciate(editAmount, editCategory);
-  const assetType = scanResult?.suggestedAssetType ?? "other";
-  const effectiveLife = Math.max(1, scanResult?.suggestedEffectiveLife ?? ASSET_EFFECTIVE_LIVES[assetType].years);
+  const assetType = editAssetType ?? scanResult?.suggestedAssetType ?? "other";
+  const effectiveLife = editEffectiveLife ?? Math.max(1, scanResult?.suggestedEffectiveLife ?? ASSET_EFFECTIVE_LIVES[assetType].years);
   const claimableAmount = Math.round(editAmount * (editWorkUse / 100) * 100) / 100;
   // what actually lands in this year's deductions (0 when the 70c rate covers it)
   const coveredByFixedRate = isCoveredByFixedRate({ category: editCategory }, state.settings.wfhMethod);
@@ -208,6 +214,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
 
   const beforeSave = useRef<{ fy: FinancialYear; summary: typeof summary } | null>(null);
   const handleReset = useCallback(() => {
+    if (initialReceipt) { onOpenChange(false); return; }
     beforeSave.current = null;
     recordId.current = uuidv4();
     setReceiptDataUrl(undefined);
@@ -218,17 +225,19 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     setPreviewUrl(null);
     setIsPdf(false);
     setScanResult(null);
+    setEditAssetType(null);
+    setEditEffectiveLife(null);
     setErrorMessage("");
     setDupWarning(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
-  }, []);
+  }, [initialReceipt, onOpenChange]);
 
   const handleClose = useCallback(() => {
     if (saveLock.current) return;
     onOpenChange(false);
-    setTimeout(handleReset, 200);
-  }, [onOpenChange, handleReset]);
+    if (!initialReceipt) setTimeout(handleReset, 200);
+  }, [onOpenChange, handleReset, initialReceipt]);
 
   useEffect(() => {
     if (!open) return;
@@ -355,6 +364,10 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
         throw new Error("Enter an item name and a positive amount.");
       if (!personal && editCategory === "car_km")
         throw new Error("Add car kilometres with the expense form so the annual limit can be tracked.");
+      if (!personal && isDep && (!Number.isFinite(effectiveLife) || effectiveLife < 1 || effectiveLife > 100))
+        throw new Error("Enter an effective life between 1 and 100 years.");
+      if (initialReceipt && (await getExpenses()).some(e => e.id === initialReceipt.id))
+        throw new Error("This Airtail receipt is already saved. Edit the existing expense instead.");
       const pool = await getExpensesForFy(editFY);
       const duplicate = pool.find((e) => e.id !== recordId.current && e.amount === editAmount && e.date === editDate);
       if (!dupWarning && duplicate) { setDupWarning(duplicate.description); return; }
@@ -373,7 +386,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
         claimType: asset ? "depreciation" : "full", assetId: asset?.id,
         workUsePercent: personal ? 0 : editWorkUse, claimableAmount: personal || asset ? 0 : claimableAmount,
         receiptDataUrl, financialYear: editFY, createdAt: new Date().toISOString(),
-        notes: scanResult ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}` : undefined,
+        notes: initialReceipt?.notes ?? (scanResult ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}` : undefined),
       };
       await addExpense(expense, asset);
       const after = await getSummaryForFy(editFY);
@@ -391,7 +404,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
     }
   }, [editAmount, editName, editDate, editCategory, editWorkUse, editMerchant, editFY, dupWarning,
     getExpensesForFy, getSummaryForFy, assetType, effectiveLife, editDepMethod, isDep,
-    claimableAmount, receiptDataUrl, scanResult, addExpense, onExpenseCreated]);
+    claimableAmount, receiptDataUrl, scanResult, addExpense, onExpenseCreated, initialReceipt]);
   const handleSaveExpense = () => void save(false);
   const handleSaveAsPersonal = () => void save(true);
 
@@ -427,7 +440,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
               <ScanLine className="h-4 w-4" />
             </span>
             <div>
-              <div className="eyebrow">Receipt scanner</div>
+              <div className="eyebrow">{initialReceipt ? "Airtail receipt" : "Receipt scanner"}</div>
               <div
                 id="receipt-scanner-title"
                 className="mt-0.5 font-serif text-lg leading-none"
@@ -665,7 +678,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
           {(step === "review") && (
             <div>
               <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
-                <div>
+                <div className="min-w-0 max-w-full">
                   <div className="mb-1 flex items-center gap-2">
                     {scanResult && (
                       <Pill tone="gold">
@@ -676,9 +689,9 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                       {isDep ? "Depreciate over time" : "Instant write-off"}
                     </Pill>
                   </div>
-                  <h3 className="font-serif text-3xl leading-tight">{editName || "New expense"}</h3>
+                  <h3 className="break-words font-serif text-3xl leading-tight">{editName || "New expense"}</h3>
                   {(editMerchant || editDate) && (
-                    <div className="mt-1 text-sm text-muted-foreground">
+                    <div className="mt-1 break-words text-sm text-muted-foreground">
                       {editMerchant}
                       {editMerchant && editDate ? " · " : ""}
                       {editDate}
@@ -698,6 +711,11 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   &ldquo;{scanResult.relevanceExplanation}&rdquo;
                 </blockquote>
               )}
+
+              {initialReceipt && <div className="mb-6 rounded-md border border-border p-4 text-sm">
+                <p>Imported from Airtail. Check the item, purchase date, category and work use before saving.</p>
+                <a className="mt-2 inline-block underline" href={initialReceipt.receiptDataUrl} download="original-receipt.eml">Download original receipt email</a>
+              </div>}
 
               <div className="mb-6 grid gap-4 md:grid-cols-2">
                 <Field label="Item">
@@ -764,6 +782,13 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                     className="mt-2 w-full accent-[var(--color-gold)]"
                   />
                 </Field>
+                {initialReceipt && isDep && <>
+                  <Field label="Asset type"><select className="scan-input" value={assetType} onChange={event => {
+                    const type = event.target.value as AssetType;
+                    setEditAssetType(type); setEditEffectiveLife(ASSET_EFFECTIVE_LIVES[type].years);
+                  }}>{Object.entries(ASSET_EFFECTIVE_LIVES).map(([key, value]) => <option key={key} value={key}>{value.label}</option>)}</select></Field>
+                  <Field label="Effective life (years)"><input className="scan-input" type="number" min="1" max="100" step="0.1" value={effectiveLife} onChange={event => setEditEffectiveLife(Number(event.target.value))} /></Field>
+                </>}
               </div>
 
               {scanResult?.rawItems && scanResult.rawItems.length > 0 && (
@@ -860,7 +885,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated }: Receipt
                   onClick={handleReset}
                   className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm text-muted-foreground hover:text-foreground"
                 >
-                  <RotateCw className="h-3.5 w-3.5" /> Rescan
+                  <RotateCw className="h-3.5 w-3.5" /> {initialReceipt ? "Back to receipt" : "Rescan"}
                 </button>
                 <button
                   onClick={handleSaveExpense}

@@ -1,0 +1,6 @@
+{
+  "env": {
+    "AIRTAIL_URL": "https://airtail.vercel.app",
+    "LEDGR_APP_URL": "https://taxlens-alpha.vercel.app"
+  }
+}

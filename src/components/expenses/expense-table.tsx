@@ -432,6 +432,8 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
           </DialogHeader>
           {receiptUrl?.startsWith("data:application/pdf;") ? (
             <a href={receiptUrl} download="receipt.pdf" className="text-sm underline">Download original PDF receipt</a>
+          ) : receiptUrl?.startsWith("data:message/rfc822;") ? (
+            <a href={receiptUrl} download="original-receipt.eml" className="text-sm underline">Download original receipt email and attachments</a>
           ) : receiptUrl && (
             // Stored receipt data URLs do not benefit from remote image optimization.
             // eslint-disable-next-line @next/next/no-img-element
