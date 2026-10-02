@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Caveat, Gabarito } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/layout/theme-provider";
@@ -26,6 +26,12 @@ export const metadata: Metadata = {
   title: "Ledgr — your refund, filling up all year",
   description:
     "Chuck your work receipts in as you go, log your work-from-home hours, and watch your refund pot grow. Built on the ATO's rules for Australian employees.",
+  // home-screen install on iPhone: full-screen, named "Ledgr", cream status bar
+  appleWebApp: { title: "Ledgr", statusBarStyle: "default" },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#fff5ea",
 };
 
 const RootLayout = ({

@@ -1,7 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { decode } from "next-auth/jwt";
+import { getBearerUserId } from "@/lib/mobile-auth";
 
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth/callback", "/api/auth"];
+// /api/mobile routes check the iOS app's bearer token themselves
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/auth/callback", "/api/auth", "/api/mobile"];
 
 export const proxy = async (request: NextRequest) => {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -30,8 +32,14 @@ export const proxy = async (request: NextRequest) => {
         hasSession = false;
       }
     }
+    // the iOS app calls the shared AI routes with a bearer token, not a cookie
+    if (!hasSession) hasSession = !!(await getBearerUserId(request));
 
     if (!hasSession && !isPublicPath) {
+      // API callers get JSON they can act on, not the login page's HTML
+      if (pathname.startsWith("/api/")) {
+        return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+      }
       const redirectUrl = request.nextUrl.clone();
       redirectUrl.pathname = "/login";
       return NextResponse.redirect(redirectUrl);
@@ -49,6 +57,6 @@ export const proxy = async (request: NextRequest) => {
 
 export const config = {
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|icon.svg|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

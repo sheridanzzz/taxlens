@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Ledgr",
+    "slug": "ledgr",
+    "scheme": "ledgr",
+    "version": "1.0.0",
+    "platforms": [
+      "ios"
+    ],
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.sheridangomes.ledgr",
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Ledgr reads the receipt photos you choose so it can fill in the amount and date for you.",
+          "cameraPermission": "Ledgr uses the camera to photograph your receipts.",
+          "microphonePermission": false
+        }
+      ],
+      "expo-secure-store",
+      "expo-sqlite",
+      "@react-native-community/datetimepicker",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#2a1538",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 140
+        }
+      ],
+      "./plugins/with-scene-lifecycle"
+    ]
+  }
+}

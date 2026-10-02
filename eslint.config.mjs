@@ -16,6 +16,8 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "public/pdf.worker.min.mjs",
+    // the Expo app lints and type-checks on its own
+    "mobile/**",
   ]),
 ]);
 
