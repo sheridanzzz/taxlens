@@ -9,10 +9,49 @@ import { useData } from "@/lib/store";
 import { API_URL } from "@/lib/api";
 import { colors } from "@/lib/theme";
 import { ReceiptReview } from "@/components/receipt-review";
-import { Button, Card, Heading, Icon, Screen, T } from "@/components/ui";
+import { Button, Card, Heading, Icon, Screen, T, Tile } from "@/components/ui";
 
 const DAY = 86_400_000;
 const TINTS = [colors.butter, colors.mint, colors.pink, colors.sky, colors.lav];
+const COIN = "#f2b63c";
+// the web Jar (dashboard/page.tsx) is an SVG on a 100×120 grid; these Views redraw it at this scale
+const S = 0.72;
+
+const openWeb = (path: string) => void Linking.openURL(`${API_URL}${path}`);
+
+const Jar = ({ fill }: { fill: number }) => {
+  // the pot fills as the financial year goes on
+  const level = Math.round(56 * Math.min(1, Math.max(0.15, fill)));
+  const coin = (left: number, top: number) => (
+    <View style={{ position: "absolute", left: left * S, top: top * S, width: 12 * S, height: 12 * S, borderRadius: 6 * S, backgroundColor: COIN }} />
+  );
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 100 * S, height: 120 * S }}>
+      <View style={{ position: "absolute", left: 26 * S, top: 4 * S, width: 48 * S, height: 12 * S, borderRadius: 4 * S, backgroundColor: colors.tangerine }} />
+      <View
+        style={{
+          position: "absolute",
+          left: 10 * S,
+          top: 22 * S,
+          width: 80 * S,
+          height: 94 * S,
+          borderWidth: 3 * S,
+          borderColor: "#ffffff",
+          borderTopLeftRadius: 8 * S,
+          borderTopRightRadius: 8 * S,
+          borderBottomLeftRadius: 12 * S,
+          borderBottomRightRadius: 12 * S,
+          backgroundColor: "rgba(255,255,255,0.12)",
+          overflow: "hidden",
+        }}
+      >
+        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: level * S, backgroundColor: colors.butter }} />
+        {coin(15, 69)}
+        {coin(41, 63)}
+      </View>
+    </View>
+  );
+};
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -68,6 +107,9 @@ export default function Home() {
       .reduce((s, e) => s + e.claimableAmount, 0) +
     (settings.wfhMethod === "fixed_rate" ? weekHours * WFH_FIXED_RATE_PER_HOUR : 0);
 
+  const empty = expenses.length === 0 && assets.length === 0 && wfhEntries.length === 0;
+  const missingReceipts = expenses.filter((e) => e.workUsePercent > 0 && !e.receiptDataUrl && !e.hasReceipt).length;
+
   const returnRows = getMyTaxRows(
     getCategoryBreakdown(expenses, settings.wfhMethod, assets, fy),
     summary.totalWfhDeduction
@@ -86,27 +128,55 @@ export default function Home() {
     <Screen refreshing={refreshing} onRefresh={pull}>
       <Heading title={greeting()} subtitle={`FY ${fy} · ${status}`} />
 
+      {empty && (
+        <Card>
+          <View style={{ gap: 4 }}>
+            <T w="bold" size={13} color={colors.inkSoft}>
+              Getting started
+            </T>
+            <T w="black" size={28} color={colors.plum} accessibilityRole="header" style={{ letterSpacing: -0.6 }}>
+              Your FY {fy} pot is empty
+            </T>
+            <T size={15} color={colors.inkSoft}>
+              Start with whatever&apos;s closest to hand — it all goes in the pot.
+            </T>
+          </View>
+          <Tile tint={colors.butter} icon="camera.viewfinder" title="Scan a receipt" detail="AI reads it and suggests the claim" onPress={() => router.push("/expense")} />
+          <Tile
+            tint={colors.mint}
+            icon="plus"
+            title="Add an expense"
+            detail="Enter a deduction manually"
+            onPress={() => router.push({ pathname: "/expense", params: { manual: "1" } })}
+          />
+          <Tile tint={colors.pink} icon="house.fill" title="Log WFH hours" detail="70c an hour, one day at a time" onPress={() => router.navigate("/wfh")} />
+        </Card>
+      )}
+
       <Card tint={colors.plum} style={{ gap: 16, borderRadius: 32, padding: 22 }}>
-        <View>
-          <T w="bold" size={15} color={colors.butter}>
-            Estimated tax savings · FY {fy}
-          </T>
-          <T
-            w="black"
-            size={54}
-            color="#ffffff"
-            adjustsFontSizeToFit
-            numberOfLines={1}
-            style={{ letterSpacing: -1.5, fontVariant: ["tabular-nums"] }}
-          >
-            {formatCurrency(summary.estimatedTaxSaved)}
-          </T>
-          <T w="medium" size={15} color={colors.lav}>
-            Tax your deductions save you
-            {settings.annualIncome > 0
-              ? ` on a ${formatCurrency(settings.annualIncome)} salary.`
-              : ". Add your salary in Settings for a sharper number."}
-          </T>
+        <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
+          <View style={{ flex: 1 }}>
+            <T w="bold" size={15} color={colors.butter}>
+              Estimated tax savings · FY {fy}
+            </T>
+            <T
+              w="black"
+              size={54}
+              color="#ffffff"
+              adjustsFontSizeToFit
+              numberOfLines={1}
+              style={{ letterSpacing: -1.5, fontVariant: ["tabular-nums"] }}
+            >
+              {formatCurrency(summary.estimatedTaxSaved)}
+            </T>
+            <T w="medium" size={15} color={colors.lav}>
+              Tax your deductions save you
+              {settings.annualIncome > 0
+                ? ` on a ${formatCurrency(settings.annualIncome)} salary.`
+                : ". Add your salary in Settings for a sharper number."}
+            </T>
+          </View>
+          <Jar fill={yearDone} />
         </View>
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -139,9 +209,38 @@ export default function Home() {
         </T>
       </Card>
 
-      <Button title="Add a receipt" icon="camera.fill" kind="primary" onPress={() => router.push("/expense")} />
+      {!empty && <Button title="Add a receipt" icon="camera.fill" kind="primary" onPress={() => router.push("/expense")} />}
 
       <ReceiptReview />
+
+      <View style={{ gap: 10 }}>
+        <T w="heavy" size={20} color={colors.plum} accessibilityRole="header">
+          This week
+        </T>
+        <Tile
+          tint={colors.butter}
+          icon="doc.text.fill"
+          web
+          title={missingReceipts > 0 ? `${missingReceipts} receipt${missingReceipts === 1 ? "" : "s"} missing` : "Every receipt attached"}
+          detail={missingReceipts > 0 ? "Attach them before you lodge" : "Nice — nothing to chase"}
+          onPress={() => openWeb("/expenses")}
+        />
+        <Tile
+          tint={colors.mint}
+          icon="clock.fill"
+          title={weekHours > 0 ? `${weekHours.toLocaleString()} h at home` : "No hours logged"}
+          detail={weekHours > 0 ? `${formatCurrency(weekHours * WFH_FIXED_RATE_PER_HOUR)} at 70c an hour` : "Worked from home? Log it while you remember"}
+          onPress={() => router.navigate("/wfh")}
+        />
+        <Tile
+          tint={colors.pink}
+          icon="shippingbox.fill"
+          web
+          title={assets.length > 0 ? `${assets.length} asset${assets.length === 1 ? "" : "s"} depreciating` : "No assets yet"}
+          detail={assets.length > 0 ? `${formatCurrency(summary.totalDepreciationClaims)} claimed this year` : "Laptop over $300? Add it here"}
+          onPress={() => openWeb("/assets")}
+        />
+      </View>
 
       <Card>
         <T w="heavy" size={20} color={colors.plum} accessibilityRole="header">
@@ -218,7 +317,7 @@ export default function Home() {
 
       <Pressable
         accessibilityRole="link"
-        onPress={() => void Linking.openURL(`${API_URL}/reports`)}
+        onPress={() => openWeb("/reports")}
         style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 6, padding: 8 }}
       >
         <T w="bold" size={14} color={colors.tangerineInk}>

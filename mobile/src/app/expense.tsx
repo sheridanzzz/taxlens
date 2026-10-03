@@ -94,12 +94,12 @@ const Header = ({ title, onClose }: { title: string; onClose: () => void }) => (
 );
 
 export default function ExpenseScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, manual } = useLocalSearchParams<{ id?: string; manual?: string }>();
   const { data, save, remove, expensesFor } = useData();
   const { settings } = data;
   const editing: Expense | undefined = id ? data.expenses.find((e) => e.id === id) : undefined;
 
-  const [step, setStep] = useState<"pick" | "scanning" | "form">(id ? "form" : "pick");
+  const [step, setStep] = useState<"pick" | "scanning" | "form">(id || manual ? "form" : "pick");
   const [scan, setScan] = useState<ReceiptScanResult | null>(null);
   const [photo, setPhoto] = useState<{ uri: string; dataUrl: string } | null>(null);
   const [description, setDescription] = useState(editing?.description ?? "");

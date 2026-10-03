@@ -108,6 +108,51 @@ export const Card = ({
   </View>
 );
 
+/** The web's tinted cards (WeekCard, GettingStarted): white icon tile, plum text, arrow. */
+export const Tile = ({
+  tint,
+  icon,
+  title,
+  detail,
+  onPress,
+  web,
+}: {
+  tint: string;
+  icon: SFSymbol;
+  title: string;
+  detail: string;
+  onPress: () => void;
+  web?: boolean;
+}) => (
+  <Pressable
+    accessibilityRole={web ? "link" : "button"}
+    accessibilityHint={web ? "Opens in Safari" : undefined}
+    onPress={onPress}
+    style={({ pressed }) => ({
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 14,
+      borderRadius: 24,
+      backgroundColor: tint,
+      padding: 18,
+      opacity: pressed ? 0.8 : 1,
+    })}
+  >
+    <View style={{ width: 48, height: 48, borderRadius: 16, backgroundColor: colors.surface, alignItems: "center", justifyContent: "center" }}>
+      <Icon name={icon} size={22} />
+    </View>
+    <View style={{ flex: 1 }}>
+      <T w="heavy" size={18} color={colors.plum}>
+        {title}
+      </T>
+      <T w="medium" size={14} color={colors.plum} style={{ opacity: 0.8 }}>
+        {detail}
+      </T>
+    </View>
+    <Icon name={web ? "arrow.up.right" : "chevron.right"} size={15} color={colors.plum} />
+  </Pressable>
+);
+
 const box: ViewStyle = {
   minHeight: 50,
   flexDirection: "row",

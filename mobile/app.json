@@ -4,6 +4,9 @@
     "slug": "ledgr",
     "scheme": "ledgr",
     "version": "1.0.0",
+    "runtimeVersion": {
+      "policy": "fingerprint"
+    },
     "platforms": [
       "ios"
     ],
