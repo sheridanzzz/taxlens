@@ -45,6 +45,7 @@
         }
       ],
       "./plugins/with-scene-lifecycle",
+      "./plugins/without-push",
       "expo-sharing"
     ]
   }
