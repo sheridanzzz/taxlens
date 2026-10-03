@@ -1,6 +1,9 @@
 import { ActivityIndicator, View } from "react-native";
 import { NativeTabs } from "expo-router/unstable-native-tabs";
+import { toLocalDate } from "@shared/constants";
+import { lodgingYear, taxTimeFor } from "@shared/tax-time";
 import { useStore } from "@/lib/store";
+import { useReminders } from "@/lib/reminders";
 import { colors } from "@/lib/theme";
 import { Button, T } from "@/components/ui";
 
@@ -26,20 +29,41 @@ export default function TabsLayout() {
     );
   }
 
+  // 1 July to 31 October, until that year is marked lodged
+  const lodging = lodgingYear(toLocalDate());
+  const showTaxTime = !!lodging && !taxTimeFor(data.settings, lodging).lodgedAt;
+
   return (
-    <NativeTabs tintColor={colors.tangerineInk}>
-      <NativeTabs.Trigger name="index">
-        <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="house.fill" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="wfh">
-        <NativeTabs.Trigger.Label>Home hours</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="clock.fill" />
-      </NativeTabs.Trigger>
-      <NativeTabs.Trigger name="settings">
-        <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
-        <NativeTabs.Trigger.Icon sf="gearshape.fill" />
-      </NativeTabs.Trigger>
-    </NativeTabs>
+    <>
+      <ReminderSync />
+      <NativeTabs tintColor={colors.tangerineInk}>
+        <NativeTabs.Trigger name="index">
+          <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="house.fill" />
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="expenses">
+          <NativeTabs.Trigger.Label>Expenses</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="list.bullet.rectangle.fill" />
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="wfh">
+          <NativeTabs.Trigger.Label>Hours</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="clock.fill" />
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="tax-time" hidden={!showTaxTime}>
+          <NativeTabs.Trigger.Label>Tax time</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="checklist" />
+        </NativeTabs.Trigger>
+        <NativeTabs.Trigger name="settings">
+          <NativeTabs.Trigger.Label>Settings</NativeTabs.Trigger.Label>
+          <NativeTabs.Trigger.Icon sf="gearshape.fill" />
+        </NativeTabs.Trigger>
+      </NativeTabs>
+    </>
   );
 }
+
+// a component so the hook only runs once data has loaded
+const ReminderSync = () => {
+  useReminders();
+  return null;
+};

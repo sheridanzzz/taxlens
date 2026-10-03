@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Pressable, View } from "react-native";
 import { randomUUID } from "expo-crypto";
+import { router, useLocalSearchParams } from "expo-router";
 import { FY_DATE_RANGES, WFH_FIXED_RATE_PER_HOUR, toLocalDate } from "@shared/constants";
 import { calculateWfhDeductionFixedRate, formatCurrency } from "@shared/tax-calculator";
 import { useData } from "@/lib/store";
@@ -45,6 +46,7 @@ const Stepper = ({ value, onChange }: { value: number; onChange: (v: number) => 
 };
 
 export default function Wfh() {
+  const { date: dateParam } = useLocalSearchParams<{ date?: string }>();
   const { data, save, remove } = useData();
   const { settings, wfhEntries } = data;
   const fy = settings.financialYear;
@@ -70,6 +72,15 @@ export default function Wfh() {
     setHours(byDate.get(date)?.hours ?? DEFAULT_HOURS);
     setError("");
   };
+
+  // a reminder's "Different hours" opens a given day; this tab stays mounted, so apply each new one
+  const [appliedParam, setAppliedParam] = useState<string | undefined>(undefined);
+  if (dateParam && dateParam !== appliedParam && dateParam >= start && dateParam <= lastDay) {
+    setAppliedParam(dateParam);
+    select(dateParam);
+    const d = new Date(`${dateParam}T12:00:00`);
+    setMonth({ y: d.getFullYear(), m: d.getMonth() });
+  }
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -219,6 +230,8 @@ export default function Wfh() {
               })}
             </View>
           </Card>
+
+          <Button title="Find weeks with no hours" icon="calendar.badge.exclamationmark" kind="soft" onPress={() => router.push("/gaps")} />
         </>
       )}
     </Screen>

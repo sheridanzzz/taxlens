@@ -153,6 +153,49 @@ export const Tile = ({
   </Pressable>
 );
 
+/** A row of selectable pills (filters, two-way switches). Scrolls sideways when it overflows. */
+export const Pills = <V extends string>({
+  options,
+  value,
+  onChange,
+  dark,
+  label,
+}: {
+  options: { value: V; label: string }[];
+  value: V;
+  onChange: (value: V) => void;
+  /** on the plum card */
+  dark?: boolean;
+  label: string;
+}) => (
+  <ScrollView horizontal showsHorizontalScrollIndicator={false} accessibilityLabel={label} contentContainerStyle={{ gap: 8 }}>
+    {options.map((o) => {
+      const selected = o.value === value;
+      return (
+        <Pressable
+          key={o.value}
+          accessibilityRole="button"
+          accessibilityState={{ selected }}
+          onPress={() => onChange(o.value)}
+          style={({ pressed }) => ({
+            borderRadius: 999,
+            paddingHorizontal: 14,
+            paddingVertical: 8,
+            backgroundColor: selected ? (dark ? colors.butter : colors.plum) : dark ? colors.plum2 : colors.surface,
+            borderWidth: dark ? 0 : 1,
+            borderColor: colors.border,
+            opacity: pressed ? 0.75 : 1,
+          })}
+        >
+          <T w="bold" size={14} color={selected ? (dark ? colors.plum : "#ffffff") : dark ? colors.lav : colors.plum}>
+            {o.label}
+          </T>
+        </Pressable>
+      );
+    })}
+  </ScrollView>
+);
+
 const box: ViewStyle = {
   minHeight: 50,
   flexDirection: "row",

@@ -44,7 +44,8 @@
           "imageWidth": 140
         }
       ],
-      "./plugins/with-scene-lifecycle"
+      "./plugins/with-scene-lifecycle",
+      "expo-sharing"
     ]
   }
 }

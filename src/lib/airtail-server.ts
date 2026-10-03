@@ -3,11 +3,18 @@ import { sql } from "./neon";
 import { isSupabaseConfigured, isNeonConfigured } from "./env";
 import { createClient } from "./supabase/server";
 import { connectorConfig, seal, unseal } from "./airtail-security";
+import { getBearerUserId } from "./mobile-auth";
 
 export type ConnectorUser = { id: string; supabase?: Awaited<ReturnType<typeof createClient>> };
 export type AirtailConnection = { token_ciphertext: string; account_email: string; expires_at: string };
 
-export async function connectorUser(): Promise<ConnectorUser | null> {
+export async function connectorUser(request?: Request): Promise<ConnectorUser | null> {
+  // The iOS app sends its bearer token instead of the web session cookie. Its
+  // accounts live in Neon, like the rest of the mobile API.
+  if (request?.headers.has("authorization")) {
+    const id = await getBearerUserId(request);
+    return id ? { id } : null;
+  }
   if (isSupabaseConfigured()) {
     const supabase = await createClient();
     const { data, error } = await supabase.auth.getUser();

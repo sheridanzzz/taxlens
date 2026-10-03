@@ -12,6 +12,7 @@ import type {
 } from "./types";
 import { DEFAULT_SETTINGS, FY_DATE_RANGES } from "./constants";
 import { applyCarClaimCaps } from "./expense-claims";
+import { packTaxOptions, unpackTaxOptions } from "./tax-time";
 import { validateExpense, validateAsset, validateSettings, validateWfhEntry, validateWfhActualCost, validateCgtTransaction, validateRentalProperty, validateRentalTransaction } from "./validation";
 
 type Row = Record<string, unknown>;
@@ -97,7 +98,7 @@ const toSettings = (r: Row): UserSettings => ({
   depreciationMethod: r.depreciation_method as UserSettings["depreciationMethod"],
   hasHelpDebt: Boolean(r.has_help_debt),
   hasPrivateHospitalCover: Boolean(r.has_private_hospital_cover),
-  taxOptions: (r.tax_options as UserSettings["taxOptions"]) ?? {},
+  ...unpackTaxOptions(r.tax_options),
 });
 
 // Every ON CONFLICT (id) upsert below ends in WHERE <table>.user_id =
@@ -349,10 +350,10 @@ export const getSettings = async (userId: string): Promise<UserSettings> => {
 };
 
 export const saveSettings = async (userId: string, s: UserSettings): Promise<void> => {
-  validateSettings(s);
+  s = validateSettings(s);
   const db = sql();
   await db`INSERT INTO user_settings (user_id, financial_year, annual_income, occupation, tax_resident_status, default_work_use_percent, wfh_method, depreciation_method, has_help_debt, has_private_hospital_cover, tax_options)
-     VALUES (${userId}, ${s.financialYear}, ${s.annualIncome}, ${s.occupation}, ${s.taxResidentStatus}, ${s.defaultWorkUsePercent}, ${s.wfhMethod}, ${s.depreciationMethod}, ${s.hasHelpDebt}, ${s.hasPrivateHospitalCover}, ${JSON.stringify(s.taxOptions ?? {})}::jsonb)
+     VALUES (${userId}, ${s.financialYear}, ${s.annualIncome}, ${s.occupation}, ${s.taxResidentStatus}, ${s.defaultWorkUsePercent}, ${s.wfhMethod}, ${s.depreciationMethod}, ${s.hasHelpDebt}, ${s.hasPrivateHospitalCover}, ${JSON.stringify(packTaxOptions(s))}::jsonb)
      ON CONFLICT (user_id) DO UPDATE SET
        financial_year=EXCLUDED.financial_year, annual_income=EXCLUDED.annual_income, occupation=EXCLUDED.occupation,
        tax_resident_status=EXCLUDED.tax_resident_status, default_work_use_percent=EXCLUDED.default_work_use_percent,

@@ -20,6 +20,7 @@ import {
 } from "@shared/constants";
 import { formatCurrency, isCoveredByFixedRate } from "@shared/tax-calculator";
 import { api } from "@/lib/api";
+import { clearImport, pendingImport } from "@/lib/airtail";
 import { useData } from "@/lib/store";
 import { colors } from "@/lib/theme";
 import { Button, Card, Choice, Field, Heading, Icon, Label, Screen, T } from "@/components/ui";
@@ -94,20 +95,22 @@ const Header = ({ title, onClose }: { title: string; onClose: () => void }) => (
 );
 
 export default function ExpenseScreen() {
-  const { id, manual } = useLocalSearchParams<{ id?: string; manual?: string }>();
+  const { id, manual, airtail } = useLocalSearchParams<{ id?: string; manual?: string; airtail?: string }>();
   const { data, save, remove, expensesFor } = useData();
   const { settings } = data;
   const editing: Expense | undefined = id ? data.expenses.find((e) => e.id === id) : undefined;
+  // an Airtail email the review screen handed over; work use starts at 0% like the web import
+  const [imported] = useState(() => (airtail && !id ? pendingImport() : null));
 
-  const [step, setStep] = useState<"pick" | "scanning" | "form">(id || manual ? "form" : "pick");
+  const [step, setStep] = useState<"pick" | "scanning" | "form">(id || manual || imported ? "form" : "pick");
   const [scan, setScan] = useState<ReceiptScanResult | null>(null);
   const [photo, setPhoto] = useState<{ uri: string; dataUrl: string } | null>(null);
-  const [description, setDescription] = useState(editing?.description ?? "");
+  const [description, setDescription] = useState(editing?.description ?? imported?.description ?? "");
   const [merchant, setMerchant] = useState("");
-  const [amount, setAmount] = useState(editing ? String(editing.amount) : "");
-  const [date, setDate] = useState(editing?.date ?? getDefaultDateForFinancialYear(settings.financialYear));
+  const [amount, setAmount] = useState(editing ? String(editing.amount) : imported ? String(imported.amount) : "");
+  const [date, setDate] = useState(editing?.date ?? imported?.date ?? getDefaultDateForFinancialYear(settings.financialYear));
   const [category, setCategory] = useState<ExpenseCategory>(editing?.category ?? "other");
-  const [workUse, setWorkUse] = useState(String(editing?.workUsePercent ?? settings.defaultWorkUsePercent));
+  const [workUse, setWorkUse] = useState(String(editing?.workUsePercent ?? (imported ? 0 : settings.defaultWorkUsePercent)));
   const [assetType, setAssetType] = useState<AssetType>("other");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -123,24 +126,42 @@ export default function ExpenseScreen() {
     );
   }
 
+  /** Camera or library photo, shrunk to what the scanner and receipt store expect. Null if cancelled. */
+  const capture = async (source: "camera" | "library") => {
+    if (source === "camera" && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
+      setError("Camera access is off. Turn it on in the Settings app, or choose a photo instead.");
+      return null;
+    }
+    const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], quality: 1 };
+    const picked =
+      source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
+    if (picked.canceled) return null;
+    const { uri, width, height } = picked.assets[0];
+    const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
+    const context = ImageManipulator.manipulate(uri);
+    if (scale < 1) context.resize({ width: Math.round(width * scale), height: null });
+    const image = await (await context.renderAsync()).saveAsync({ base64: true, compress: JPEG_QUALITY, format: SaveFormat.JPEG });
+    return { uri: image.uri, base64: image.base64 ?? "", dataUrl: `data:image/jpeg;base64,${image.base64}` };
+  };
+
+  /** Keeps a photo as the receipt without the AI read, for an expense whose details are already right. */
+  const handleAttach = async (source: "camera" | "library") => {
+    setError("");
+    try {
+      const image = await capture(source);
+      if (image) setPhoto({ uri: image.uri, dataUrl: image.dataUrl });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't attach that photo.");
+    }
+  };
+
   const pick = async (source: "camera" | "library") => {
     if (!(await aiConsent())) return;
     setError("");
     try {
-      if (source === "camera" && !(await ImagePicker.requestCameraPermissionsAsync()).granted) {
-        setError("Camera access is off. Turn it on in the Settings app, or choose a photo instead.");
-        return;
-      }
-      const options: ImagePicker.ImagePickerOptions = { mediaTypes: ["images"], quality: 1 };
-      const picked =
-        source === "camera" ? await ImagePicker.launchCameraAsync(options) : await ImagePicker.launchImageLibraryAsync(options);
-      if (picked.canceled) return;
-      const { uri, width, height } = picked.assets[0];
-      const scale = Math.min(1, MAX_IMAGE_DIMENSION / Math.max(width, height));
-      const context = ImageManipulator.manipulate(uri);
-      if (scale < 1) context.resize({ width: Math.round(width * scale), height: null });
-      const image = await (await context.renderAsync()).saveAsync({ base64: true, compress: JPEG_QUALITY, format: SaveFormat.JPEG });
-      setPhoto({ uri: image.uri, dataUrl: `data:image/jpeg;base64,${image.base64}` });
+      const image = await capture(source);
+      if (!image) return;
+      setPhoto({ uri: image.uri, dataUrl: image.dataUrl });
       setStep("scanning");
 
       const result = await api<ReceiptScanResult>("/api/ai/scan-receipt", {
@@ -210,7 +231,8 @@ export default function ExpenseScreen() {
         });
       }
       await save("expenses", {
-        id: editing?.id ?? randomUUID(),
+        // an import keeps its stable id, so the same email can't be saved twice
+        id: editing?.id ?? imported?.id ?? randomUUID(),
         date,
         description: name,
         amount: numAmount,
@@ -219,13 +241,20 @@ export default function ExpenseScreen() {
         workUsePercent: wu,
         claimableAmount: type === "full" ? Math.round(numAmount * (wu / 100) * 100) / 100 : 0,
         assetId,
-        receiptDataUrl: photo?.dataUrl,
+        receiptDataUrl: photo?.dataUrl ?? imported?.receiptDataUrl,
         // list rows carry this flag instead of the image; the server keeps the stored one
         hasReceipt: editing?.hasReceipt,
-        notes: editing ? editing.notes : scan ? `AI scan: ${merchant.trim() || scan.storeName}. ${scan.relevanceExplanation}` : undefined,
+        notes: editing
+          ? editing.notes
+          : imported
+            ? imported.notes
+            : scan
+              ? `AI scan: ${merchant.trim() || scan.storeName}. ${scan.relevanceExplanation}`
+              : undefined,
         financialYear: fy,
         createdAt: editing?.createdAt ?? new Date().toISOString(),
       });
+      if (imported) clearImport();
       close();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't save. Try again.");
@@ -291,13 +320,35 @@ export default function ExpenseScreen() {
 
   return (
     <Screen>
-      <Header title={editing ? "Edit expense" : scan ? "Check the details" : "New expense"} onClose={close} />
+      <Header title={editing ? "Edit expense" : scan || imported ? "Check the details" : "New expense"} onClose={close} />
 
       {photo && <Image source={{ uri: photo.uri }} accessibilityLabel="Your receipt" style={{ width: "100%", height: 180, borderRadius: 20, backgroundColor: colors.surface2 }} resizeMode="contain" />}
-      {editing?.hasReceipt && (
-        <T w="bold" size={14} color={colors.positive}>
-          Receipt attached
-        </T>
+      {editing?.hasReceipt && !photo && (
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
+          <T w="bold" size={14} color={colors.positive}>
+            Receipt attached
+          </T>
+          <Button title="View receipt" icon="doc.text.magnifyingglass" kind="soft" onPress={() => router.push({ pathname: "/receipt", params: { id: editing.id } })} style={{ minHeight: 40 }} />
+        </View>
+      )}
+      {imported && (
+        <Card tint={colors.sky}>
+          <T w="heavy" color={colors.plum}>
+            Email receipt from {imported.merchant}
+          </T>
+          <T size={15} color={colors.plum}>
+            The original email is saved with this expense. Work use starts at 0%, so set it before you save if part of this was for work.
+          </T>
+        </Card>
+      )}
+      {!photo && !imported && !editing?.hasReceipt && !isCarTrip && (
+        <View style={{ gap: 6 }}>
+          <Label>{editing ? "No receipt yet" : "Receipt"}</Label>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <Button title="Take photo" icon="camera.fill" kind="soft" onPress={() => void handleAttach("camera")} style={{ flex: 1 }} />
+            <Button title="Choose" icon="photo.on.rectangle" kind="soft" onPress={() => void handleAttach("library")} style={{ flex: 1 }} />
+          </View>
+        </View>
       )}
 
       {scan && !scan.isRelevantToOccupation && (

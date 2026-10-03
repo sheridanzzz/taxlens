@@ -20,6 +20,19 @@ import { validateExpense, validateSettings } from "./validation";
 import { calculateCgt, isDiscountHoldingPeriod } from "./cgt";
 import { calculateRentalSummary } from "./rental";
 import { buildTransactions, guessMapping, parseCsv } from "./csv";
+import { getMyTaxRows } from "./mytax";
+import {
+  fillPlan,
+  fyWeeks,
+  lodgeLines,
+  lodgingYear,
+  packTaxOptions,
+  refundEstimate,
+  unpackTaxOptions,
+  usualWeek,
+  weekStatuses,
+  withTaxTime,
+} from "./tax-time";
 import {
   CAR_KM_CAP,
   CAR_RATE_PER_KM,
@@ -588,3 +601,59 @@ console.log("Bug regression checks passed.");
 assert.equal(calculateTaxPayable(70000, "2025-26", true, { reportableFringeBenefits: 40000 }) -
   calculateTaxPayable(70000, "2025-26", true, { reportableFringeBenefits: 40000, hasPrivateHospitalCover: true }), 1100,
   "MLS applies to taxable income plus reportable fringe benefits, once the threshold is exceeded");
+
+// ── Tax time (iOS checklist, gap finder, Lodge mode) ───────────────
+const weeks = fyWeeks("2025-26");
+assert.equal(weeks[0].monday, "2025-06-30", "1 Jul 2025 is a Tuesday, so the first week starts the Monday before");
+assert.equal(weeks[0].days[0], "2025-07-01", "but only in-FY days count");
+assert.deepEqual(weeks.at(-1)?.days, ["2026-06-29", "2026-06-30"], "the last week stops at 30 June");
+assert.equal(weeks.length, 53);
+const hoursDiary = [
+  { id: "1", date: "2025-07-01", hours: 7.6, financialYear: "2025-26" as const },
+  { id: "2", date: "2025-07-02", hours: 4, financialYear: "2025-26" as const },
+  { id: "3", date: "2025-07-21", hours: 7.6, financialYear: "2025-26" as const },
+];
+const statuses = weekStatuses("2025-26", hoursDiary, ["2025-07-07"], "2025-07-31");
+assert.deepEqual(statuses.slice(0, 5).map((w) => w.status), ["logged", "away", "gap", "logged", "future"],
+  "logged, marked away, empty and over, logged, not over yet");
+assert.equal(statuses[0].hours, 11.6);
+assert.deepEqual(usualWeek(hoursDiary), [7.6, 7.6, 4, 0, 0, 0, 0],
+  "a weekday counts once it's logged in at least half the logged weeks");
+assert.deepEqual(fillPlan([statuses[2]], usualWeek(hoursDiary), new Set(["2025-07-15"])).map((d) => [d.date, d.hours]),
+  [["2025-07-14", 7.6], ["2025-07-16", 4]], "the fill skips a day that's already logged");
+assert.deepEqual(refundEstimate({ taxPayable: 10000, taxPayableWithoutDeductions: 10500 }, 11000),
+  { withDeductions: 1000, withoutDeductions: 500 });
+assert.ok(refundEstimate({ taxPayable: 12000, taxPayableWithoutDeductions: 12000 }, 11000).withDeductions < 0, "negative is owing");
+assert.equal(lodgingYear("2026-10-03"), "2025-26");
+assert.equal(lodgingYear("2026-07-01"), "2025-26");
+assert.equal(lodgingYear("2026-06-30"), null, "the year isn't over");
+assert.equal(lodgingYear("2026-11-01"), null, "self-lodging closed on 31 October");
+
+const lodgingSettings: UserSettings = {
+  financialYear: "2025-26", annualIncome: 90000, occupation: "Analyst", taxResidentStatus: "resident",
+  defaultWorkUsePercent: 100, wfhMethod: "fixed_rate", depreciationMethod: "diminishing",
+  hasHelpDebt: false, hasPrivateHospitalCover: false, taxOptions: { helpDebtBalance: 5000 },
+  taxTime: { "2025-26": { taxWithheld: 18000, bills: { phone: true }, awayWeeks: ["2025-07-07"], lodgedAt: "2026-10-03" } },
+};
+assert.deepEqual(unpackTaxOptions(packTaxOptions(lodgingSettings)),
+  { taxOptions: lodgingSettings.taxOptions, taxTime: lodgingSettings.taxTime }, "lodging data rides in tax_options and comes back out");
+assert.equal(withTaxTime(lodgingSettings, "2025-26", { taxWithheld: 1 }).taxTime?.["2025-26"]?.lodgedAt, "2026-10-03", "a patch keeps the rest");
+const cleaned = validateSettings({ ...lodgingSettings,
+  taxTime: { "2025-26": { taxWithheld: 1, awayWeeks: ["2025-07-07", "2025-07-07"], extra: "x" } as never } });
+assert.deepEqual(cleaned.taxTime, { "2025-26": { taxWithheld: 1, awayWeeks: ["2025-07-07"],
+  bills: undefined, filledDays: undefined, entered: undefined, lodgedAt: undefined } }, "unknown keys are dropped, lists deduped");
+assert.throws(() => validateSettings({ ...lodgingSettings, taxTime: { "1999-00": {} } as never }), "unknown FY");
+assert.throws(() => validateSettings({ ...lodgingSettings, taxTime: { "2025-26": { awayWeeks: ["soon"] } } }), "not a date");
+assert.throws(() => validateSettings({ ...lodgingSettings, taxTime: { "2025-26": { taxWithheld: -1 } } }), "negative withholding");
+
+// Lodge mode's "What's in it" must add up to the total it shows for each myTax label
+const lodgeExpenses = [course, internet, { ...course, id: "c2", description: "Textbook", amount: 80, claimableAmount: 80 }];
+const lodgeRows = getMyTaxRows(getCategoryBreakdown(lodgeExpenses, "fixed_rate", [laptop], "2025-26"), 70);
+assert.ok(lodgeRows.length >= 2);
+for (const row of lodgeRows) {
+  const lines = lodgeLines(row.item, lodgeExpenses, [laptop], hoursDiary, "2025-26", "fixed_rate", 70);
+  assert.ok(Math.abs(lines.reduce((s, l) => s + l.amount, 0) - row.amount) < 0.01, `${row.item} lines sum to its total`);
+}
+assert.ok(!lodgeRows.some((r) => lodgeLines(r.item, lodgeExpenses, [laptop], hoursDiary, "2025-26", "fixed_rate", 70)
+  .some((l) => l.label === "Home internet")), "the 70c rate covers internet, so it's in no label");
+console.log("Tax time checks passed.");

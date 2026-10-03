@@ -23,6 +23,12 @@ const readChecked = (): string[] => {
   }
 };
 
+/** AI scans not yet swiped through on this phone (the Expenses "Not checked" filter, Tax time). */
+export const uncheckedScans = (expenses: Expense[]) => {
+  const checked = new Set(readChecked());
+  return expenses.filter((e) => isAiScanned(e) && !checked.has(fingerprint(e)));
+};
+
 type Decision = "personal" | "confirm";
 
 export const ReceiptReview = () => {

@@ -6,11 +6,13 @@ import type {
   FinancialYear,
   RentalProperty,
   RentalTransaction,
+  TaxTimeRecord,
   UserSettings,
   WfhActualCost,
   WfhEntry,
 } from "@shared/types";
 import { calculateTaxSummary } from "@shared/tax-calculator";
+import { taxTimeFor, withTaxTime } from "@shared/tax-time";
 import { calculateCgt } from "@shared/cgt";
 import { calculateRentalSummary } from "@shared/rental";
 import { api, loadToken, onTokenExpired, saveToken } from "./api";
@@ -19,7 +21,7 @@ import { api, loadToken, onTokenExpired, saveToken } from "./api";
 // plus the whole-history ones, with the summary worked out on-device by the
 // same shared functions the web dashboard uses.
 
-type Data = {
+export type Data = {
   settings: UserSettings;
   expenses: Expense[];
   assets: DepreciatingAsset[];
@@ -114,6 +116,20 @@ const useStoreValue = () => {
     [reload]
   );
 
+  /** Several rows, six at a time, one list reload. Stops at the first failed batch; earlier rows stay saved. */
+  const saveMany = useCallback(
+    async <K extends keyof Editable>(key: K, rows: Editable[K][]) => {
+      try {
+        for (let i = 0; i < rows.length; i += 6) {
+          await Promise.all(rows.slice(i, i + 6).map((row) => api(`/api/mobile/${RESOURCE[key]}`, { method: "PUT", body: row })));
+        }
+      } finally {
+        await reload(key);
+      }
+    },
+    [reload]
+  );
+
   const remove = useCallback(
     async (key: "expenses" | "wfhEntries", id: string) => {
       await api(`/api/mobile/${RESOURCE[key]}?id=${encodeURIComponent(id)}`, { method: "DELETE" });
@@ -125,8 +141,43 @@ const useStoreValue = () => {
   const saveSettings = useCallback(
     async (settings: UserSettings) => {
       await api("/api/mobile/settings", { method: "PUT", body: settings });
-      // the FY may have changed, and every FY-scoped list with it
-      await refresh();
+      // a new FY means every FY-scoped list changes; otherwise only settings did
+      if (settings.financialYear !== fy.current) await refresh();
+      else setData((d) => (d ? { ...d, settings } : d));
+    },
+    [refresh]
+  );
+
+  // Lodging saves queue up and each builds on the last, so two quick taps
+  // (ticking two bills) can't both start from the same stale settings.
+  const latestSettings = useRef<UserSettings | null>(null);
+  const settings = data?.settings;
+  useEffect(() => {
+    latestSettings.current = settings ?? null;
+  }, [settings]);
+  const taxTimeQueue = useRef(Promise.resolve());
+
+  /** Merge into one FY's lodging record (tax withheld, bills, Lodge mode progress…).
+   *  Pass a function to build on the latest record, e.g. to add to a list. */
+  const saveTaxTime = useCallback(
+    (patch: Partial<TaxTimeRecord> | ((record: TaxTimeRecord) => Partial<TaxTimeRecord>), year?: FinancialYear) => {
+      const run = taxTimeQueue.current.then(async () => {
+        const current = latestSettings.current;
+        if (!current) return;
+        const target = year ?? current.financialYear;
+        const next = withTaxTime(current, target, typeof patch === "function" ? patch(taxTimeFor(current, target)) : patch);
+        latestSettings.current = next;
+        // shown straight away so switches don't snap back mid-save; a failure reloads what's stored
+        setData((d) => (d ? { ...d, settings: next } : d));
+        try {
+          await api("/api/mobile/settings", { method: "PUT", body: next });
+        } catch (e) {
+          await refresh();
+          throw e;
+        }
+      });
+      taxTimeQueue.current = run.catch(() => {});
+      return run;
     },
     [refresh]
   );
@@ -147,8 +198,9 @@ const useStoreValue = () => {
       s.annualIncome,
       s.financialYear,
       s.wfhMethod,
-      s.taxResidentStatus === "resident",
-      { hasHelpDebt: s.hasHelpDebt, hasPrivateHospitalCover: s.hasPrivateHospitalCover },
+      // same inputs as the web's tax-context, so both show the same numbers
+      s.taxResidentStatus,
+      { ...s.taxOptions, hasHelpDebt: s.hasHelpDebt, hasPrivateHospitalCover: s.hasPrivateHospitalCover },
       cgt.netCapitalGain,
       rental.assessableIncome,
       rental.deductibleExpenses
@@ -165,8 +217,10 @@ const useStoreValue = () => {
     signOut,
     deleteAccount,
     save,
+    saveMany,
     remove,
     saveSettings,
+    saveTaxTime,
     expensesFor,
   };
 };

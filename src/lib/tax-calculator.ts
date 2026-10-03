@@ -248,7 +248,7 @@ export const calculateTaxSummary = (
   };
 };
 
-const ASSET_TYPE_TO_CATEGORY: Record<string, ExpenseCategory> = {
+export const ASSET_TYPE_TO_CATEGORY: Record<string, ExpenseCategory> = {
   laptop: "computer_equipment",
   desktop: "computer_equipment",
   monitor: "computer_equipment",

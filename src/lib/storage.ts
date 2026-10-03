@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { DEFAULT_SETTINGS, FY_DATE_RANGES } from "./constants";
 import { applyCarClaimCaps, findLinkedAsset } from "./expense-claims";
+import { packTaxOptions, unpackTaxOptions } from "./tax-time";
 import { validateExpense, validateAsset, validateSettings, validateWfhEntry, validateWfhActualCost, validateCgtTransaction, validateRentalProperty, validateRentalTransaction, validateBackup } from "./validation";
 
 const isNeonBackend = () => isNeonConfigured() && !isSupabaseConfigured();
@@ -158,7 +159,7 @@ const toSettings = (row: Row): UserSettings => ({
   depreciationMethod: row.depreciation_method as UserSettings["depreciationMethod"],
   hasHelpDebt: Boolean(row.has_help_debt),
   hasPrivateHospitalCover: Boolean(row.has_private_hospital_cover),
-  taxOptions: (row.tax_options as UserSettings["taxOptions"]) ?? {},
+  ...unpackTaxOptions(row.tax_options),
 });
 
 const fromSettings = (s: UserSettings, userId: string) => ({
@@ -172,7 +173,7 @@ const fromSettings = (s: UserSettings, userId: string) => ({
   depreciation_method: s.depreciationMethod,
   has_help_debt: s.hasHelpDebt,
   has_private_hospital_cover: s.hasPrivateHospitalCover,
-  tax_options: s.taxOptions ?? {},
+  tax_options: packTaxOptions(s),
 });
 
 const getSupabaseUserId = async (): Promise<string> => {
@@ -453,7 +454,7 @@ export const getSettings = async (): Promise<UserSettings> => {
 };
 
 export const saveSettings = async (settings: UserSettings): Promise<void> => {
-  validateSettings(settings);
+  settings = validateSettings(settings);
   if (isNeonBackend()) return neonActions.neonSaveSettings(settings);
   if (!isSupabaseConfigured()) { local.saveSettings(settings); return; }
   const userId = await getSupabaseUserId();

@@ -11,7 +11,8 @@ const MYTAX_ITEM: Record<string, string> = {
   tax_affairs: "Cost of managing tax affairs (D10)",
 };
 const MYTAX_OTHER = "Other work-related expenses (D5)";
-const MYTAX_WFH = "Working from home (D5)";
+export const MYTAX_WFH = "Working from home (D5)";
+export const myTaxItemFor = (category: string) => MYTAX_ITEM[category] ?? MYTAX_OTHER;
 const MYTAX_ORDER = [
   "Work-related car (D1)",
   "Work-related travel (D2)",
@@ -26,7 +27,7 @@ const MYTAX_ORDER = [
 export const getMyTaxRows = (breakdown: CategoryBreakdown[], wfhDeduction: number) => {
   const groups = new Map<string, number>();
   for (const b of breakdown) {
-    const item = MYTAX_ITEM[b.category] ?? MYTAX_OTHER;
+    const item = myTaxItemFor(b.category);
     groups.set(item, (groups.get(item) ?? 0) + b.amount);
   }
   if (wfhDeduction > 0) groups.set(MYTAX_WFH, wfhDeduction);

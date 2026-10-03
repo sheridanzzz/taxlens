@@ -1,23 +1,24 @@
 import { useState } from "react";
-import { Linking, Pressable, View } from "react-native";
+import { Pressable, View } from "react-native";
 import { router } from "expo-router";
-import type { Expense, WfhMethod } from "@shared/types";
 import { WFH_FIXED_RATE_PER_HOUR } from "@shared/constants";
-import { formatCurrency, getCategoryBreakdown, isCoveredByFixedRate } from "@shared/tax-calculator";
-import { getMyTaxRows } from "@shared/mytax";
+import { formatCurrency, isCoveredByFixedRate } from "@shared/tax-calculator";
+import { refundEstimate, taxTimeFor } from "@shared/tax-time";
 import { useData } from "@/lib/store";
-import { API_URL } from "@/lib/api";
+import { claimNote, myTaxCode, myTaxName, myTaxRows, needsReceipt, openWeb, plural, shortDate } from "@/lib/expenses";
 import { colors } from "@/lib/theme";
 import { ReceiptReview } from "@/components/receipt-review";
-import { Button, Card, Heading, Icon, Screen, T, Tile } from "@/components/ui";
+import { Button, Card, Heading, Icon, Pills, Screen, T, Tile } from "@/components/ui";
 
 const DAY = 86_400_000;
 const TINTS = [colors.butter, colors.mint, colors.pink, colors.sky, colors.lav];
 const COIN = "#f2b63c";
 // the web Jar (dashboard/page.tsx) is an SVG on a 100×120 grid; these Views redraw it at this scale
 const S = 0.72;
-
-const openWeb = (path: string) => void Linking.openURL(`${API_URL}${path}`);
+const COMPARE = [
+  { value: "with", label: "With deductions" },
+  { value: "without", label: "Without" },
+] as const;
 
 const Jar = ({ fill }: { fill: number }) => {
   // the pot fills as the financial year goes on
@@ -58,17 +59,6 @@ const greeting = () => {
   return h < 12 ? "Morning!" : h < 17 ? "Arvo!" : "Evening!";
 };
 
-const claimNote = (e: Expense, wfhMethod: WfhMethod) =>
-  isCoveredByFixedRate(e, wfhMethod)
-    ? "Covered by the 70c rate"
-    : e.workUsePercent === 0
-      ? "Personal · no deduction"
-      : e.claimType === "depreciation"
-        ? "Over $300, so it's depreciated"
-        : e.workUsePercent < 100
-          ? `${e.workUsePercent}% work use`
-          : "Claimed in full";
-
 const Chip = ({ text, tint = colors.plum2, color = colors.lav }: { text: string; tint?: string; color?: string }) => (
   <View style={{ borderRadius: 999, backgroundColor: tint, paddingHorizontal: 12, paddingVertical: 5 }}>
     <T w="bold" size={13} color={color}>
@@ -81,8 +71,13 @@ export default function Home() {
   const { data, summary, refresh } = useData();
   const [refreshing, setRefreshing] = useState(false);
   const [now] = useState(() => Date.now());
+  const [compare, setCompare] = useState<"with" | "without">("with");
   const { settings, expenses, wfhEntries, assets } = data;
   const fy = settings.financialYear;
+
+  const { taxWithheld } = taxTimeFor(settings);
+  const refund = taxWithheld === undefined ? null : refundEstimate(summary, taxWithheld)[compare === "with" ? "withDeductions" : "withoutDeductions"];
+  const taxBill = compare === "with" ? summary.taxPayable : summary.taxPayableWithoutDeductions;
 
   // same year-progress maths as the web dashboard
   const startYear = parseInt(fy.slice(0, 4), 10);
@@ -108,13 +103,9 @@ export default function Home() {
     (settings.wfhMethod === "fixed_rate" ? weekHours * WFH_FIXED_RATE_PER_HOUR : 0);
 
   const empty = expenses.length === 0 && assets.length === 0 && wfhEntries.length === 0;
-  const missingReceipts = expenses.filter((e) => e.workUsePercent > 0 && !e.receiptDataUrl && !e.hasReceipt).length;
+  const missingReceipts = expenses.filter(needsReceipt).length;
 
-  const returnRows = getMyTaxRows(
-    getCategoryBreakdown(expenses, settings.wfhMethod, assets, fy),
-    summary.totalWfhDeduction
-  );
-  if (summary.rentalDeductions > 0) returnRows.push({ item: "Rental property (I21)", amount: summary.rentalDeductions });
+  const returnRows = myTaxRows(data, summary);
 
   const recent = [...expenses].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 6);
 
@@ -157,7 +148,7 @@ export default function Home() {
         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
           <View style={{ flex: 1 }}>
             <T w="bold" size={15} color={colors.butter}>
-              Estimated tax savings · FY {fy}
+              {refund === null ? "Estimated tax savings" : refund >= 0 ? "Estimated refund" : "Estimated amount owing"} · FY {fy}
             </T>
             <T
               w="black"
@@ -167,13 +158,14 @@ export default function Home() {
               numberOfLines={1}
               style={{ letterSpacing: -1.5, fontVariant: ["tabular-nums"] }}
             >
-              {formatCurrency(summary.estimatedTaxSaved)}
+              {formatCurrency(refund === null ? summary.estimatedTaxSaved : Math.abs(refund))}
             </T>
             <T w="medium" size={15} color={colors.lav}>
-              Tax your deductions save you
-              {settings.annualIncome > 0
-                ? ` on a ${formatCurrency(settings.annualIncome)} salary.`
-                : ". Add your salary in Settings for a sharper number."}
+              {refund !== null
+                ? `${formatCurrency(taxWithheld ?? 0)} withheld − ${formatCurrency(taxBill)} estimated tax`
+                : settings.annualIncome > 0
+                  ? `Tax your deductions save you on a ${formatCurrency(settings.annualIncome)} salary.`
+                  : "Tax your deductions save you. Add your salary in Settings for a sharper number."}
             </T>
           </View>
           <Jar fill={yearDone} />
@@ -204,8 +196,20 @@ export default function Home() {
           <Chip text={`${formatCurrency(summary.totalDeductions)} in deductions`} />
           <Chip text={`Taxable income ${formatCurrency(summary.taxableIncome)}`} />
         </View>
+        {refund !== null && (
+          <View style={{ gap: 6 }}>
+            <Pills label="Compare the estimate" options={[...COMPARE]} value={compare} onChange={setCompare} dark />
+            {compare === "with" && summary.estimatedTaxSaved > 0 && (
+              <T w="medium" size={13} color={colors.lav}>
+                Your claims are worth {formatCurrency(summary.estimatedTaxSaved)} of that.
+              </T>
+            )}
+          </View>
+        )}
         <T size={12} color={colors.lav}>
-          Your final refund also depends on tax withheld and other income.
+          {refund === null
+            ? "Add the tax withheld from your income statement in Settings to see an estimated refund."
+            : "An estimate from your salary, deductions and tax withheld. Other income, offsets and the ATO's own figures can change it."}
         </T>
       </Card>
 
@@ -220,10 +224,9 @@ export default function Home() {
         <Tile
           tint={colors.butter}
           icon="doc.text.fill"
-          web
-          title={missingReceipts > 0 ? `${missingReceipts} receipt${missingReceipts === 1 ? "" : "s"} missing` : "Every receipt attached"}
+          title={missingReceipts > 0 ? `${plural(missingReceipts, "receipt")} missing` : "Every receipt attached"}
           detail={missingReceipts > 0 ? "Attach them before you lodge" : "Nice — nothing to chase"}
-          onPress={() => openWeb("/expenses")}
+          onPress={() => router.navigate({ pathname: "/expenses", params: { filter: "no-receipt" } })}
         />
         <Tile
           tint={colors.mint}
@@ -253,7 +256,7 @@ export default function Home() {
         ) : (
           <View>
             {returnRows.map((r, i) => {
-              const code = r.item.match(/\(([A-Z]\d+)\)$/)?.[1] ?? "";
+              const code = myTaxCode(r.item);
               return (
                 <View key={r.item} style={{ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 10, borderTopWidth: i ? 1 : 0, borderColor: colors.border }}>
                   <View style={{ minWidth: 44, borderRadius: 8, backgroundColor: colors.lav, paddingHorizontal: 6, paddingVertical: 4, alignItems: "center" }}>
@@ -262,7 +265,7 @@ export default function Home() {
                     </T>
                   </View>
                   <T w="bold" size={15} style={{ flex: 1 }}>
-                    {r.item.replace(/ \([A-Z]\d+\)$/, "")}
+                    {myTaxName(r.item)}
                   </T>
                   <T w="bold" size={15} style={{ fontVariant: ["tabular-nums"] }}>
                     {formatCurrency(r.amount)}
@@ -303,8 +306,7 @@ export default function Home() {
                   {e.description}
                 </T>
                 <T w="medium" size={13} color={colors.inkSoft}>
-                  {new Date(`${e.date}T12:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" })} ·{" "}
-                  {claimNote(e, settings.wfhMethod)}
+                  {shortDate(e.date)} · {claimNote(e, settings.wfhMethod)}
                 </T>
               </View>
               <T w="bold" size={15} style={{ fontVariant: ["tabular-nums"] }}>

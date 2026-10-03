@@ -1,6 +1,8 @@
 # Calculation scope and rates
 
-Verified against the sources below on 1 October 2026. Ledgr estimates annual liabilities and the effect of deductions; it does not calculate a tax refund from PAYG withholding or lodge a return.
+Verified against the sources below on 1 October 2026. Ledgr estimates annual liabilities and the effect of deductions; it does not lodge a return.
+
+The iOS app turns that estimate into a refund estimate once you enter the tax withheld from your income statement: tax withheld minus the estimated liability above (which already includes Medicare, the surcharge and HELP). It ignores PAYG instalments, other withholding not on that statement, and any income or offsets Ledgr doesn't hold, so the ATO's assessment can differ.
 
 ## Supported estimate
 

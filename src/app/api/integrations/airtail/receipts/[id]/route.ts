@@ -3,7 +3,7 @@ import { connectorJson, connectorUser, callAirtail } from "@/lib/airtail-server"
 export const maxDuration = 60;
 export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const user = await connectorUser();
+    const user = await connectorUser(request);
     if (!user) return connectorJson({ error: "Sign in to Ledgr first." }, 401);
     const { id } = await params;
     if (!/^[a-f0-9]{24}$/.test(id)) return connectorJson({ error: "Receipt not found." }, 404);

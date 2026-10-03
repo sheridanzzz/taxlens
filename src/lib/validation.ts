@@ -1,5 +1,5 @@
 import { ASSET_EFFECTIVE_LIVES, EXPENSE_CATEGORIES, FY_DATE_RANGES } from "./constants";
-import type { DepreciatingAsset, Expense, UserSettings, WfhEntry, WfhActualCost, CgtTransaction, RentalProperty, RentalTransaction } from "./types";
+import type { DepreciatingAsset, Expense, FinancialYear, TaxTimeRecord, UserSettings, WfhEntry, WfhActualCost, CgtTransaction, RentalProperty, RentalTransaction } from "./types";
 
 const number = (value: number, min: number, max = Infinity) => {
   if (!Number.isFinite(value) || value < min || value > max) throw new Error("Enter a valid amount or percentage.");
@@ -46,7 +46,40 @@ export const validateSettings = (s: UserSettings): UserSettings => {
       if (typeof value !== "boolean") throw new Error("Invalid tax setting.");
     } else if (value !== undefined) number(value as number, 0);
   }
-  return s;
+  return s.taxTime === undefined ? s : { ...s, taxTime: validateTaxTime(s.taxTime) };
+};
+
+const isoDate = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && Number.isFinite(Date.parse(v));
+const list = (v: unknown, max: number, ok: (item: unknown) => boolean) => {
+  if (v === undefined) return undefined;
+  if (!Array.isArray(v) || v.length > max || !v.every(ok)) throw new Error("Invalid tax time details.");
+  return [...new Set(v as string[])];
+};
+
+// Rebuilt key by key so the phone can't park arbitrary JSON in user_settings.
+const validateTaxTime = (value: unknown): UserSettings["taxTime"] => {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid tax time details.");
+  const out: NonNullable<UserSettings["taxTime"]> = {};
+  for (const [fy, r] of Object.entries(value as Record<string, TaxTimeRecord>)) {
+    if (!FY_DATE_RANGES[fy as FinancialYear] || !r || typeof r !== "object") throw new Error("Invalid tax time details.");
+    if (r.taxWithheld !== undefined) number(r.taxWithheld, 0, 10_000_000);
+    if (r.lodgedAt !== undefined && !isoDate(r.lodgedAt)) throw new Error("Invalid lodgement date.");
+    const bills = r.bills === undefined ? undefined : Object.fromEntries(
+      (["electricity", "phone", "internet"] as const).filter((k) => r.bills?.[k] !== undefined).map((k) => {
+        if (typeof r.bills?.[k] !== "boolean") throw new Error("Invalid tax time details.");
+        return [k, r.bills[k]];
+      })
+    );
+    out[fy as FinancialYear] = {
+      taxWithheld: r.taxWithheld,
+      bills,
+      awayWeeks: list(r.awayWeeks, 60, isoDate),
+      filledDays: list(r.filledDays, 400, isoDate),
+      entered: list(r.entered, 30, (v) => typeof v === "string" && v.length <= 80),
+      lodgedAt: r.lodgedAt,
+    };
+  }
+  return out;
 };
 
 export const validateWfhEntry = (e: WfhEntry) => {

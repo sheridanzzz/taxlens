@@ -141,6 +141,24 @@ export interface UserSettings {
   /** No hospital cover above the MLS threshold means an extra 1–1.5%. */
   hasPrivateHospitalCover: boolean;
   taxOptions?: TaxOptions;
+  /** Lodging progress per financial year (see lib/tax-time.ts). */
+  taxTime?: Partial<Record<FinancialYear, TaxTimeRecord>>;
+}
+
+export type RunningCostBill = "electricity" | "phone" | "internet";
+
+export interface TaxTimeRecord {
+  /** Total tax withheld, from the income statement. */
+  taxWithheld?: number;
+  /** One bill held for each running cost the 70c rate covers. */
+  bills?: Partial<Record<RunningCostBill, boolean>>;
+  /** Mondays of weeks spent in the office or on leave, so they aren't gaps. */
+  awayWeeks?: string[];
+  /** Days added by "fill from usual week", told apart from days logged at the time. */
+  filledDays?: string[];
+  /** myTax items already typed in during Lodge mode. */
+  entered?: string[];
+  lodgedAt?: string;
 }
 
 export interface TaxOptions {

@@ -41,6 +41,13 @@ const RESOURCES: Record<string, Resource> = {
   cgt: { get: (u) => db.getCgtTransactions(u) },
   "rental-properties": { get: (u) => db.getRentalProperties(u) },
   "rental-transactions": { get: (u, q) => db.getRentalTransactions(u, fy(q)) },
+  // one expense's stored receipt (image, PDF or email) as a data URL, or null
+  receipt: {
+    get: (u, q) => {
+      const id = q.get("id") ?? "";
+      return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) ? db.getExpenseReceipt(u, id) : Promise.resolve(null);
+    },
+  },
 };
 
 const handle = async (

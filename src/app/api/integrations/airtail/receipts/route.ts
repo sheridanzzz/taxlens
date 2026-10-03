@@ -1,12 +1,13 @@
 import { FY_DATE_RANGES } from "@/lib/constants";
 import type { FinancialYear } from "@/lib/types";
 import { connectorJson, connectorUser, callAirtail } from "@/lib/airtail-server";
+import { airtailExpenseId } from "@/lib/airtail-import";
 
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
   try {
-    const user = await connectorUser();
+    const user = await connectorUser(request);
     if (!user) return connectorJson({ error: "Sign in to Ledgr first." }, 401);
     const params = new URL(request.url).searchParams;
     const fy = params.get("fy") as FinancialYear;
@@ -20,6 +21,11 @@ export async function GET(request: Request) {
       if (!/^[a-f0-9]{24}$/.test(cursor)) return connectorJson({ error: "Invalid page cursor." }, 400);
       query.set("cursor", cursor);
     }
-    return connectorJson(await callAirtail(user, `receipts?${query}`));
+    const data = await callAirtail(user, `receipts?${query}`);
+    // the expense id an import gets, so the iOS app can match without bundling uuid
+    const receipts = Array.isArray(data.receipts)
+      ? data.receipts.map((r: { id: string }) => ({ ...r, expenseId: airtailExpenseId(r.id) }))
+      : data.receipts;
+    return connectorJson({ ...data, receipts });
   } catch (error) { return connectorJson({ error: error instanceof Error ? error.message : "Could not retrieve receipts." }, 503); }
 }

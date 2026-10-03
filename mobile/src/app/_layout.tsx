@@ -30,6 +30,10 @@ const Navigator = ({ fontsLoaded }: { fontsLoaded: boolean }) => {
       <Stack.Protected guard={signedIn}>
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="expense" options={{ presentation: "modal" }} />
+        <Stack.Screen name="receipt" options={{ presentation: "modal" }} />
+        <Stack.Screen name="airtail" options={{ presentation: "modal" }} />
+        <Stack.Screen name="gaps" options={{ presentation: "modal" }} />
+        <Stack.Screen name="lodge" options={{ presentation: "fullScreenModal", gestureEnabled: false }} />
       </Stack.Protected>
       <Stack.Protected guard={!signedIn}>
         <Stack.Screen name="sign-in" />

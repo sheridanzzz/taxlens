@@ -1,13 +1,18 @@
 import { useState } from "react";
 import { Alert, Linking, Pressable, Switch, View } from "react-native";
 import Constants from "expo-constants";
+import { router } from "expo-router";
+import DateTimePicker from "@react-native-community/datetimepicker";
 import type { SFSymbol } from "expo-symbols";
-import type { UserSettings } from "@shared/types";
+import type { FinancialYear, UserSettings } from "@shared/types";
 import { FINANCIAL_YEARS } from "@shared/constants";
+import { taxTimeFor, withTaxTime } from "@shared/tax-time";
 import { useData } from "@/lib/store";
 import { API_URL } from "@/lib/api";
+import { allowNotifications, readPrefs, savePrefs, USUAL_DAY_HOURS, type ReminderPrefs } from "@/lib/reminders";
+import { shareReceiptPack } from "@/lib/receipt-pack";
 import { colors } from "@/lib/theme";
-import { Button, Card, Choice, Field, Heading, Icon, Screen, T } from "@/components/ui";
+import { Button, Card, Choice, Field, Heading, Icon, Label, Screen, T } from "@/components/ui";
 
 const RESIDENCY: { value: UserSettings["taxResidentStatus"]; label: string }[] = [
   { value: "resident", label: "Australian resident" },
@@ -29,8 +34,24 @@ const WEB_LINKS: { path: string; label: string; icon: SFSymbol }[] = [
   { path: "/investments", label: "Shares & crypto", icon: "chart.line.uptrend.xyaxis" },
   { path: "/reports", label: "Reports & myTax export", icon: "doc.richtext.fill" },
   { path: "/ask", label: "Ask about deductions", icon: "questionmark.bubble.fill" },
-  { path: "/settings?airtail=setup", label: "Email receipts from Airtail", icon: "envelope.fill" },
+  { path: "/settings?airtail=setup", label: "Connect Airtail (email receipts)", icon: "envelope.badge.fill" },
 ];
+
+const Row = ({ icon, label, onPress, busy }: { icon: SFSymbol; label: string; onPress: () => void; busy?: boolean }) => (
+  <Pressable
+    accessibilityRole="button"
+    accessibilityState={{ busy }}
+    disabled={busy}
+    onPress={onPress}
+    style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 12, paddingVertical: 12, opacity: pressed || busy ? 0.6 : 1 })}
+  >
+    <Icon name={icon} size={18} />
+    <T w="bold" style={{ flex: 1 }}>
+      {busy ? "Making the PDF…" : label}
+    </T>
+    <Icon name="chevron.right" size={13} color={colors.inkSoft} />
+  </Pressable>
+);
 
 const Toggle = ({ label, detail, value, onChange }: { label: string; detail: string; value: boolean; onChange: (v: boolean) => void }) => (
   <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
@@ -45,9 +66,17 @@ const Toggle = ({ label, detail, value, onChange }: { label: string; detail: str
 );
 
 export default function Settings() {
-  const { data, saveSettings, signOut, deleteAccount } = useData();
+  const { data, summary, saveSettings, saveTaxTime, signOut, deleteAccount } = useData();
+  const [prefs, setPrefs] = useState(readPrefs);
+  const [reminderMessage, setReminderMessage] = useState("");
+  const [packing, setPacking] = useState(false);
   const [draft, setDraft] = useState(data.settings);
   const [income, setIncome] = useState(data.settings.annualIncome ? String(data.settings.annualIncome) : "");
+  const storedWithheld = (fy: FinancialYear) => {
+    const v = taxTimeFor(data.settings, fy).taxWithheld;
+    return v === undefined ? "" : String(v);
+  };
+  const [withheld, setWithheld] = useState(() => storedWithheld(data.settings.financialYear));
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -55,8 +84,19 @@ export default function Settings() {
     setDraft((d) => ({ ...d, [key]: value }));
     setMessage("");
   };
-  const next = { ...draft, annualIncome: parseFloat(income.replace(/[^\d.]/g, "")) || 0, occupation: draft.occupation.trim() };
-  const dirty = JSON.stringify(next) !== JSON.stringify(data.settings);
+  const handleYearChange = (fy: FinancialYear) => {
+    set("financialYear", fy);
+    setWithheld(storedWithheld(fy));
+  };
+  const parsedWithheld = withheld.trim() === "" ? undefined : parseFloat(withheld.replace(/[^\d.]/g, "")) || 0;
+  // lodging progress comes from the store, not the draft, so this screen can't undo
+  // what Tax time or Lodge mode saved since it opened
+  const next = withTaxTime(
+    { ...draft, taxTime: data.settings.taxTime, annualIncome: parseFloat(income.replace(/[^\d.]/g, "")) || 0, occupation: draft.occupation.trim() },
+    draft.financialYear,
+    { taxWithheld: parsedWithheld }
+  );
+  const dirty = JSON.stringify(next) !== JSON.stringify(withTaxTime(data.settings, draft.financialYear, {}));
 
   const submit = async () => {
     setBusy(true);
@@ -69,6 +109,36 @@ export default function Settings() {
       setBusy(false);
     }
   };
+
+  const handleReminders = async (patch: Partial<ReminderPrefs>) => {
+    setReminderMessage("");
+    const turningOn = (patch.hours && !prefs.hours) || (patch.deadline && !prefs.deadline);
+    if (turningOn && !(await allowNotifications())) {
+      setReminderMessage("Notifications are off for Ledgr. Turn them on in the Settings app, then try again.");
+      return;
+    }
+    const nextPrefs = { ...prefs, ...patch };
+    setPrefs(nextPrefs);
+    try {
+      await savePrefs(nextPrefs, data);
+    } catch {
+      setReminderMessage("Couldn't set the reminders. Try again.");
+    }
+  };
+
+  const handlePack = async () => {
+    setPacking(true);
+    try {
+      await shareReceiptPack(data, summary);
+    } catch (e) {
+      Alert.alert("Couldn't make the receipt pack", e instanceof Error ? e.message : "Try again.");
+    } finally {
+      setPacking(false);
+    }
+  };
+
+  const lodgedAt = taxTimeFor(data.settings, draft.financialYear).lodgedAt;
+  const reminderTime = new Date(2000, 0, 1, prefs.hour, prefs.minute);
 
   const confirmDelete = () =>
     Alert.alert(
@@ -89,8 +159,32 @@ export default function Settings() {
       <Heading title="Settings" subtitle="These shape every estimate" />
 
       <Card style={{ gap: 16 }}>
-        <Choice label="Financial year" value={draft.financialYear} options={FINANCIAL_YEARS} onChange={(v) => set("financialYear", v)} />
+        <Choice label="Financial year" value={draft.financialYear} options={FINANCIAL_YEARS} onChange={handleYearChange} />
         <Field label="Salary before tax" value={income} onChangeText={setIncome} keyboardType="number-pad" prefix="$" placeholder="0" />
+        <View style={{ gap: 4 }}>
+          <Field
+            label={`Tax withheld · FY ${draft.financialYear}`}
+            value={withheld}
+            onChangeText={(v) => {
+              setWithheld(v);
+              setMessage("");
+            }}
+            keyboardType="decimal-pad"
+            prefix="$"
+            placeholder="From your income statement"
+          />
+          <T size={13} color={colors.inkSoft}>
+            In myGov under Employment income statements, or on your payslip at 30 June. Home then shows an estimated refund.
+          </T>
+        </View>
+        {lodgedAt && (
+          <View style={{ flexDirection: "row", alignItems: "center", gap: 12 }}>
+            <T size={14} color={colors.inkSoft} style={{ flex: 1 }}>
+              FY {draft.financialYear} marked lodged on {new Date(`${lodgedAt}T12:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "long" })}.
+            </T>
+            <Button title="Undo" kind="soft" onPress={() => void saveTaxTime({ lodgedAt: undefined }, draft.financialYear).catch(() => {})} style={{ minHeight: 38 }} />
+          </View>
+        )}
         <Field label="Occupation" value={draft.occupation} onChangeText={(v) => set("occupation", v)} autoCapitalize="words" />
         <Choice label="Tax residency" value={draft.taxResidentStatus} options={RESIDENCY} onChange={(v) => set("taxResidentStatus", v)} />
       </Card>
@@ -112,6 +206,49 @@ export default function Settings() {
           )}
         </View>
       )}
+
+      <Card style={{ gap: 14 }}>
+        <T w="heavy" size={18} color={colors.plum} accessibilityRole="header">
+          Reminders
+        </T>
+        <Toggle
+          label="Log my hours"
+          detail={`Weekdays, with Log ${USUAL_DAY_HOURS} h right on the notification`}
+          value={prefs.hours}
+          onChange={(v) => void handleReminders({ hours: v })}
+        />
+        {prefs.hours && (
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+            <Label>Remind me at</Label>
+            <DateTimePicker
+              value={reminderTime}
+              mode="time"
+              display="compact"
+              accentColor={colors.tangerine}
+              onValueChange={(_, picked) => void handleReminders({ hour: picked.getHours(), minute: picked.getMinutes() })}
+            />
+          </View>
+        )}
+        <Toggle
+          label="Lodging deadline"
+          detail="Two weeks, one week and two days before 31 October, with what's left"
+          value={prefs.deadline}
+          onChange={(v) => void handleReminders({ deadline: v })}
+        />
+        {!!reminderMessage && (
+          <T size={14} color={colors.negative} accessibilityRole="alert">
+            {reminderMessage}
+          </T>
+        )}
+      </Card>
+
+      <Card style={{ gap: 4 }}>
+        <T w="heavy" size={18} color={colors.plum} accessibilityRole="header">
+          Records
+        </T>
+        <Row icon="doc.on.doc.fill" label={`Receipt pack for FY ${data.settings.financialYear} (PDF)`} busy={packing} onPress={() => void handlePack()} />
+        <Row icon="envelope.fill" label="Email receipts from Airtail" onPress={() => router.push("/airtail")} />
+      </Card>
 
       <Card style={{ gap: 4 }}>
         <T w="heavy" size={18} color={colors.plum} accessibilityRole="header">
