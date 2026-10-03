@@ -55,7 +55,7 @@ const LoginPage = () => {
           return;
         }
 
-        router.push("/dashboard");
+        router.push(new URLSearchParams(window.location.search).has("airtail") ? "/settings?airtail=setup" : "/dashboard");
         router.refresh();
       } catch {
         setError("Sign in failed. Please try again.");
@@ -77,7 +77,7 @@ const LoginPage = () => {
       return;
     }
 
-    router.push("/dashboard");
+    router.push(new URLSearchParams(window.location.search).has("airtail") ? "/settings?airtail=setup" : "/dashboard");
     router.refresh();
   };
 

@@ -29,6 +29,7 @@ const WEB_LINKS: { path: string; label: string; icon: SFSymbol }[] = [
   { path: "/investments", label: "Shares & crypto", icon: "chart.line.uptrend.xyaxis" },
   { path: "/reports", label: "Reports & myTax export", icon: "doc.richtext.fill" },
   { path: "/ask", label: "Ask about deductions", icon: "questionmark.bubble.fill" },
+  { path: "/settings?airtail=setup", label: "Email receipts from Airtail", icon: "envelope.fill" },
 ];
 
 const Toggle = ({ label, detail, value, onChange }: { label: string; detail: string; value: boolean; onChange: (v: boolean) => void }) => (

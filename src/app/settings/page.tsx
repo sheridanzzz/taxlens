@@ -138,6 +138,8 @@ const SettingsPage = () => {
     setHelpDebt(state.settings.hasHelpDebt);
     setPrivateCover(state.settings.hasPrivateHospitalCover);
     setTaxOptions(state.settings.taxOptions ?? {});
+    // The Airtail callback, login and the iOS app all land here with ?airtail=…
+    if (new URLSearchParams(window.location.search).has("airtail")) setActiveTab("connections");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.loaded]);
 
