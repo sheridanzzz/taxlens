@@ -124,7 +124,9 @@ export const useReminders = () => {
     const action = response.actionIdentifier;
     if (kind === "deadline") return router.navigate("/tax-time");
     if (kind !== "hours") return;
-    const date = toLocalDate(new Date(response.notification.date));
+    // iOS reports seconds since 1970, Android milliseconds
+    const sent = response.notification.date;
+    const date = toLocalDate(new Date(sent < 1e12 ? sent * 1000 : sent));
     if (action === ACTION_LOG) {
       const fy = getFinancialYearForDate(date);
       if (!fy) return;

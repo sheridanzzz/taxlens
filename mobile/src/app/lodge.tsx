@@ -86,7 +86,7 @@ export default function Lodge() {
     const lines = linesFor(row.item);
     // the 70c method asks for hours and does the maths itself
     const hoursStep = row.item === MYTAX_WFH && settings.wfhMethod === "fixed_rate";
-    const hours = wfhEntries.reduce((s, e) => s + e.hours, 0);
+    const hours = Math.round(wfhEntries.reduce((s, e) => s + e.hours, 0) * 100) / 100;
     const copyText = hoursStep ? String(hours) : forMyTax(row.amount);
     return (
       <Screen>
