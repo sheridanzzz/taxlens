@@ -46,8 +46,9 @@ export function parseShortlist(text: string, receipts: AirtailReceipt[], profile
     const receipt = known.get(row.id)!; const baseline = ruleSuggestion(receipt, profile);
     // Known ordinary private purchases stay out of the shortlist. Work exceptions
     // still remain discoverable in All receipts; model output cannot erase them.
-    const needsRuleReview = !profile.occupation.trim() || phoneInternet.test(`${receipt.vendor} ${receipt.subject} ${receipt.category}`) || (profile.wfhMethod === "fixed_rate" && consumables.test(`${receipt.vendor} ${receipt.subject} ${receipt.category}`));
-    result[row.id] = baseline.bucket === "likely_personal" || (needsRuleReview && row.bucket === "possible_work") ? baseline : { bucket: row.bucket, reason: row.reason.trim(), source: "ai" };
+    const receiptText = `${receipt.vendor} ${receipt.subject} ${receipt.category}`;
+    const needsRuleReview = phoneInternet.test(receiptText) || (profile.wfhMethod === "fixed_rate" && consumables.test(receiptText)) || (!profile.occupation.trim() && row.bucket === "possible_work");
+    result[row.id] = baseline.bucket === "likely_personal" || needsRuleReview ? baseline : { bucket: row.bucket, reason: row.reason.trim(), source: "ai" };
   }
   return result;
 }
