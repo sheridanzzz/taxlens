@@ -38,7 +38,8 @@ export const MODEL_LABELS: Record<ModelKey, string> = {
  */
 export const generateTextWithFallback = async (
   messages: ModelMessage[],
-  maxOutputTokens: number
+  maxOutputTokens: number,
+  options: { signal?: AbortSignal; modelTimeoutMs?: number; system?: string } = {}
 ): Promise<{ text: string; modelKey: ModelKey }> => {
   const chain: ModelKey[] = ["primary", "quality", "fallback", "budget"];
   let lastError: unknown;
@@ -47,8 +48,10 @@ export const generateTextWithFallback = async (
       const { text } = await generateText({
         model: models[modelKey],
         messages,
+        system: options.system,
         maxOutputTokens,
         maxRetries: 1,
+        abortSignal: options.modelTimeoutMs ? AbortSignal.any([AbortSignal.timeout(options.modelTimeoutMs), ...(options.signal ? [options.signal] : [])]) : options.signal,
         // qwen3.8 is a thinking model; without this it spends the whole
         // token budget reasoning and returns nothing. Google ignores it.
         providerOptions: { groq: { reasoningEffort: "none" } },
@@ -56,6 +59,7 @@ export const generateTextWithFallback = async (
       return { text, modelKey };
     } catch (error) {
       lastError = error;
+      if (options.signal?.aborted) break;
       console.warn(
         `AI model "${modelKey}" failed:`,
         error instanceof Error ? error.message : error

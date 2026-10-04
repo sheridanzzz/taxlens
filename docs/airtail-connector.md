@@ -74,3 +74,12 @@ Connector checks use production code with synthetic email fixtures, database dou
 ## Current production setup
 
 Ledgr runs at https://ledgr-alphav2.vercel.app and Airtail at https://airtail.vercel.app. Both project configurations register these origins in `vercel.json`; Ledgr encrypts connector tokens with its existing server-only `AUTH_SECRET` unless `AIRTAIL_CONNECTOR_SECRET` is configured. Migration 006 and Airtail grant indexes were applied on 2 October 2026. Start in Ledgr Settings → Connections → Connect Airtail, sign into your existing Airtail account, then allow receipt access. Select a financial year, retrieve receipts, and review before saving.
+# Smart receipt shortlist
+
+In web Settings → Connections, retrieval requests an occupation-aware shortlist. Possible work expenses and receipts needing details appear by default; likely personal purchases remain accessible through the personal and all-receipts filters. The selected financial year and pagination still govern retrieval. Update the occupation in Profile and refresh to reassess the shortlist.
+
+Known ordinary personal purchases are sorted using conservative rules. Other summaries can use Ledgr's existing AI provider fallback chain. Only bounded merchant, subject, category, purchase date, amount/currency and the work profile are sent; original emails, attachments and mailbox credentials are excluded. Output must match the supplied receipt IDs and allowed categories. Invalid output, timeouts or provider failures return rule suggestions, labelled as rule sorting in the UI. Missing saved occupation never inherits a sample occupation.
+
+Suggestions do not change totals, save expenses or infer work-use percentages. Review the original receipt and confirm work use, reimbursement and any asset treatment before saving. WFH running-cost suggestions flag possible overlap with the fixed-rate method. See the [ATO's work-related expense conditions](https://www.ato.gov.au/myTax25Deductions) and [WFH expense guidance](https://www.ato.gov.au/individuals-and-families/income-deductions-offsets-and-records/deductions-you-can-claim/working-from-home-expenses).
+
+Run `npm run check` for shortlist parsing, classification safeguards and provider-failure checks alongside connector import and storage regressions. Browser fixtures cover default filtering, access to all receipts, pagination, year changes, failed refreshes and review starting at 0% work use.

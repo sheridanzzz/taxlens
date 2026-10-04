@@ -54,12 +54,12 @@ export async function removeConnection(user: ConnectorUser) {
   } else await sql()`DELETE FROM airtail_connections WHERE user_id=${user.id}`;
 }
 
-export async function callAirtail(user: ConnectorUser, path: string, method = "GET") {
+export async function callAirtail(user: ConnectorUser, path: string, method = "GET", timeoutMs = 55_000) {
   const connection = await getConnection(user);
   if (!connection) throw new Error("Connect Airtail in Ledgr Settings first.");
   const response = await fetch(`${connectorConfig().airtail}/api/integrations/ledgr/${path}`, {
     method, headers: { Authorization: `Bearer ${unseal(connection.token_ciphertext, `token:${user.id}`)}` },
-    cache: "no-store", redirect: "error", signal: AbortSignal.timeout(55_000),
+    cache: "no-store", redirect: "error", signal: AbortSignal.timeout(timeoutMs),
   });
   const body = await response.json().catch(() => ({ error: "Airtail returned an unexpected response." }));
   if (!response.ok && !(method === "DELETE" && response.status === 401)) throw new Error(body.error || "Could not reach Airtail. Try again.");

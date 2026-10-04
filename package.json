@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "check": "tsc src/lib/tax.check.ts --outDir .check --module commonjs --target es2022 --moduleResolution node --esModuleInterop --skipLibCheck && node .check/tax.check.js && node scripts/storage.check.mjs && node scripts/airtail.check.mjs && node scripts/password-recovery.check.mjs",
+    "check": "tsc src/lib/tax.check.ts --outDir .check --module commonjs --target es2022 --moduleResolution node --esModuleInterop --skipLibCheck && node .check/tax.check.js && node scripts/storage.check.mjs && node scripts/airtail.check.mjs && node scripts/receipt-shortlist.check.mjs && node scripts/password-recovery.check.mjs",
     "postinstall": "node scripts/prepare-pdf-worker.mjs",
     "predev": "node scripts/prepare-pdf-worker.mjs",
     "prebuild": "node scripts/prepare-pdf-worker.mjs"
