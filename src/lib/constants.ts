@@ -269,7 +269,7 @@ export const DEFAULT_SETTINGS = {
     getFinancialYearForDate(toLocalDate()) ??
     FINANCIAL_YEARS[FINANCIAL_YEARS.length - 1].value,
   annualIncome: 0,
-  occupation: "Software Engineer",
+  occupation: "",
   taxResidentStatus: "resident" as const,
   defaultWorkUsePercent: 100,
   wfhMethod: "fixed_rate" as const,

@@ -121,6 +121,16 @@ await db.exec(base.split('alter table public.expenses enable row level security;
 await db.exec(migration('002_help_debt_and_mls.sql'));
 await db.exec(migration('003_cgt_transactions.sql'));
 await db.exec(migration('004_rental_properties.sql'));
+await check('Unsaved local and cloud profiles do not invent an occupation', async () => {
+  const saved = values.get('taxlens_settings');
+  values.delete('taxlens_settings');
+  assert.equal(local.getSettings().occupation, '');
+  assert.equal((await neon.getSettings(user)).occupation, '');
+  localStorage.setItem('taxlens_settings', JSON.stringify({ occupation: 'Teacher' }));
+  assert.equal(local.getSettings().occupation, 'Teacher');
+  if (saved === undefined) values.delete('taxlens_settings');
+  else values.set('taxlens_settings', saved);
+});
 await check('Migration links unambiguous legacy evidence and leaves ambiguous records untouched', async () => {
   for (const n of [30,31,32]) {
     await sql`insert into assets(id,user_id,name,asset_type,purchase_date,purchase_price,effective_life_years,depreciation_method,work_use_percent,financial_year)
