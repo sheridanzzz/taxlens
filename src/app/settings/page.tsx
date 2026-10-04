@@ -1,7 +1,7 @@
 "use client";
 
 import { toLocalDate } from "@/lib/utils";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import {
   Download,
   Upload,
@@ -94,16 +94,30 @@ const SettingsPage = () => {
   const { user, signOut, cloudEnabled } = useAuth();
   const action = useAsyncAction();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const occupationInputRef = useRef<HTMLInputElement>(null);
   const [saved, setSaved] = useState(false);
   const [clearDialogOpen, setClearDialogOpen] = useState(false);
   const [importError, setImportError] = useState("");
   const [activeTab, setActiveTab] = useState<"profile" | "preferences" | "data" | "connections">(
     "profile"
   );
+  const [connectionsVisited, setConnectionsVisited] = useState(false);
+  const selectTab = useCallback((tab: typeof activeTab) => {
+    setActiveTab(tab);
+    if (tab === "connections") setConnectionsVisited(true);
+  }, []);
+
+  const editOccupation = () => {
+    selectTab("profile");
+    requestAnimationFrame(() => {
+      occupationInputRef.current?.focus();
+      occupationInputRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    });
+  };
 
   useEffect(() => {
-    if (new URLSearchParams(window.location.search).has("airtail")) queueMicrotask(() => setActiveTab("connections"));
-  }, []);
+    if (new URLSearchParams(window.location.search).has("airtail")) queueMicrotask(() => selectTab("connections"));
+  }, [selectTab]);
 
   const [income, setIncome] = useState(state.settings.annualIncome.toString());
   const [occupation, setOccupation] = useState(state.settings.occupation);
@@ -139,7 +153,7 @@ const SettingsPage = () => {
     setPrivateCover(state.settings.hasPrivateHospitalCover);
     setTaxOptions(state.settings.taxOptions ?? {});
     // The Airtail callback, login and the iOS app all land here with ?airtail=…
-    if (new URLSearchParams(window.location.search).has("airtail")) setActiveTab("connections");
+    if (new URLSearchParams(window.location.search).has("airtail")) selectTab("connections");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.loaded]);
 
@@ -227,7 +241,7 @@ const SettingsPage = () => {
             role="tab"
             aria-selected={activeTab === id}
             onClick={() =>
-              setActiveTab(id as "profile" | "preferences" | "data" | "connections")
+              selectTab(id as "profile" | "preferences" | "data" | "connections")
             }
             className={`inline-flex h-10 shrink-0 items-center gap-2 rounded-md px-4 text-sm transition-colors ${
               activeTab === id
@@ -241,7 +255,9 @@ const SettingsPage = () => {
         ))}
       </div>
 
-      {activeTab === "connections" && <AirtailConnector />}
+      {connectionsVisited && <div hidden={activeTab !== "connections"}>
+        <AirtailConnector onEditOccupation={editOccupation} />
+      </div>}
 
       {cloudEnabled && activeTab === "profile" ? (
         <Card className="border-border/50">
@@ -326,6 +342,7 @@ const SettingsPage = () => {
               </div>
               <Input
                 id="settings-occupation"
+                ref={occupationInputRef}
                 value={occupation}
                 onChange={(e) => setOccupation(e.target.value)}
               />

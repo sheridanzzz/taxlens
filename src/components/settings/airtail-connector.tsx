@@ -21,7 +21,7 @@ async function requestJson(path = "", method = "GET", signal?: AbortSignal) {
   return data;
 }
 
-export function AirtailConnector() {
+export function AirtailConnector({ onEditOccupation }: { onEditOccupation: () => void }) {
   const { state, refreshData } = useTax();
   const [status, setStatus] = useState<Status | null>(null);
   const [error, setError] = useState("");
@@ -33,6 +33,8 @@ export function AirtailConnector() {
   const [shortlistOccupation, setShortlistOccupation] = useState("");
   const [cursor, setCursor] = useState<string | null>(null);
   const [searched, setSearched] = useState(false);
+  const [paginationError, setPaginationError] = useState("");
+  const [pageResult, setPageResult] = useState<{ added: number; possible: number; total: number } | null>(null);
   const [fy, setFy] = useState<FinancialYear>(state.settings.financialYear);
   const [selected, setSelected] = useState<AirtailReceipt | null>(null);
   const [evidence, setEvidence] = useState<ReceiptEvidence | null>(null);
@@ -72,23 +74,48 @@ export function AirtailConnector() {
     const current = generation.current;
     const abort = new AbortController();
     controller.current = abort;
-    setBusy(name); setError(""); setMessage("");
+    setBusy(name); setError(""); setPaginationError(""); setMessage("");
     try { await action(abort.signal, current); }
-    catch (err) { if (mounted.current && !abort.signal.aborted) setError(err instanceof Error ? err.message : "Please try again."); }
+    catch (err) {
+      if (mounted.current && !abort.signal.aborted) {
+        const detail = err instanceof Error ? err.message : "Please try again.";
+        if (name === "more-receipts") setPaginationError(detail);
+        else setError(detail);
+      }
+    }
     finally { lock.current = false; if (mounted.current) setBusy(""); }
   }
 
-  const loadReceipts = (more = false) => run("receipts", async (signal, current) => {
-    const params = new URLSearchParams({ fy, smart: "1" });
-    if (more && cursor) params.set("cursor", cursor);
-    const [data, existing] = await Promise.all([requestJson(`/receipts?${params}`, "GET", signal), getExpenses()]);
-    if (current !== generation.current || !mounted.current) return;
-    setReceipts(old => more ? [...old, ...data.receipts].filter((row, i, all) => all.findIndex(r => r.id === row.id) === i) : data.receipts);
-    setCursor(data.nextCursor); setSearched(true); setSelected(null); setEvidence(null);
-    setShortlistMode(data.shortlist?.mode === "ai" ? "ai" : "rules");
-    setShortlistOccupation(data.shortlist ? data.shortlist.occupation : state.settings.occupation);
-    setSavedIds(existing.map(expense => expense.id));
-  });
+  const profileChanged = searched && shortlistOccupation.trim() !== state.settings.occupation.trim();
+  const loadReceipts = (more = false) => {
+    if (more && (!cursor || profileChanged)) return;
+    return run(more ? "more-receipts" : "receipts", async (signal, current) => {
+      setPageResult(null);
+      const params = new URLSearchParams({ fy, smart: "1" });
+      if (more && cursor) params.set("cursor", cursor);
+      const [data, existing] = await Promise.all([
+        requestJson(`/receipts?${params}`, "GET", signal),
+        more ? Promise.resolve(null) : getExpenses(),
+      ]);
+      if (current !== generation.current || !mounted.current) return;
+      const seen = new Set(more ? receipts.map(receipt => receipt.id) : []);
+      const added = (data.receipts as SuggestedReceipt[]).filter(receipt => {
+        if (seen.has(receipt.id)) return false;
+        seen.add(receipt.id); return true;
+      });
+      const combined = more ? [...receipts, ...added] : added;
+      setReceipts(combined);
+      if (more) setPageResult({
+        added: added.length,
+        possible: added.filter(receipt => suggestionFor(receipt).bucket !== "likely_personal").length,
+        total: combined.length,
+      });
+      setCursor(data.nextCursor); setSearched(true); setSelected(null); setEvidence(null);
+      setShortlistMode(data.shortlist?.mode === "ai" ? "ai" : "rules");
+      setShortlistOccupation(data.shortlist ? data.shortlist.occupation : state.settings.occupation);
+      if (existing) setSavedIds(existing.map(expense => expense.id));
+    });
+  };
   const viewReceipt = (receipt: AirtailReceipt) => run(receipt.id, async (signal, current) => {
     setSelected(receipt); setEvidence(null); setPaidAud("");
     const data = await requestJson(`/receipts/${receipt.id}`, "GET", signal);
@@ -97,7 +124,7 @@ export function AirtailConnector() {
 
   function changeYear(value: FinancialYear) {
     generation.current++; controller.current?.abort();
-    setFy(value); setReceipts([]); setReceiptFilter("possible"); setCursor(null); setSearched(false); setSelected(null); setEvidence(null); setError("");
+    setFy(value); setReceipts([]); setReceiptFilter("possible"); setCursor(null); setSearched(false); setSelected(null); setEvidence(null); setError(""); setPaginationError(""); setPageResult(null);
   }
   const alreadySaved = (receipt: AirtailReceipt) => savedIds.includes(airtailExpenseId(receipt.id)) || state.expenses.some(e => e.id === airtailExpenseId(receipt.id));
   const suggestionFor = (receipt: SuggestedReceipt) => receipt.suggestion || ruleSuggestion(receipt, { occupation: state.settings.occupation, wfhMethod: state.settings.wfhMethod });
@@ -119,7 +146,7 @@ export function AirtailConnector() {
               const data = await requestJson("/connect", "POST", signal); window.location.assign(data.url);
             })}>{status.connected ? "Reconnect Airtail" : "Connect Airtail"}</Button>
             {status.connected && <Button variant="outline" disabled={!!busy} onClick={() => void run("disconnect", async signal => {
-              await requestJson("", "DELETE", signal); setReceipts([]); setSelected(null); setEvidence(null); setCursor(null); setSearched(false);
+              await requestJson("", "DELETE", signal); setReceipts([]); setSelected(null); setEvidence(null); setCursor(null); setSearched(false); setPageResult(null);
               await loadStatus(signal); setMessage("Disconnected. Receipts already saved in Ledgr are kept.");
             })}>Disconnect</Button>}
           </div>
@@ -135,7 +162,8 @@ export function AirtailConnector() {
           {searched && receipts.length > 0 && <div className="space-y-3 rounded-lg bg-muted/50 p-3">
             <p className="text-sm font-medium">{shortlistMode === "ai" ? "AI-assisted shortlist" : "Smart shortlist"}{shortlistOccupation ? ` · ${shortlistOccupation}` : ""}</p>
             <p className="text-xs text-muted-foreground">Possible work expenses and items needing details are shown first. Everyday personal purchases are filtered out. These are suggestions; confirm the work connection, reimbursement and work use before saving.</p>
-            {!shortlistOccupation && <p className="text-xs"><Link href="/settings" className="underline">Add your occupation in Profile</Link> for better suggestions.</p>}
+            {!state.settings.occupation.trim() && <p className="text-xs"><button type="button" onClick={onEditOccupation} className="underline">Add your occupation in Profile</button> for better suggestions.</p>}
+            {profileChanged && <p role="status" className="text-xs">Your occupation changed. Refresh receipts to update this shortlist.</p>}
             {shortlistMode === "rules" && <p className="text-xs text-muted-foreground">Sorted using receipt rules. You can check every suggestion in All receipts.</p>}
             <div className="flex flex-wrap gap-2" role="group" aria-label="Filter Airtail receipts">
               {([{ value: "possible", label: `Possible work (${possibleCount})` }, { value: "personal", label: `Likely personal (${personalCount})` }, { value: "all", label: `All receipts (${receipts.length})` }] as const).map(filter => <Button key={filter.value} size="sm" variant={receiptFilter === filter.value ? "default" : "outline"} aria-pressed={receiptFilter === filter.value} onClick={() => { setReceiptFilter(filter.value); setSelected(null); setEvidence(null); }}>{filter.label}</Button>)}
@@ -150,7 +178,17 @@ export function AirtailConnector() {
               <Button variant="outline" disabled={!!busy || alreadySaved(receipt)} onClick={() => void viewReceipt(receipt)}>{alreadySaved(receipt) ? "Saved" : busy === receipt.id ? "Retrieving…" : "Review receipt"}</Button>
             </li>)}
           </ul>}
-          {cursor && <Button variant="outline" disabled={!!busy} onClick={() => void loadReceipts(true)}>Load more receipts</Button>}
+          {(cursor || pageResult || paginationError) && <div className="space-y-3" aria-busy={busy === "more-receipts"}>
+            {paginationError && <p role="alert" className="break-words text-sm text-destructive">{paginationError} Your loaded receipts are kept. Try loading more again.</p>}
+            {pageResult && <div className="space-y-2">
+              <p role="status" className="text-sm">Checked {pageResult.added} more {pageResult.added === 1 ? "receipt" : "receipts"}: {pageResult.possible} possible work {pageResult.possible === 1 ? "expense" : "expenses"} and {pageResult.added - pageResult.possible} likely personal. {pageResult.total} checked in total.{pageResult.possible === 0 && receiptFilter === "possible" ? " No additional possible work expenses in this batch." : ""}</p>
+              {receiptFilter !== "all" && <Button size="sm" variant="outline" onClick={() => { setReceiptFilter("all"); setSelected(null); setEvidence(null); }}>View all {pageResult.total} receipts</Button>}
+            </div>}
+            {cursor && <Button variant="outline" disabled={!!busy || profileChanged} onClick={() => void loadReceipts(true)}>
+              {busy === "more-receipts" && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {busy === "more-receipts" ? "Loading more receipts…" : "Load more receipts"}
+            </Button>}
+          </div>}
           {selected && <section aria-label="Receipt evidence" className="space-y-4 rounded-lg border p-4">
             <h3 className="break-words font-semibold">{selected.vendor} — original receipt</h3>
             {!evidence ? <p className="text-sm">{busy === selected.id ? "Retrieving original email and attachments…" : "Evidence could not be retrieved. Try reviewing this receipt again."}</p> : <>
