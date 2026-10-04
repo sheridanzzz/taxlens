@@ -18,6 +18,8 @@ const equipment = /laptop|monitor|keyboard|mouse|computer|headset|desk|office ch
 const phoneInternet = /internet|broadband|mobile plan|phone plan|telstra|optus|vodafone|electricity|energy bill|gas bill/i;
 const clothing = /clothing|fashion|uniqlo|zara\b|h&m|sneakers|casual wear/i;
 const consumables = /stationery|printer ink|toner|computer consumables/i;
+const genericMerchant = /^(amazon|officeworks|apple)\b/i;
+const explicitItem = /laptop|monitor|keyboard|mouse|computer|headset|desk|chair|stationery|printer|ink|toner|software|subscription|book|course|phone|internet/i;
 
 /** Conservative triage. Every receipt remains available and no claim amount is inferred. */
 export function ruleSuggestion(receipt: AirtailReceipt, profile: ShortlistProfile): ReceiptSuggestion {
@@ -47,7 +49,8 @@ export function parseShortlist(text: string, receipts: AirtailReceipt[], profile
     // Known ordinary private purchases stay out of the shortlist. Work exceptions
     // still remain discoverable in All receipts; model output cannot erase them.
     const receiptText = `${receipt.vendor} ${receipt.subject} ${receipt.category}`;
-    const needsRuleReview = phoneInternet.test(receiptText) || (profile.wfhMethod === "fixed_rate" && consumables.test(receiptText)) || (!profile.occupation.trim() && row.bucket === "possible_work");
+    const ambiguousMerchant = genericMerchant.test(receipt.vendor.trim()) && !explicitItem.test(receipt.subject);
+    const needsRuleReview = ambiguousMerchant || phoneInternet.test(receiptText) || (profile.wfhMethod === "fixed_rate" && consumables.test(receiptText)) || (!profile.occupation.trim() && row.bucket === "possible_work");
     result[row.id] = baseline.bucket === "likely_personal" || needsRuleReview ? baseline : { bucket: row.bucket, reason: row.reason.trim(), source: "ai" };
   }
   return result;
