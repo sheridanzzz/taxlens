@@ -15,7 +15,7 @@ function load(file) {
   const source = ts.transpileModule(readFileSync(file, 'utf8'), { compilerOptions: {
     module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true,
   } }).outputText;
-  const require = name => name === './ai-providers' ? { generateTextWithFallback: (...args) => model(...args) }
+  const require = name => name === './ai-providers' ? { generateTextWithFallback: (...args) => model(...args), hasAiProvider: () => !!process.env.GROQ_API_KEY }
     : name.startsWith('.') ? load(resolve(dirname(file), `${name}.ts`)) : nativeRequire(name);
   runInThisContext(`(function(require,module,exports){${source}\n})`, { filename: file })(require, compiled, compiled.exports);
   return compiled.exports;

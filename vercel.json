@@ -1,6 +1,7 @@
 {
   "env": {
     "AIRTAIL_URL": "https://airtail.vercel.app",
+    "CLOUDFLARE_AI_BASE_URL": "https://ledgr-ai-backup.sheridan-portfolio.workers.dev/v1",
     "LEDGR_APP_URL": "https://ledgr-alphav2.vercel.app"
   }
 }

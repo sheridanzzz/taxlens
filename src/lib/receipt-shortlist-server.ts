@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
-import { generateTextWithFallback } from "./ai-providers";
+import { generateTextWithFallback, hasAiProvider } from "./ai-providers";
 import { ruleSuggestion, parseShortlist, shortlistPrompt, SHORTLIST_INSTRUCTIONS, type ShortlistProfile, type ReceiptSuggestion } from "./receipt-shortlist";
 import type { AirtailReceipt } from "./airtail-receipt";
 
 const cache = new Map<string, { expires: number; suggestions: Record<string, ReceiptSuggestion> }>();
 export async function suggestReceiptBatch(receipts: AirtailReceipt[], profile: ShortlistProfile, useAi: boolean) {
   const rules = Object.fromEntries(receipts.map(receipt => [receipt.id, ruleSuggestion(receipt, profile)]));
-  if (!useAi || !receipts.length || (!process.env.GROQ_API_KEY && !process.env.GOOGLE_GENERATIVE_AI_API_KEY)) return { suggestions: rules, mode: "rules" as const };
+  if (!useAi || !receipts.length || !hasAiProvider()) return { suggestions: rules, mode: "rules" as const };
   const key = createHash("sha256").update(JSON.stringify({ receipts, profile })).digest("hex");
   const hit = cache.get(key); if (hit && hit.expires > Date.now()) return { suggestions: hit.suggestions, mode: "ai" as const };
   const candidates = receipts.filter(receipt => rules[receipt.id].bucket !== "likely_personal");

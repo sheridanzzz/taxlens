@@ -1,0 +1,14 @@
+{
+  "name": "ledgr-ai-backup",
+  "main": "worker.mjs",
+  "account_id": "7d7542fc96a42dfe023a9d3a0b276563",
+  "compatibility_date": "2026-10-04",
+  "workers_dev": true,
+  "ai": { "binding": "AI" },
+  "ratelimits": [{
+    "name": "AI_RATE_LIMITER",
+    "namespace_id": "431002",
+    "simple": { "limit": 20, "period": 60 }
+  }],
+  "observability": { "enabled": false }
+}
