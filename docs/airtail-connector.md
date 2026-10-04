@@ -4,7 +4,7 @@ Ledgr connects to an existing Airtail account. Airtail continues to own the Gmai
 
 ## Setup
 
-1. Apply `supabase/migrations/006_airtail_connector.sql` to the Ledgr database after migrations 001–005. The migration supports Neon and Supabase, adds account-owned encrypted connector storage, and allows original MIME email evidence in atomic expense saves. It can be rerun. No live database was migrated during implementation.
+1. Apply `supabase/migrations/006_airtail_connector.sql` to the Ledgr database after migrations 001–005. The migration supports Neon and Supabase, adds account-owned encrypted connector storage, and allows original MIME email evidence in atomic expense saves. It can be rerun.
 2. Set these **server environment variables in Ledgr**:
 
    ```dotenv
