@@ -93,6 +93,11 @@ try {
     assert.equal((await worker.fetch(large, env)).status, 413);
     assert.equal((await worker.fetch(request({ model: '@cf/openai/gpt-oss-120b', messages }), { ...env, AI: { run: async () => { throw Error('Synthetic quota exhausted'); } } })).status, 503);
   });
+  await check('Gemma vision uses the output budget for its answer rather than hidden reasoning', async () => {
+    let input;
+    await worker.fetch(request({ model: '@cf/google/gemma-4-26b-a4b-it', messages }), { ...env, AI: { run: async (_model, body) => { input = body; return { response: 'Synthetic answer' }; } } });
+    assert.deepEqual(input.chat_template_kwargs, { enable_thinking: false });
+  });
 } finally {
   for (const key of ['GOOGLE_GENERATIVE_AI_API_KEY', 'GROQ_API_KEY', 'CLOUDFLARE_AI_BASE_URL', 'CLOUDFLARE_AI_API_KEY']) {
     if (savedEnv[key] === undefined) delete process.env[key]; else process.env[key] = savedEnv[key];

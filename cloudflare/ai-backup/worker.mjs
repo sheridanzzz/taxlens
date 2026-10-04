@@ -51,6 +51,8 @@ const worker = {
     const maxTokens = Math.max(1, Math.min(7000, Math.floor(Number(body.max_tokens ?? body.max_completion_tokens) || 2000)));
     const input = { messages: body.messages, max_tokens: maxTokens, stream: false };
     if (body.model === '@cf/openai/gpt-oss-120b') input.reasoning_effort = 'low';
+    // Receipt extraction needs the final JSON within its token/time budget.
+    if (body.model === '@cf/google/gemma-4-26b-a4b-it') input.chat_template_kwargs = { enable_thinking: false };
     try {
       const result = await env.AI.run(body.model, input);
       // Newer models return Chat Completions; Mistral returns the older shape.
