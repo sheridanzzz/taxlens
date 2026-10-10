@@ -12,6 +12,7 @@ import {
 import { Onboarding } from "@/components/onboarding";
 import { GettingStarted } from "@/components/dashboard/getting-started";
 import { ReceiptReview } from "@/components/dashboard/receipt-review";
+import { SavingsJar } from "@/components/dashboard/savings-jar";
 import { useAuth } from "@/context/auth-context";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency, getCategoryBreakdown, isCoveredByFixedRate } from "@/lib/tax-calculator";
@@ -44,28 +45,6 @@ const claimNote = (e: Expense, wfhMethod: WfhMethod) =>
 
 const shortDate = (d: string) =>
   new Date(`${d}T12:00:00`).toLocaleDateString("en-AU", { day: "numeric", month: "short" });
-
-const Jar = ({ fill }: { fill: number }) => {
-  // the pot fills as the financial year goes on
-  const top = 114 - Math.round(56 * Math.min(1, Math.max(0.15, fill)));
-  return (
-    <svg width="96" height="116" viewBox="0 0 100 120" aria-hidden="true" className="hidden shrink-0 sm:block">
-      <rect x="26" y="4" width="48" height="12" rx="4" fill="var(--color-gold)" />
-      <path
-        d="M18 22h64a8 8 0 0 1 8 8v74a12 12 0 0 1-12 12H22a12 12 0 0 1-12-12V30a8 8 0 0 1 8-8z"
-        fill="rgb(255 255 255 / 0.12)"
-        stroke="#fff"
-        strokeWidth="3"
-      />
-      <path
-        d={`M12 ${top}h76v${104 - top}a10 10 0 0 1-10 10H22a10 10 0 0 1-10-10z`}
-        fill="var(--color-butter)"
-      />
-      <circle cx="34" cy="100" r="6" fill="#f2b63c" />
-      <circle cx="60" cy="94" r="6" fill="#f2b63c" />
-    </svg>
-  );
-};
 
 const WeekCard = ({
   href,
@@ -196,7 +175,7 @@ const DashboardPage = () => {
                 Your final refund also depends on tax withheld and other income.
               </p>
             </div>
-            <Jar fill={yearDone} />
+            <SavingsJar fill={yearDone} />
           </div>
           {/* how far through the financial year the pot has had to fill */}
           <div>
