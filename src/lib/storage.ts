@@ -46,6 +46,7 @@ const toExpense = (row: Row): Expense => ({
   kilometres: row.kilometres == null ? undefined : Number(row.kilometres),
   hasReceipt: Boolean(row.receipt_data_url),
   receiptDataUrl: (row.receipt_data_url as string) || undefined,
+  reviewStatus: (row.review_status as Expense["reviewStatus"]) ?? undefined,
   notes: (row.notes as string) || undefined,
   financialYear: row.financial_year as FinancialYear,
   createdAt: timestamp(row.created_at),
@@ -213,6 +214,17 @@ export const getExpenseReceipt = async (id: string): Promise<string | null> => {
   const { data, error } = await supabase().from("expenses").select("receipt_data_url").eq("id", id).single();
   if (error) throw error;
   return data?.receipt_data_url ?? null;
+};
+
+export const getExpenseReceipts = async (ids: string[]): Promise<Record<string, string | null>> => {
+  if (!Array.isArray(ids) || ids.length > 500 || !ids.every(id => typeof id === "string" && id.length <= 100))
+    throw new Error("Invalid receipt selection.");
+  if (!ids.length) return {};
+  if (isNeonBackend()) return neonActions.neonGetExpenseReceipts(ids);
+  if (!isSupabaseConfigured()) return Object.fromEntries(local.getExpenses().filter(e => ids.includes(e.id)).map(e => [e.id, e.receiptDataUrl ?? null]));
+  const { data, error } = await supabase().from("expenses").select("id,receipt_data_url").eq("user_id", await getSupabaseUserId()).in("id", ids);
+  if (error) throw error;
+  return Object.fromEntries((data ?? []).map((r: Row) => [r.id as string, (r.receipt_data_url as string) || null]));
 };
 
 export const deleteExpense = async (id: string): Promise<void> => {

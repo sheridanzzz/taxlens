@@ -10,6 +10,8 @@ export type ExpenseCategory =
   | "computer_equipment"
   | "software_subscriptions"
   | "internet_phone"
+  | "electricity"
+  | "stationery_consumables"
   | "office_furniture"
   | "professional_development"
   | "union_fees"
@@ -53,6 +55,8 @@ export interface Expense {
   /** Cloud mode: list queries omit the receipt payload and set this instead;
    *  fetch the image on demand via neonGetExpenseReceipt. */
   hasReceipt?: boolean;
+  /** Null keeps legacy records undecided; an explicit decision syncs across devices. */
+  reviewStatus?: "pending" | "reviewed" | "personal" | null;
   notes?: string;
   financialYear: FinancialYear;
   createdAt: string;

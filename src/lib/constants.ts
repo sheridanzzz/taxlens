@@ -53,6 +53,16 @@ export const EXPENSE_CATEGORIES: Record<
     description: "Work portion of internet and mobile phone bills",
     icon: "Wifi",
   },
+  electricity: {
+    label: "Electricity & Gas",
+    description: "Energy used for working from home; included in the fixed rate",
+    icon: "Zap",
+  },
+  stationery_consumables: {
+    label: "Stationery & Computer Consumables",
+    description: "Paper, pens and printer ink; included in the fixed rate",
+    icon: "Pencil",
+  },
   office_furniture: {
     label: "Office Furniture",
     description: "Desk, chair, monitor arm, standing desk converter",

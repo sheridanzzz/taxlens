@@ -9,15 +9,15 @@ import { useTax } from "@/context/tax-context";
 import { useLaunchers } from "@/components/layout/app-shell";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { formatCurrency, isCoveredByFixedRate } from "@/lib/tax-calculator";
+import { expenseReviewStatus } from "@/lib/receipt-review";
 import { isAiScanned } from "@/lib/utils";
 import type { Expense } from "@/lib/types";
 
-// Review acknowledgements stay in this browser, scoped to the signed-in account.
-// Fingerprints put an edited expense back in the queue. Personal decisions use
-// the normal expense store, so they also update totals, exports and cloud data.
+// Saved review decisions sync through the normal expense store. Legacy browser
+// acknowledgements remain account-scoped, with fingerprints to detect edits.
 const fingerprint = (e: Expense) => JSON.stringify([
   e.id, e.date, e.description, e.amount, e.category, e.claimType,
-  e.workUsePercent, e.claimableAmount, e.notes, e.assetId, e.carId, e.kilometres,
+  e.workUsePercent, e.claimableAmount, e.notes, e.assetId, e.carId, e.kilometres, e.reviewStatus ?? null,
 ]);
 const readReviews = (key: string): string[] => {
   try {
@@ -51,7 +51,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
   const [editing, setEditing] = useState<Expense | null>(null);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false);
-  const lastDecisionAt = useRef(0);
+  const coolingDown = useRef(false);
   const sectionRef = useRef<HTMLElement>(null);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -60,7 +60,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
   const rotate = useTransform(x, [-220, 0, 220], reducedMotion ? [0, 0, 0] : [-10, 0, 10]);
   const personalOpacity = useTransform(x, [-90, -15], [1, 0]);
   const confirmOpacity = useTransform(x, [15, 90], [0, 1]);
-  const queue = state.expenses.filter((e) => isAiScanned(e) && !checked.includes(fingerprint(e)))
+  const queue = state.expenses.filter((e) => isAiScanned(e) && e.reviewStatus !== "reviewed" && e.reviewStatus !== "personal" && !checked.includes(fingerprint(e)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   const top = queue[0];
   const last = history.at(-1);
@@ -78,7 +78,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
 
   const decide = async (decision: Decision, keyboard = false) => {
     if (!top || lock.current || editing) return;
-    if (!keyboard && Date.now() - lastDecisionAt.current < 300) {
+    if (!keyboard && coolingDown.current) {
       void animate(x, 0, { duration: reducedMotion ? 0 : 0.18 });
       return;
     }
@@ -87,14 +87,21 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
       void animate(x, 0, { duration: 0.18 });
       return;
     }
-    lastDecisionAt.current = Date.now();
+    if (decision === "confirm" && expenseReviewStatus(top) === "pending" && top.workUsePercent === 0) {
+      setMessage("Set your work use before confirming, or choose Personal to keep a zero deduction.");
+      setEditing(top);
+      void animate(x, 0, { duration: reducedMotion ? 0 : 0.18 });
+      return;
+    }
+    coolingDown.current = true;
+    window.setTimeout(() => { coolingDown.current = false; }, 300);
     lock.current = true;
     setBusy(true);
     setError("");
-    const after = decision === "personal" ? { ...top, workUsePercent: 0, claimableAmount: 0 } : top;
+    const after: Expense = decision === "personal" ? { ...top, workUsePercent: 0, claimableAmount: 0, reviewStatus: "personal" } : { ...top, reviewStatus: "reviewed" };
     try {
       // Wait for persistence before removing the card. A failed save stays actionable.
-      if (decision === "personal") await updateExpense(after);
+      await updateExpense(after);
       await animate(x, reducedMotion ? 0 : decision === "personal" ? -500 : 500, { duration: reducedMotion ? 0 : 0.22 });
       setHistory((items) => [...items, { before: top, after, decision }]);
       setMessage(decision === "personal" ? `${top.description} marked personal. Receipt kept; claim set to $0.` : `${top.description} checked. Amount unchanged.`);
@@ -104,7 +111,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
         requestAnimationFrame(() => sectionRef.current?.focus({ preventScroll: true }));
       }
     } catch {
-      lastDecisionAt.current = 0;
+      coolingDown.current = false;
       setError("Couldn’t save this review. Your card is still here — please try again.");
       void animate(x, 0, { duration: reducedMotion ? 0 : 0.18 });
     } finally {
@@ -119,11 +126,11 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
     setBusy(true);
     setError("");
     try {
-      if (last.decision === "personal") await updateExpense(last.before);
+      await updateExpense({ ...last.before, reviewStatus: last.before.reviewStatus ?? null });
       setMessage(`Undone. ${last.before.description} is ready to review again.`);
       remember(checked.filter((item) => item !== fingerprint(last.after)));
       setHistory((items) => items.slice(0, -1));
-      lastDecisionAt.current = 0;
+      coolingDown.current = false;
     } catch {
       setError("Couldn’t undo yet. Please try again.");
     } finally {
@@ -186,7 +193,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
                 </div>
                 <p className="mt-5 text-xs font-bold text-muted-foreground">{top.claimType === "depreciation" ? "Receipt total · claimed through Assets" : isCoveredByFixedRate(top, state.settings.wfhMethod) ? "Covered by the 70c rate · not claimed separately" : "Recorded deduction"}</p>
                 <p className="mt-1 break-all font-serif text-4xl font-black tabular text-plum">{formatCurrency(top.claimType === "depreciation" ? top.amount : isCoveredByFixedRate(top, state.settings.wfhMethod) ? 0 : top.claimableAmount)}</p>
-                <p className="mt-2 text-sm text-muted-foreground">{top.workUsePercent === 0 ? "Personal · no deduction" : `${top.workUsePercent}% work use · ${formatCurrency(top.amount)} paid`}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{expenseReviewStatus(top) === "pending" ? "Pending review · set work use before claiming" : top.workUsePercent === 0 ? "Personal · no deduction" : `${top.workUsePercent}% work use · ${formatCurrency(top.amount)} paid`}</p>
                 <motion.div aria-hidden="true" style={{ opacity: personalOpacity }} className="pointer-events-none absolute inset-0 grid place-items-center rounded-[22px] bg-pink/95"><span className="-rotate-12 rounded-xl border-4 border-plum px-4 py-2 text-2xl font-black text-plum">PERSONAL</span></motion.div>
                 <motion.div aria-hidden="true" style={{ opacity: confirmOpacity }} className="pointer-events-none absolute inset-0 grid place-items-center rounded-[22px] bg-mint/95"><span className="rotate-12 rounded-xl border-4 border-plum px-4 py-2 text-2xl font-black text-plum">LOOKS RIGHT</span></motion.div>
               </motion.div>
@@ -202,7 +209,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
               <button disabled={busy} onClick={() => { setError(""); setEditing(top); }} className="flex min-h-12 items-center justify-center gap-1.5 rounded-full border border-plum/20 bg-surface px-3 text-sm font-bold text-plum hover:bg-surface-2 disabled:opacity-50"><PencilLine className="h-4 w-4" /><span className="sr-only sm:not-sr-only">Fix it</span></button>
               <button disabled={busy} onClick={() => void decide("confirm")} className="flex min-h-12 items-center justify-center gap-1.5 rounded-full bg-plum px-3 text-sm font-bold text-white hover:bg-plum-2 disabled:opacity-50"><Check className="h-4 w-4" /> Looks right</button>
             </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">Confirm checks the saved amount. Personal keeps the receipt.</p>
+            <p className="mt-3 text-center text-xs text-muted-foreground">Review work use before confirming. Personal keeps the receipt.</p>
           </>
         ) : (
           <div className="flex min-h-[260px] flex-col items-start justify-center rounded-[22px] bg-butter p-6">
@@ -214,7 +221,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
         )}
       </div>
       <div className="mt-3 flex min-h-8 items-start justify-between gap-3">
-        <p role="status" className="min-w-0 text-xs leading-relaxed text-muted-foreground">{busy ? "Saving…" : message || "Review progress is remembered in this browser."}</p>
+        <p role="status" className="min-w-0 text-xs leading-relaxed text-muted-foreground">{busy ? "Saving…" : message || "Saved decisions sync with your account."}</p>
         {history.length > 0 && <button disabled={busy || !canUndo} onClick={() => void undo()} className="inline-flex min-h-10 shrink-0 items-center gap-1 rounded-full px-2 text-xs font-bold text-plum hover:bg-white/60 disabled:opacity-40"><RotateCcw className="h-3.5 w-3.5" /> Undo</button>}
       </div>
       {error && <p role="alert" className="mt-2 rounded-xl bg-white p-3 text-sm text-negative">{error}{top?.claimType === "depreciation" && <Link href="/assets" className="ml-1 font-bold underline">Open Assets</Link>}</p>}

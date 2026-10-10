@@ -1,8 +1,10 @@
 import { CAR_KM_CAP, CAR_RATE_PER_KM, DEPRECIABLE_CATEGORIES, INSTANT_DEDUCTION_THRESHOLD } from "./constants";
 import type { DepreciatingAsset, Expense, ExpenseCategory } from "./types";
+import { isWfhRunningCost } from "./wfh-running-costs";
 
-export const mustDepreciate = (amount: number, category: ExpenseCategory) =>
-  amount > INSTANT_DEDUCTION_THRESHOLD && DEPRECIABLE_CATEGORIES.includes(category);
+export const mustDepreciate = (amount: number, category: ExpenseCategory, description = "") =>
+  amount > INSTANT_DEDUCTION_THRESHOLD && DEPRECIABLE_CATEGORIES.includes(category) &&
+  !isWfhRunningCost({ category, description });
 
 export const findLinkedAsset = (e: Expense, assets: DepreciatingAsset[], expenses: Expense[]) => {
   if (e.assetId) return assets.find((a) => a.id === e.assetId);

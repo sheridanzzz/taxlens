@@ -93,7 +93,7 @@ export const Header = ({ onMenuClick }: HeaderProps) => {
       <form
         onSubmit={handleSearch}
         role="search"
-        className="relative hidden max-w-2xl flex-1 md:block"
+        className="relative hidden min-w-0 flex-1 md:block"
       >
         <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <input

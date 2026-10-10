@@ -72,7 +72,7 @@ const ExpensesInner = () => {
 
       <div className="mb-6 grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         <Kpi
-          label="Claimable YTD"
+          label="Immediate deductions"
           value={formatCurrency(summary.totalFullClaims)}
           hint={`${state.expenses.length} recorded`}
           positive={summary.totalFullClaims > 0}

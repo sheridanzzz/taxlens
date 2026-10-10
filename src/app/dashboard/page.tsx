@@ -18,6 +18,7 @@ import { formatCurrency, getCategoryBreakdown, isCoveredByFixedRate } from "@/li
 import { getMyTaxRows } from "@/lib/mytax";
 import { WFH_FIXED_RATE_PER_HOUR } from "@/lib/constants";
 import { fadeInUp } from "@/lib/animations";
+import { expenseReviewStatus } from "@/lib/receipt-review";
 import type { Expense, WfhMethod } from "@/lib/types";
 
 const DAY = 86_400_000;
@@ -31,7 +32,7 @@ const greeting = () => {
 };
 
 const claimNote = (e: Expense, wfhMethod: WfhMethod) =>
-  isCoveredByFixedRate(e, wfhMethod)
+  expenseReviewStatus(e) === "pending" ? "Pending review" : isCoveredByFixedRate(e, wfhMethod)
     ? "Covered by the 70c rate"
     : e.workUsePercent === 0
     ? "Personal · no deduction"
@@ -158,7 +159,7 @@ const DashboardPage = () => {
       initial={fadeInUp.initial}
       animate={fadeInUp.animate}
       transition={fadeInUp.transition}
-      className="mx-auto max-w-[1180px]"
+      className="w-full"
     >
       <Onboarding />
 

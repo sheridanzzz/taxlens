@@ -7,6 +7,7 @@ import {
   MEDICARE_LOW_INCOME_THRESHOLD,
   HELP_2024_25_BANDS,
 } from "./constants";
+import { isWfhRunningCost } from "./wfh-running-costs";
 import type {
   FinancialYear,
   Expense,
@@ -151,10 +152,11 @@ export const calculateWfhDeductionActualCost = (
 // Internet & Phone expenses can't be claimed on top of it — the single most
 // common WFH adjustment the ATO makes. On the actual-cost method they count.
 export const isCoveredByFixedRate = (
-  expense: Pick<Expense, "category">,
+  expense: Pick<Expense, "category"> & Partial<Pick<Expense, "description" | "claimType">>,
   wfhMethod: WfhMethod
-) =>
-  wfhMethod === "fixed_rate" && expense.category === "internet_phone";
+) => {
+  return wfhMethod === "fixed_rate" && isWfhRunningCost(expense);
+};
 
 export const calculateTotalExpenseDeductions = (
   expenses: Expense[],

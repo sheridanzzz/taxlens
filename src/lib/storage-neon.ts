@@ -32,6 +32,7 @@ const toExpense = (r: Row): Expense => ({
   kilometres: r.kilometres == null ? undefined : Number(r.kilometres),
   receiptDataUrl: (r.receipt_data_url as string) || undefined,
   hasReceipt: Boolean(r.has_receipt ?? r.receipt_data_url),
+  reviewStatus: (r.review_status as Expense["reviewStatus"]) ?? undefined,
   notes: (r.notes as string) || undefined,
   financialYear: r.financial_year as FinancialYear,
   createdAt: timestamp(r.created_at),
@@ -111,7 +112,7 @@ const toSettings = (r: Row): UserSettings => ({
 // getExpenseReceipt. ponytail: receipts live in the same column as always,
 // just off the hot path; move to blob storage if they outgrow Postgres.
 const EXPENSE_LIST_COLS = `id, user_id, date, description, amount, category,
-  claim_type, work_use_percent, claimable_amount, notes, financial_year,
+  claim_type, work_use_percent, claimable_amount, notes, review_status, financial_year,
   created_at, asset_id, car_id, kilometres, (receipt_data_url IS NOT NULL AND receipt_data_url <> '') AS has_receipt`;
 
 export const getExpenses = async (userId: string, fy?: FinancialYear): Promise<Expense[]> => {
@@ -136,6 +137,15 @@ export const getExpenseReceipt = async (
   const rows = await db`SELECT receipt_data_url FROM expenses
     WHERE id = ${expenseId} AND user_id = ${userId}`;
   return (rows[0]?.receipt_data_url as string) || null;
+};
+
+export const getExpenseReceipts = async (userId: string, ids: string[]): Promise<Record<string, string | null>> => {
+  if (!Array.isArray(ids) || ids.length > 500 || !ids.every(id => typeof id === "string" && /^[0-9a-f-]{36}$/i.test(id)))
+    throw new Error("Invalid receipt selection.");
+  if (!ids.length) return {};
+  const rows = await sql()`SELECT id, receipt_data_url FROM expenses WHERE user_id = ${userId}
+    AND id IN (SELECT jsonb_array_elements_text(${JSON.stringify(ids)}::jsonb)::uuid)`;
+  return Object.fromEntries(rows.map(r => [r.id as string, (r.receipt_data_url as string) || null]));
 };
 
 export const saveExpense = async (userId: string, e: Expense, asset?: DepreciatingAsset): Promise<void> => {

@@ -141,11 +141,35 @@ await check('Migration links unambiguous legacy evidence and leaves ambiguous re
       values(${id(n)},${user},'2025-08-01',${n===33 ? 'Unique legacy laptop' : 'Ambiguous laptop'},1500,'computer_equipment','depreciation',100,0,'2025-26')`;
   }
   await db.exec(migration('005_linked_claims.sql'));
+  await db.exec(migration('008_expense_review.sql'));
   assert.equal((await sql`select asset_id from expenses where id=${id(33)}`)[0].asset_id, id(30));
   assert.equal((await sql`select asset_id from expenses where id=${id(34)}`)[0].asset_id, null);
   await db.exec(migration('005_linked_claims.sql'));
+  await db.exec(migration('008_expense_review.sql'));
   await sql`delete from expenses where id in (${id(33)},${id(34)})`;
   await sql`delete from assets where id in (${id(30)},${id(31)},${id(32)})`;
+});
+await check('Review decisions persist, undo restores pending, legacy saves preserve decisions and batch receipts enforce ownership', async () => {
+  const pending = { ...expense, id: id(80), assetId: undefined, claimType: 'full', workUsePercent: 0, reviewStatus: 'pending', notes: 'AI scan: fixture' };
+  local.saveExpense(pending);
+  local.saveExpense({ ...pending, reviewStatus: 'personal' });
+  assert.equal(local.getExpenses().find(e => e.id === pending.id).reviewStatus, 'personal');
+  local.saveExpense({ ...pending, reviewStatus: null });
+  assert.equal(local.getExpenses().find(e => e.id === pending.id).reviewStatus, null);
+  assert.equal(local.getExpenses().find(e => e.id === pending.id).receiptDataUrl, pdf);
+  local.deleteExpense(pending.id);
+  await neon.saveExpense(user, pending);
+  await neon.saveExpense(user, { ...pending, reviewStatus: 'personal', receiptDataUrl: undefined, hasReceipt: true });
+  const legacy = { ...pending, receiptDataUrl: undefined, hasReceipt: true }; delete legacy.reviewStatus;
+  await neon.saveExpense(user, legacy);
+  assert.equal((await neon.getExpenses(user)).find(e => e.id === pending.id).reviewStatus, 'personal');
+  await neon.saveExpense(user, { ...legacy, reviewStatus: null });
+  assert.equal((await neon.getExpenses(user)).find(e => e.id === pending.id).reviewStatus, undefined);
+  await neon.saveExpense(other, { ...pending, id: id(81) });
+  assert.deepEqual(await neon.getExpenseReceipts(user, [pending.id, id(81)]), { [pending.id]: pdf });
+  await assert.rejects(neon.saveExpense(user, { ...pending, reviewStatus: 'personal', workUsePercent: 80 }));
+  assert.equal(await neon.getExpenseReceipt(user, pending.id), pdf);
+  await neon.deleteExpense(user, pending.id); await neon.deleteExpense(other, id(81));
 });
 await check('PostgreSQL paired save, edit, personal swipe and undo preserve the original PDF', async () => {
   await neon.saveExpense(user, expense, asset);
@@ -206,6 +230,7 @@ await check('Supabase functions respect the authenticated user and RLS protects 
   await db.exec(base.slice(base.indexOf('alter table public.expenses enable row level security;')));
   await db.exec(migration('004_rental_properties.sql'));
   await db.exec(migration('005_linked_claims.sql'));
+  await db.exec(migration('008_expense_review.sql'));
   await db.exec(`set role authenticated; set request.jwt.claim.sub='${user}'`);
   await neon.saveExpense(user, expense, asset);
   await assert.rejects(neon.saveExpense(other, { ...expense, id: id(20) }, asset), /Not authorized/);

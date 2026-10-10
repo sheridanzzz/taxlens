@@ -54,7 +54,7 @@ export default function AskPage() {
   };
 
   return (
-    <motion.div {...fadeInUp} className="mx-auto max-w-3xl">
+    <motion.div {...fadeInUp} className="w-full max-w-5xl">
       <Section
         eyebrow="Answers from ATO guidance"
         title="Ask a question"

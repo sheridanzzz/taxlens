@@ -80,7 +80,7 @@ export const AppShell = ({ children }: { children: ReactNode }) => {
             id="main-content"
             className="flex-1 overflow-y-auto overscroll-contain px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8"
           >
-            <div className="mx-auto w-full max-w-[1440px]">{children}</div>
+            <div className="mx-auto w-full max-w-[1800px]">{children}</div>
           </main>
         </div>
       </div>

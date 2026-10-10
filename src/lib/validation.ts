@@ -19,6 +19,10 @@ export const validateExpense = (e: Expense): Expense => {
     throw new Error("Invalid expense category or claim method.");
   text(e.id); text(e.description); date(e.date, e.financialYear);
   number(e.amount, 0.01); number(e.workUsePercent, 0, 100);
+  if (e.reviewStatus != null && !["pending", "reviewed", "personal"].includes(e.reviewStatus))
+    throw new Error("Invalid receipt review status.");
+  if (e.reviewStatus === "personal" && e.workUsePercent !== 0)
+    throw new Error("Personal receipts must have zero work use.");
   if (e.kilometres !== undefined) number(e.kilometres, 0);
   if (e.receiptDataUrl !== undefined &&
       (!/^data:(image\/(png|jpeg|jpg|webp|gif)|application\/pdf|message\/rfc822);base64,/.test(e.receiptDataUrl) || e.receiptDataUrl.length > 20_000_000))

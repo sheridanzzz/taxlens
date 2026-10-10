@@ -142,6 +142,8 @@ const SettingsPage = () => {
   // reload of this page shows defaults and Save wipes the real values.
   useEffect(() => {
     if (!state.loaded) return;
+    // Hydrate drafts only when the asynchronous account load completes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIncome(state.settings.annualIncome.toString());
     setOccupation(state.settings.occupation);
     setFy(state.settings.financialYear);
@@ -216,7 +218,7 @@ const SettingsPage = () => {
   const fyLabel = FINANCIAL_YEARS.find((f) => f.value === fy)?.label ?? fy;
 
   return (
-    <div className="mx-auto max-w-3xl space-y-6">
+    <div className="w-full max-w-5xl space-y-6">
       <section>
         <h1 className="font-serif text-3xl leading-tight md:text-[40px]">Settings</h1>
         <p className="mt-2 text-sm text-muted-foreground">Your tax profile, preferences and data.</p>
@@ -225,7 +227,7 @@ const SettingsPage = () => {
 
       {!clearDialogOpen && action.error && <p role="alert" className="text-sm text-destructive">{action.error}</p>}
       <div
-        className="flex gap-1 overflow-x-auto rounded-lg border border-border bg-surface-2/60 p-1"
+        className="flex flex-wrap gap-1 rounded-lg border border-border bg-surface-2/60 p-1"
         role="tablist"
         aria-label="Settings sections"
       >

@@ -32,6 +32,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { ReceiptEvidence } from "./receipt-evidence";
 import { isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { useTax } from "@/context/tax-context";
 import { getExpenseReceipt } from "@/lib/storage";
@@ -40,7 +41,6 @@ import {
   ASSET_EFFECTIVE_LIVES,
   CAR_KM_CAP,
   CAR_RATE_PER_KM,
-  DEPRECIABLE_CATEGORIES,
   EXPENSE_CATEGORIES,
   FINANCIAL_YEARS,
   FY_DATE_RANGES,
@@ -142,6 +142,8 @@ export const ExpenseForm = ({
     if (!open) return;
     let cancelled = false;
     if (editingExpense) {
+    // Reset the draft when the parent selects a different receipt; saving stays explicit.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
       setDescription(editingExpense.description);
       setAmount(editingExpense.amount.toString());
       setCategory(editingExpense.category);
@@ -173,14 +175,13 @@ export const ExpenseForm = ({
   }, [editingExpense, open]);
 
   const mustDepreciate =
-    needsDepreciation(parseFloat(amount), category);
+    needsDepreciation(parseFloat(amount), category, description);
 
   const handleAmountChange = (value: string) => {
     setAmount(value);
     if (parseFloat(value) > 0) {
       setClaimType(
-        parseFloat(value) > INSTANT_DEDUCTION_THRESHOLD &&
-          DEPRECIABLE_CATEGORIES.includes(category)
+        needsDepreciation(parseFloat(value), category, description)
           ? "depreciation"
           : "full"
       );
@@ -196,8 +197,7 @@ export const ExpenseForm = ({
     }
     if (parseFloat(amount) > 0) {
       setClaimType(
-        parseFloat(amount) > INSTANT_DEDUCTION_THRESHOLD &&
-          DEPRECIABLE_CATEGORIES.includes(next)
+        needsDepreciation(parseFloat(amount), next, description)
           ? "depreciation"
           : "full"
       );
@@ -256,6 +256,7 @@ export const ExpenseForm = ({
       category,
       claimType,
       workUsePercent: numWorkUse,
+      reviewStatus: numWorkUse === 0 ? "personal" : "reviewed",
       claimableAmount,
       assetId: asset?.id ?? (editingExpense?.claimType === "depreciation" ? assetId : undefined),
       carId: isCarKm ? carId.trim() || "DEFAULT" : undefined,
@@ -306,7 +307,7 @@ export const ExpenseForm = ({
   };
 
   const fyRange = FY_DATE_RANGES[fy];
-  const coveredByFixedRate = isCoveredByFixedRate({ category }, state.settings.wfhMethod);
+  const coveredByFixedRate = isCoveredByFixedRate({ category, description, claimType }, state.settings.wfhMethod);
   const claimablePreview =
     coveredByFixedRate ? 0 : claimType === "full"
       ? (isCarKm ? enteredKm * carRate : parseFloat(amount) || 0) *
@@ -618,7 +619,7 @@ export const ExpenseForm = ({
                 {coveredByFixedRate && (
                   <p className="rounded-lg bg-butter/50 px-4 py-3 text-sm text-plum">
                     <strong>Covered by your 70c rate.</strong> The fixed rate already
-                    includes internet and phone, so this won’t add to your deductions.
+                    includes energy, internet, phone, stationery and computer consumables, so this won’t add to your deductions.
                     Switch to the actual cost method under WFH hours to claim it.
                   </p>
                 )}
@@ -660,14 +661,8 @@ export const ExpenseForm = ({
                 <div className="space-y-2">
                   <Label>Receipt</Label>
                   {receiptDataUrl ? (
-                    <div className="relative inline-block">
-                      {/* Data URLs and authenticated receipt payloads cannot use next/image. */}
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={receiptDataUrl}
-                        alt="Receipt"
-                        className="h-28 w-auto rounded-lg border border-border object-cover"
-                      />
+                    <div className="relative w-full pr-3">
+                      <ReceiptEvidence url={receiptDataUrl} compact />
                       <Button
                         type="button"
                         variant="destructive"

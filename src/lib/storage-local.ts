@@ -88,6 +88,7 @@ export const saveExpense = (expense: Expense, asset?: DepreciatingAsset): void =
   if (oldAssetId && oldAssetId !== expense.assetId) assets = assets.filter((a) => a.id !== oldAssetId);
   if (idx >= 0 && expense.hasReceipt && expense.receiptDataUrl === undefined)
     expense = { ...expense, receiptDataUrl: all[idx].receiptDataUrl };
+  if (idx >= 0 && !("reviewStatus" in expense)) expense = { ...expense, reviewStatus: all[idx].reviewStatus };
   if (idx >= 0) {
     all[idx] = expense;
   } else {
@@ -125,6 +126,7 @@ export const saveAsset = (asset: DepreciatingAsset): void => {
   const expenses = rawExpenses.map((e) => findLinkedAsset(e, previous, rawExpenses)?.id === asset.id ? {
     ...e, assetId: asset.id, description: asset.name, amount: asset.purchasePrice, date: asset.purchaseDate,
     financialYear: asset.financialYear, workUsePercent: asset.workUsePercent, claimableAmount: 0,
+    reviewStatus: asset.workUsePercent === 0 ? "personal" : "reviewed",
   } : e);
   commit({ [KEYS.assets]: all, [KEYS.expenses]: expenses });
 };
@@ -134,7 +136,7 @@ export const deleteAsset = (id: string): void => {
   const expenses = getItem<Expense[]>(KEYS.expenses, []);
   commit({ [KEYS.assets]: all.filter((a) => a.id !== id),
     [KEYS.expenses]: expenses.map((e) => findLinkedAsset(e, all, expenses)?.id === id ?
-      { ...e, assetId: undefined, claimType: "full", workUsePercent: 0, claimableAmount: 0 } : e) });
+      { ...e, assetId: undefined, claimType: "full", workUsePercent: 0, claimableAmount: 0, reviewStatus: "personal" } : e) });
 };
 
 export const getWfhEntries = (fy?: FinancialYear): WfhEntry[] => {

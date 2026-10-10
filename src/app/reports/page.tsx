@@ -5,7 +5,8 @@ import { motion } from "motion/react";
 import { Section, Kpi, Card } from "@/components/ledgr/primitives";
 import { useAsyncAction } from "@/hooks/use-async-action";
 import { useTax } from "@/context/tax-context";
-import { getExpenseReceipt } from "@/lib/storage";
+import { makeReceiptArchive, makeReceiptPackHtml } from "@/lib/receipt-evidence";
+import { getExpenseReceipts } from "@/lib/storage";
 import {
   formatCurrency,
   getCategoryBreakdown,
@@ -33,8 +34,6 @@ const CHART_COLORS = [
   "var(--color-chart-5)",
 ];
 
-const escapeHtml = (s: string) =>
-  s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 
 const downloadCsv = (filename: string, csvContent: string) => {
   const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
@@ -87,7 +86,7 @@ const ReportsPage = () => {
   // single most common ATO adjustment.
   const doubleClaim =
     state.settings.wfhMethod === "fixed_rate" &&
-    state.expenses.some((e) => e.category === "internet_phone");
+    state.expenses.some((e) => isCoveredByFixedRate(e, state.settings.wfhMethod));
 
   const handleExportTaxSummary = () => {
     const lines = [
@@ -173,64 +172,39 @@ const ReportsPage = () => {
     );
   };
 
-  const handleReceiptPack = () => action.run(async () => {
-    const fmt = (d: string) => new Date(d + "T00:00:00").toLocaleDateString("en-AU");
-    const byDate = [...state.expenses].sort((a, b) => a.date.localeCompare(b.date));
-    // cloud lists carry only a flag — pull the actual images for the pack
-    const withReceipt = await Promise.all(
-      byDate
-        .filter((e) => e.receiptDataUrl || e.hasReceipt)
-        .map(async (e) => ({
-          ...e,
-          receiptDataUrl:
-            e.receiptDataUrl ?? (await getExpenseReceipt(e.id)) ?? undefined,
-        }))
-    ).then((list) => list.filter((e) => e.receiptDataUrl));
-    const missing = byDate.filter((e) => !e.receiptDataUrl && !e.hasReceipt);
-
-    const html = `<!doctype html><html><head><meta charset="utf-8"><title>Ledgr receipt pack — FY ${fy}</title>
-<style>
-  body{font-family:-apple-system,system-ui,sans-serif;max-width:800px;margin:2rem auto;padding:0 1rem;color:#111}
-  h1{font-size:1.3rem} h2{font-size:1rem;margin-top:2rem}
-  p.meta{color:#555;font-size:.85rem}
-  figure{margin:0 0 2rem;page-break-inside:avoid;border-top:1px solid #ddd;padding-top:1rem}
-  figcaption{font-size:.85rem;margin-bottom:.5rem}
-  img{max-width:100%;max-height:480px;border:1px solid #ddd;border-radius:6px}
-  table{width:100%;border-collapse:collapse;font-size:.85rem}
-  td,th{text-align:left;padding:.35rem .5rem;border-bottom:1px solid #eee}
-  td:last-child,th:last-child{text-align:right}
-  @media print{button{display:none}}
-</style></head><body>
-<h1>Receipt pack — FY ${fy}</h1>
-<p class="meta">Generated ${new Date().toLocaleDateString("en-AU")} · ${withReceipt.length} receipts on file · ${missing.length} entries without receipts</p>
-<button onclick="window.print()">Print / Save as PDF</button>
-${withReceipt
-  .map(
-    (e) => `<figure><figcaption><strong>${escapeHtml(e.description)}</strong> — ${fmt(e.date)} · $${e.amount.toFixed(2)} · ${escapeHtml(EXPENSE_CATEGORIES[e.category]?.label || e.category)} · ${e.workUsePercent}% work use</figcaption>${e.receiptDataUrl?.startsWith("data:application/pdf;") ? `<a href="${escapeHtml(e.receiptDataUrl)}" download="receipt-${e.id}.pdf">Download original PDF receipt</a>` : `<img src="${escapeHtml(e.receiptDataUrl ?? "")}" alt="Receipt">`}</figure>`
-  )
-  .join("")}
-${
-  missing.length
-    ? `<h2>Entries without a stored receipt</h2><table><tr><th>Date</th><th>Description</th><th>Category</th><th>Amount</th></tr>${missing
-        .map(
-          (e) => `<tr><td>${fmt(e.date)}</td><td>${escapeHtml(e.description)}</td><td>${escapeHtml(EXPENSE_CATEGORIES[e.category]?.label || e.category)}</td><td>$${e.amount.toFixed(2)}</td></tr>`
-        )
-        .join("")}</table>`
-    : ""
-}
-</body></html>`;
-
-    const url = URL.createObjectURL(new Blob([html], { type: "text/html" }));
-    window.open(url, "_blank", "noopener");
-    setTimeout(() => URL.revokeObjectURL(url), 60_000);
-  });
+  const handleReceiptPack = () => {
+    const popup = window.open("", "_blank");
+    if (popup) { popup.opener = null; popup.document.body.textContent = "Preparing receipt pack…"; }
+    return action.run(async () => {
+      if (!popup) throw new Error("Allow popups for Ledgr to open your receipt pack.");
+      const urls: string[] = [];
+      try {
+        const byDate = [...state.expenses].sort((a, b) => a.date.localeCompare(b.date));
+        const ids = byDate.filter(e => !e.receiptDataUrl && e.hasReceipt).map(e => e.id);
+        const receipts: Record<string, string | null> = {};
+        for (let i = 0; i < ids.length; i += 500) Object.assign(receipts, await getExpenseReceipts(ids.slice(i, i + 500)));
+        const expenses = byDate.map(e => ({ ...e, receiptDataUrl: e.receiptDataUrl ?? receipts[e.id] ?? undefined }));
+        const archive = makeReceiptArchive(expenses, fy);
+        const archiveUrl = URL.createObjectURL(new Blob([new Uint8Array(archive)], { type: "application/zip" }));
+        urls.push(archiveUrl);
+        const html = await makeReceiptPackHtml(expenses, fy, archiveUrl);
+        const htmlUrl = URL.createObjectURL(new Blob([html], { type: "text/html" }));
+        urls.push(htmlUrl);
+        if (popup.closed) throw new Error("Receipt pack window was closed. Please try again.");
+        popup.location.href = htmlUrl;
+        const cleanup = window.setInterval(() => {
+          if (popup.closed) { urls.forEach(url => URL.revokeObjectURL(url)); window.clearInterval(cleanup); }
+        }, 10_000);
+      } catch (error) { urls.forEach(url => URL.revokeObjectURL(url)); popup.close(); throw error; }
+    });
+  };
 
   const EXPORTS = [
     { label: "Tax summary (CSV)", detail: "Full overview + myTax items", handler: handleExportTaxSummary, disabled: false, icon: FileText },
     { label: "Expenses (CSV)", detail: `${state.expenses.length} items`, handler: handleExportExpenses, disabled: state.expenses.length === 0, icon: FileText },
     { label: "WFH hour log (CSV)", detail: `${state.wfhEntries.length} days`, handler: handleExportWfh, disabled: state.wfhEntries.length === 0, icon: FileText },
     { label: "Depreciation schedule (CSV)", detail: `${state.assets.length} assets`, handler: handleExportDepreciation, disabled: state.assets.length === 0, icon: FileText },
-    { label: "Receipt pack (print/PDF)", detail: "Audit-ready archive", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
+    { label: "Receipt pack (print/PDF)", detail: "Readable emails + original receipts ZIP", handler: handleReceiptPack, disabled: state.expenses.length === 0, icon: Printer },
     { label: "CGT worksheet (CSV)", detail: `${cgt.disposals.length} disposal${cgt.disposals.length === 1 ? "" : "s"}`, handler: handleExportCgt, disabled: cgt.disposals.length === 0, icon: FileText },
     { label: "Rental schedule (CSV)", detail: `${state.rentalTransactions.length} entries`, handler: handleExportRental, disabled: state.rentalTransactions.length === 0, icon: FileText },
   ];
@@ -258,7 +232,7 @@ ${
 
       {doubleClaim && (
         <div className="mb-6 rounded-md border border-gold/50 bg-gold/5 p-4 text-[13px]">
-          <strong className="text-gold">Internet &amp; Phone isn’t counted.</strong>{" "}
+          <strong className="text-gold">Covered running costs aren’t counted.</strong>{" "}
           You’re using the 70c fixed rate, which already covers phone, internet,
           power and stationery, so those expenses are left out of your totals and
           myTax figures. Switch to the actual cost method under WFH hours if

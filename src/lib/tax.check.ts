@@ -231,6 +231,16 @@ const onActualCost = calculateTaxSummary([course, internet], [], [], [], 120000,
 near(onActualCost.totalFullClaims, 1950, "on actual cost the internet share counts");
 assert.equal(getCategoryBreakdown([internet], "fixed_rate").length, 0, "myTax breakdown leaves it out too");
 near(getCategoryBreakdown([internet], "actual_cost")[0].amount, 450, "and includes it on actual cost");
+const power: Expense = { ...internet, id: "power", category: "other", description: "Origin energy payment - 2026-06-29 [confirm electricity bill]", amount: 100, workUsePercent: 90, claimableAmount: 90 };
+assert.equal(mustDepreciate(1000, "other", power.description), false, "a large annual energy bill is a running cost, not an asset");
+assert.equal(mustDepreciate(1000, "other", "Electrical testing equipment"), true, "physical equipment still depreciates");
+const supplies: Expense = { ...power, id: "supplies", category: "stationery_consumables", description: "Printer ink" };
+for (const runningCost of [power, supplies, { ...power, category: "electricity" as const }]) {
+  near(calculateTaxSummary([course, runningCost], [], [], [], 120000, "2025-26", "fixed_rate").totalFullClaims, 1500, "covered running cost cannot be claimed twice");
+  assert.equal(getCategoryBreakdown([runningCost], "fixed_rate").length, 0, "myTax also excludes running costs");
+  near(calculateTaxSummary([runningCost], [], [], [], 120000, "2025-26", "actual_cost").totalFullClaims, 90, "actual-cost work share remains available");
+}
+near(calculateTaxSummary([{ ...power, description: "Work reference book" }], [], [], [], 120000, "2025-26", "fixed_rate").totalFullClaims, 90, "unrelated Other expenses remain claimable");
 assert.ok(
   summary.estimatedTaxSaved > summary.totalDeductions * 0.4,
   "a $120k earner with a HELP debt saves more than 40c per deducted dollar"

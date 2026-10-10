@@ -60,8 +60,8 @@ export function Kpi({
     >
       <div className="eyebrow">{label}</div>
       <div
-        className={`truncate font-serif font-black leading-none tabular ${
-          large ? "text-4xl md:text-5xl" : "text-3xl"
+        className={`break-words font-serif font-black leading-none tabular ${
+          large ? "text-3xl sm:text-4xl md:text-5xl" : "text-2xl sm:text-3xl"
         }`}
         title={value}
       >

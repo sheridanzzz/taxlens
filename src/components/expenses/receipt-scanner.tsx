@@ -170,14 +170,14 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated, initialRe
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
 
-  const isDep = mustDepreciate(editAmount, editCategory);
+  const isDep = mustDepreciate(editAmount, editCategory, editName);
   const assetType = editAssetType ?? scanResult?.suggestedAssetType ?? "other";
   const effectiveLife = editEffectiveLife ?? Math.max(1, scanResult?.suggestedEffectiveLife ?? ASSET_EFFECTIVE_LIVES[assetType].years);
   const claimableAmount = Math.round(editAmount * (editWorkUse / 100) * 100) / 100;
   // what actually lands in this year's deductions (0 when the 70c rate covers it)
-  const coveredByFixedRate = isCoveredByFixedRate({ category: editCategory }, state.settings.wfhMethod);
+  const coveredByFixedRate = isCoveredByFixedRate({ category: editCategory, description: editName }, state.settings.wfhMethod);
   const claimsNow = isDep ? calculateCurrentYearDepreciation({
-    id: recordId.current, name: editName, assetType, purchaseDate: editDate,
+    id: "preview", name: editName, assetType, purchaseDate: editDate,
     purchasePrice: editAmount, effectiveLifeYears: effectiveLife, depreciationMethod: editDepMethod,
     workUsePercent: editWorkUse, financialYear: editFY, createdAt: "",
   }, editFY) : coveredByFixedRate ? 0 : claimableAmount;
@@ -305,6 +305,8 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated, initialRe
   useEffect(() => {
     if (step !== "scanning" || !scanInput) return;
     let cancelled = false;
+    // Reset the progress display for each new external scan request.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setStageIndex(0);
     const timer = setInterval(() => setStageIndex((i) => (i + 1) % STAGES.length), 1800);
 
@@ -385,6 +387,7 @@ export const ReceiptScanner = ({ open, onOpenChange, onExpenseCreated, initialRe
         category: personal ? "other" : editCategory,
         claimType: asset ? "depreciation" : "full", assetId: asset?.id,
         workUsePercent: personal ? 0 : editWorkUse, claimableAmount: personal || asset ? 0 : claimableAmount,
+        reviewStatus: personal || editWorkUse === 0 ? "personal" : "reviewed",
         receiptDataUrl, financialYear: editFY, createdAt: new Date().toISOString(),
         notes: initialReceipt?.notes ?? (scanResult ? `AI scan: ${editMerchant}. ${scanResult.relevanceExplanation}` : undefined),
       };

@@ -60,6 +60,8 @@ export const WfhCalendar = () => {
   });
   useEffect(() => {
     const date = new Date(getDefaultDateForFinancialYear(state.settings.financialYear) + "T00:00:00");
+    // Synchronize the calendar with the financial year selected outside this component.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCurrentMonth({ year: date.getFullYear(), month: date.getMonth() });
   }, [state.settings.financialYear]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

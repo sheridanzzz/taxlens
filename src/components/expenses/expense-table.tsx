@@ -39,6 +39,8 @@ import { useTax } from "@/context/tax-context";
 import { getExpenseReceipt } from "@/lib/storage";
 import { formatCurrency, isCoveredByFixedRate } from "@/lib/tax-calculator";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
+import { ReceiptEvidence } from "./receipt-evidence";
+import { expenseReviewStatus } from "@/lib/receipt-review";
 import { isAiScanned } from "@/lib/utils";
 import type { Expense } from "@/lib/types";
 
@@ -47,10 +49,11 @@ interface ExpenseTableProps {
   initialSearch?: string;
 }
 
-type StatusFilter = "all" | "deductible" | "depreciating" | "personal";
+type StatusFilter = "all" | "pending" | "deductible" | "depreciating" | "personal";
 
 const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
   { value: "all", label: "All" },
+  { value: "pending", label: "Pending review" },
   { value: "deductible", label: "Deductible" },
   { value: "depreciating", label: "Depreciating" },
   { value: "personal", label: "Personal" },
@@ -80,11 +83,12 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
         categoryFilter === "all" || e.category === categoryFilter;
       const matchesStatus =
         statusFilter === "all" ||
-        (statusFilter === "personal" && e.workUsePercent === 0) ||
+        (statusFilter === "pending" && expenseReviewStatus(e) === "pending") ||
+        (statusFilter === "personal" && expenseReviewStatus(e) === "personal") ||
         (statusFilter === "depreciating" && e.claimType === "depreciation") ||
         (statusFilter === "deductible" &&
           e.workUsePercent > 0 &&
-          e.claimType !== "depreciation");
+          e.claimType !== "depreciation" && !isCoveredByFixedRate(e, state.settings.wfhMethod) && expenseReviewStatus(e) !== "pending");
       return matchesSearch && matchesCategory && matchesStatus;
     })
     .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -98,6 +102,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
 
   const covered = (e: Expense) => isCoveredByFixedRate(e, state.settings.wfhMethod);
   const statusFor = (e: Expense) => {
+    if (expenseReviewStatus(e) === "pending") return { label: "Pending review", tone: "gold" as const };
     if (covered(e))
       return { label: "Covered by 70c rate", tone: "muted" as const };
     if (e.workUsePercent === 0)
@@ -119,10 +124,9 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
   };
 
   const openReceipt = (expense: Expense) => action.run(async () => {
-    setReceiptUrl(
-      expense.receiptDataUrl ?? (await getExpenseReceipt(expense.id))
-    );
-    if (!expense.receiptDataUrl && !expense.hasReceipt) throw new Error("Receipt not found.");
+    const url = expense.receiptDataUrl ?? (await getExpenseReceipt(expense.id));
+    if (!url) throw new Error("Stored receipt could not be found. Please reattach your evidence.");
+    setReceiptUrl(url);
   });
 
   return (
@@ -151,7 +155,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
         </div>
 
         <div
-          className="flex max-w-full gap-1 overflow-x-auto rounded-lg border border-border bg-surface-2 p-1"
+          className="flex max-w-full flex-wrap gap-1 rounded-lg border border-border bg-surface-2 p-1"
           aria-label="Filter expenses by status"
         >
           {STATUS_FILTERS.map((filter) => (
@@ -226,7 +230,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
         </div>
       ) : (
         <>
-        <div className="divide-y divide-border md:hidden">
+        <div className="divide-y divide-border xl:hidden">
           {filtered.map((expense) => {
             const status = statusFor(expense);
             return (
@@ -234,7 +238,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
-                      <h3 className="truncate text-sm font-medium">
+                      <h3 className="break-words text-sm font-medium">
                         {expense.description}
                       </h3>
                       {isAiScanned(expense) && (
@@ -255,12 +259,11 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                     <div className="font-mono text-sm tabular">
                       {formatCurrency(expense.amount)}
                     </div>
-                    <div className="mt-1">
-                      <Pill tone={status.tone}>{status.label}</Pill>
-                    </div>
+
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between border-t border-border pt-3">
+                <div className="mt-3"><Pill tone={status.tone}>{status.label}</Pill></div>
+                <div className="mt-3 flex items-center justify-between border-t border-border pt-3">
                   <div>
                     <span className="eyebrow">Claimable </span>
                     <span className="ml-1 font-mono text-sm tabular">
@@ -304,17 +307,17 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
             );
           })}
         </div>
-        <div className="hidden overflow-x-auto md:block">
-          <table className="w-full text-sm">
+        <div className="hidden overflow-x-auto xl:block">
+          <table className="w-full min-w-[960px] text-sm">
             <thead>
               <tr className="eyebrow border-b border-border">
-                <th className="py-3 text-left font-normal">Date</th>
-                <th className="py-3 text-left font-normal">Description</th>
-                <th className="py-3 text-left font-normal">Category</th>
-                <th className="py-3 text-left font-normal">Status</th>
-                <th className="py-3 text-right font-normal">Amount</th>
-                <th className="py-3 text-right font-normal">Claimable</th>
-                <th className="py-3 text-right font-normal">Actions</th>
+                <th className="px-4 py-4 text-left font-normal">Date</th>
+                <th className="px-4 py-4 text-left font-normal">Description</th>
+                <th className="px-4 py-4 text-left font-normal">Category</th>
+                <th className="px-4 py-4 text-left font-normal">Status</th>
+                <th className="px-4 py-4 text-right font-normal">Amount</th>
+                <th className="px-4 py-4 text-right font-normal">Claimable</th>
+                <th className="px-4 py-4 text-right font-normal">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -325,15 +328,15 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                     key={expense.id}
                     className="border-b border-border hover:bg-surface-2/40"
                   >
-                    <td className="whitespace-nowrap py-3 tabular text-muted-foreground">
+                    <td className="whitespace-nowrap px-4 py-4 tabular text-muted-foreground">
                       {new Date(expense.date).toLocaleDateString("en-AU", {
                         day: "2-digit",
                         month: "short",
                       })}
                     </td>
-                    <td className="py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="max-w-[220px] truncate">
+                    <td className="px-4 py-4">
+                      <div className="flex items-start gap-2">
+                        <span className="min-w-0 break-words">
                           {expense.description}
                         </span>
                         {isAiScanned(expense) && (
@@ -345,7 +348,7 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-6 w-6"
+                            className="h-8 w-8 shrink-0"
                             onClick={() => openReceipt(expense)}
                             aria-label={`View receipt for ${expense.description}`}
                           >
@@ -354,22 +357,19 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
                         )}
                       </div>
                     </td>
-                    <td className="py-3 text-muted-foreground">
-                      {EXPENSE_CATEGORIES[expense.category]?.label
-                        .split(" ")
-                        .slice(0, 2)
-                        .join(" ")}
+                    <td className="px-4 py-4 text-muted-foreground">
+                      {EXPENSE_CATEGORIES[expense.category]?.label}
                     </td>
-                    <td className="py-3">
+                    <td className="px-4 py-4">
                       <Pill tone={status.tone}>{status.label}</Pill>
                     </td>
-                    <td className="py-3 text-right font-mono tabular text-muted-foreground">
+                    <td className="whitespace-nowrap px-4 py-4 text-right font-mono tabular text-muted-foreground">
                       {formatCurrency(expense.amount)}
                     </td>
-                    <td className="py-3 text-right font-mono tabular">
+                    <td className="whitespace-nowrap px-4 py-4 text-right font-mono tabular">
                       {formatCurrency(covered(expense) ? 0 : expense.claimableAmount)}
                     </td>
-                    <td className="py-3 text-right">
+                    <td className="px-4 py-4 text-right">
                       <div className="flex justify-end gap-1">
                         <Button
                           variant="ghost"
@@ -426,23 +426,11 @@ export const ExpenseTable = ({ onEdit, initialSearch = "" }: ExpenseTableProps) 
         open={!!receiptUrl}
         onOpenChange={(open) => !open && setReceiptUrl(null)}
       >
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Receipt</DialogTitle>
           </DialogHeader>
-          {receiptUrl?.startsWith("data:application/pdf;") ? (
-            <a href={receiptUrl} download="receipt.pdf" className="text-sm underline">Download original PDF receipt</a>
-          ) : receiptUrl?.startsWith("data:message/rfc822;") ? (
-            <a href={receiptUrl} download="original-receipt.eml" className="text-sm underline">Download original receipt email and attachments</a>
-          ) : receiptUrl && (
-            // Stored receipt data URLs do not benefit from remote image optimization.
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              src={receiptUrl}
-              alt="Receipt"
-              className="w-full rounded-lg object-contain"
-            />
-          )}
+          {receiptUrl && <ReceiptEvidence url={receiptUrl} />}
         </DialogContent>
       </Dialog>
     </div>
