@@ -3,6 +3,10 @@ import * as db from "@/lib/storage-neon";
 import { getBearerUserId } from "@/lib/mobile-auth";
 import { FY_DATE_RANGES } from "@/lib/constants";
 import type { FinancialYear } from "@/lib/types";
+import type { Expense, DepreciatingAsset } from "@/lib/types";
+import { makeReceiptArchive, makeReceiptFiguresHtml, readEmailEvidence, receiptMime } from "@/lib/receipt-evidence";
+
+export const maxDuration = 60;
 
 // The iOS app's data API: a bearer-auth shell over storage-neon, which already
 // scopes every query to the user id it's handed.
@@ -24,11 +28,36 @@ const fy = (q: URLSearchParams) => {
   return value && value in FY_DATE_RANGES ? (value as FinancialYear) : undefined;
 };
 
+const receiptId = (q: URLSearchParams) => {
+  const id = q.get("id") ?? "";
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) throw new Error("Invalid receipt id.");
+  return id;
+};
+
+const receiptRows = async (userId: string, q: URLSearchParams) => {
+  const year = fy(q);
+  if (!year) throw new Error("Choose a valid financial year.");
+  const expenses = await db.getExpenses(userId, year);
+  const originals: Record<string, string | null> = {};
+  for (let i = 0; i < expenses.length; i += 500)
+    Object.assign(originals, await db.getExpenseReceipts(userId, expenses.slice(i, i + 500).map(e => e.id)));
+  return { year, expenses: expenses.map(e => ({ ...e, receiptDataUrl: originals[e.id] ?? undefined })) };
+};
+
 const RESOURCES: Record<string, Resource> = {
+  data: { get: async u => {
+    const settings = await db.getSettings(u);
+    const year = settings.financialYear;
+    const [expenses, assets, wfhEntries, wfhActualCosts, cgt, rentalProperties, rentalTransactions] = await Promise.all([
+      db.getExpenses(u, year), db.getAssets(u, year), db.getWfhEntries(u, year), db.getWfhActualCosts(u, year),
+      db.getCgtTransactions(u), db.getRentalProperties(u), db.getRentalTransactions(u, year),
+    ]);
+    return { settings, expenses, assets, wfhEntries, wfhActualCosts, cgt, rentalProperties, rentalTransactions };
+  } },
   settings: { get: (u) => db.getSettings(u), put: db.saveSettings },
   expenses: {
     get: (u, q) => db.getExpenses(u, fy(q)),
-    put: db.saveExpense,
+    put: (u, body: Expense & { linkedAsset?: DepreciatingAsset }) => db.saveExpense(u, body, body.linkedAsset),
     del: db.deleteExpense,
   },
   assets: { get: (u, q) => db.getAssets(u, fy(q)), put: db.saveAsset },
@@ -41,6 +70,22 @@ const RESOURCES: Record<string, Resource> = {
   cgt: { get: (u) => db.getCgtTransactions(u) },
   "rental-properties": { get: (u) => db.getRentalProperties(u) },
   "rental-transactions": { get: (u, q) => db.getRentalTransactions(u, fy(q)) },
+  "receipt-evidence": { get: async (u, q) => {
+    const dataUrl = await db.getExpenseReceipt(u, receiptId(q));
+    if (!dataUrl || receiptMime(dataUrl) !== "message/rfc822") return { dataUrl, email: null };
+    try { return { dataUrl, email: await readEmailEvidence(dataUrl) }; }
+    catch { return { dataUrl, email: null, previewError: "Email preview unavailable. The original email and its attachments are still available." }; }
+  } },
+  "receipt-pack": { get: async (u, q) => {
+    const { expenses } = await receiptRows(u, q);
+    // Printed PDFs cannot use HTML download links. Keep the original payloads
+    // in the ZIP so email/PDF base64 isn't duplicated in this response.
+    return { html: await makeReceiptFiguresHtml(expenses, false), missing: expenses.filter(e => !e.receiptDataUrl).map(e => e.id) };
+  } },
+  "receipt-archive": { get: async (u, q) => {
+    const { expenses, year } = await receiptRows(u, q);
+    return { base64: Buffer.from(makeReceiptArchive(expenses, year)).toString("base64"), missing: expenses.filter(e => !e.receiptDataUrl).length };
+  } },
   // one expense's stored receipt (image, PDF or email) as a data URL, or null
   receipt: {
     get: (u, q) => {

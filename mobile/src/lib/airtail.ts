@@ -1,5 +1,6 @@
 import type { AirtailReceipt, ImportedReceipt, ReceiptEvidence } from "@shared/airtail-receipt";
 import type { Expense, FinancialYear } from "@shared/types";
+import type { ReceiptSuggestion } from "@shared/receipt-shortlist";
 import { addDays } from "@shared/tax-time";
 import { api } from "./api";
 import { needsReceipt } from "./expenses";
@@ -8,15 +9,17 @@ import { needsReceipt } from "./expenses";
 // bearer token. Connecting a mailbox stays on the web.
 
 /** List rows carry the id an import would get, worked out on the server. */
-export type ListedReceipt = AirtailReceipt & { expenseId: string };
+export type ListedReceipt = AirtailReceipt & { expenseId: string; suggestion?: ReceiptSuggestion };
 export type AirtailStatus = { configured: boolean; signedIn: boolean; connected: boolean; accountEmail?: string; expired: boolean };
+export type ReceiptPage = { receipts: ListedReceipt[]; nextCursor?: string | null; shortlist?: { mode: "ai" | "rules"; occupation: string } };
 
-export const airtailStatus = () => api<AirtailStatus>("/api/integrations/airtail");
-export const airtailReceipts = (fy: FinancialYear, cursor?: string | null) =>
-  api<{ receipts: ListedReceipt[]; nextCursor?: string | null }>(
-    `/api/integrations/airtail/receipts?fy=${fy}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`
+export const airtailStatus = (signal?: AbortSignal) => api<AirtailStatus>("/api/integrations/airtail", { signal });
+export const airtailReceipts = (fy: FinancialYear, cursor?: string | null, signal?: AbortSignal) =>
+  api<ReceiptPage>(
+    `/api/integrations/airtail/receipts?fy=${fy}&smart=1${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`,
+    { signal }
   );
-export const airtailEvidence = (id: string) => api<ReceiptEvidence>(`/api/integrations/airtail/receipts/${id}`);
+export const airtailEvidence = (id: string, signal?: AbortSignal) => api<ReceiptEvidence>(`/api/integrations/airtail/receipts/${id}`, { signal });
 
 /** Already in Ledgr: imported as its own expense, or attached to one. */
 export const isSaved = (r: ListedReceipt, expenses: Expense[]) =>

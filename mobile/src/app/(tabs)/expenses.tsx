@@ -5,6 +5,7 @@ import type { Expense } from "@shared/types";
 import { EXPENSE_CATEGORIES } from "@shared/constants";
 import { formatCurrency, isCoveredByFixedRate } from "@shared/tax-calculator";
 import { myTaxItemFor } from "@shared/mytax";
+import { expenseReviewStatus } from "@shared/receipt-review";
 import { useData } from "@/lib/store";
 import { claimNote, myTaxCode, needsReceipt, plural, shortDate } from "@/lib/expenses";
 import { colors } from "@/lib/theme";
@@ -14,7 +15,7 @@ import { Button, Field, Heading, Icon, Pills, Screen, T } from "@/components/ui"
 const BASE_FILTERS = [
   { value: "all", label: "All" },
   { value: "no-receipt", label: "No receipt" },
-  { value: "unchecked", label: "Not checked" },
+  { value: "unchecked", label: "Pending review" },
   { value: "personal", label: "Personal" },
 ];
 
@@ -42,10 +43,10 @@ const Row = ({ e, note, onPress }: { e: Expense; note: string; onPress: () => vo
         <Icon name={missing ? "exclamationmark" : attached ? "paperclip" : "doc.text"} size={17} />
       </View>
       <View style={{ flex: 1 }}>
-        <T w="bold" size={15} numberOfLines={1}>
+        <T w="bold" size={15}>
           {e.description}
         </T>
-        <T w="medium" size={13} color={missing ? colors.negative : colors.inkSoft} numberOfLines={1}>
+        <T w="medium" size={13} color={missing ? colors.negative : colors.inkSoft}>
           {shortDate(e.date)} · {missing ? "No receipt" : note}
         </T>
       </View>
@@ -83,7 +84,7 @@ export default function Expenses() {
         : filter === "unchecked"
           ? unchecked.has(e.id)
           : filter === "personal"
-            ? e.workUsePercent === 0
+            ? expenseReviewStatus(e) === "personal"
             : e.workUsePercent > 0 && myTaxItemFor(e.category) === filter;
   const q = query.trim().toLowerCase();
   const matchesQuery = (e: Expense) =>

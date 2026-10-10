@@ -4,6 +4,7 @@ import { getCategoryBreakdown, isCoveredByFixedRate } from "@shared/tax-calculat
 import { getMyTaxRows } from "@shared/mytax";
 import { API_URL } from "./api";
 import type { Data } from "./store";
+import { expenseReviewStatus } from "@shared/receipt-review";
 
 export const MYTAX_RENTAL = "Rental property (I21)";
 
@@ -20,7 +21,7 @@ export const myTaxRows = (data: Data, summary: TaxSummary) => {
 export const openWeb = (path: string) => void Linking.openURL(`${API_URL}${path}`);
 
 export const claimNote = (e: Expense, wfhMethod: WfhMethod) =>
-  isCoveredByFixedRate(e, wfhMethod)
+  expenseReviewStatus(e) === "pending" ? "Pending review" : isCoveredByFixedRate(e, wfhMethod)
     ? "Covered by the 70c rate"
     : e.workUsePercent === 0
       ? "Personal · no deduction"

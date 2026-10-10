@@ -7,9 +7,9 @@ import DateTimePicker from "@react-native-community/datetimepicker";
 import { randomUUID } from "expo-crypto";
 import type { SFSymbol } from "expo-symbols";
 import type { AssetType, Expense, ExpenseCategory, ReceiptScanResult } from "@shared/types";
+import { mustDepreciate } from "@shared/expense-claims";
 import {
   ASSET_EFFECTIVE_LIVES,
-  DEPRECIABLE_CATEGORIES,
   EXPENSE_CATEGORIES,
   FINANCIAL_YEARS,
   FY_DATE_RANGES,
@@ -96,7 +96,7 @@ const Header = ({ title, onClose }: { title: string; onClose: () => void }) => (
 
 export default function ExpenseScreen() {
   const { id, manual, airtail } = useLocalSearchParams<{ id?: string; manual?: string; airtail?: string }>();
-  const { data, save, remove, expensesFor } = useData();
+  const { data, saveExpense, remove, expensesFor } = useData();
   const { settings } = data;
   const editing: Expense | undefined = id ? data.expenses.find((e) => e.id === id) : undefined;
   // an Airtail email the review screen handed over; work use starts at 0% like the web import
@@ -188,7 +188,7 @@ export default function ExpenseScreen() {
   // an edit keeps its claim type: a depreciating receipt already has its asset record
   const claimType = editing
     ? editing.claimType
-    : numAmount > INSTANT_DEDUCTION_THRESHOLD && DEPRECIABLE_CATEGORIES.includes(category)
+    : mustDepreciate(numAmount, category, description)
       ? "depreciation"
       : "full";
   const claimable = (wu: number) =>
@@ -216,8 +216,7 @@ export default function ExpenseScreen() {
       // A depreciating item deducts nothing as an expense row: it goes on the
       // asset register, and the expense row keeps the receipt as evidence.
       const assetId = type === "depreciation" && !editing ? randomUUID() : editing?.assetId;
-      if (type === "depreciation" && !editing) {
-        await save("assets", {
+      const linkedAsset = type === "depreciation" && !editing ? {
           id: assetId!,
           name,
           assetType,
@@ -228,9 +227,8 @@ export default function ExpenseScreen() {
           workUsePercent: wu,
           financialYear: fy,
           createdAt: new Date().toISOString(),
-        });
-      }
-      await save("expenses", {
+        } : undefined;
+      await saveExpense({
         // an import keeps its stable id, so the same email can't be saved twice
         id: editing?.id ?? imported?.id ?? randomUUID(),
         date,
@@ -239,6 +237,7 @@ export default function ExpenseScreen() {
         category: personal ? "other" : category,
         claimType: type,
         workUsePercent: wu,
+        reviewStatus: wu === 0 ? "personal" : "reviewed",
         claimableAmount: type === "full" ? Math.round(numAmount * (wu / 100) * 100) / 100 : 0,
         assetId,
         receiptDataUrl: photo?.dataUrl ?? imported?.receiptDataUrl,
@@ -253,7 +252,7 @@ export default function ExpenseScreen() {
               : undefined,
         financialYear: fy,
         createdAt: editing?.createdAt ?? new Date().toISOString(),
-      });
+      }, linkedAsset);
       if (imported) clearImport();
       close();
     } catch (e) {
@@ -268,7 +267,7 @@ export default function ExpenseScreen() {
     const ok = await ask(
       "Delete this expense?",
       editing.claimType === "depreciation"
-        ? "This removes the receipt record. Its asset stays under Assets on the web."
+        ? "This removes the expense, its receipt and its linked asset."
         : "This removes the expense and its receipt.",
       "Delete"
     );
@@ -314,7 +313,7 @@ export default function ExpenseScreen() {
     );
   }
 
-  const covered = isCoveredByFixedRate({ category }, settings.wfhMethod);
+  const covered = isCoveredByFixedRate({ category, description }, settings.wfhMethod);
   const lastDay = FY_DATE_RANGES[FINANCIAL_YEARS[FINANCIAL_YEARS.length - 1].value].end;
   const today = toLocalDate();
 
@@ -409,11 +408,11 @@ export default function ExpenseScreen() {
             </T>
           ) : covered ? (
             <T color={colors.plum}>
-              Covered by the 70c rate. Internet and phone are already in your hourly work-from-home rate, so this isn&apos;t claimed separately.
+              Covered by the 70c rate. Energy, internet, phone and stationery/computer consumables are included in your hourly work-from-home rate.
             </T>
           ) : claimType === "depreciation" ? (
             editing ? (
-              <T color={colors.plum}>Claimed through Assets. Change its work use there on the web so the depreciation follows.</T>
+              <T color={colors.plum}>Claimed through Assets. Saving its work use here updates the linked asset too.</T>
             ) : (
               <>
                 <T color={colors.plum}>

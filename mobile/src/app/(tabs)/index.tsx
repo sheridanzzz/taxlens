@@ -7,52 +7,16 @@ import { refundEstimate, taxTimeFor } from "@shared/tax-time";
 import { useData } from "@/lib/store";
 import { claimNote, myTaxCode, myTaxName, myTaxRows, needsReceipt, openWeb, plural, shortDate } from "@/lib/expenses";
 import { colors } from "@/lib/theme";
+import { SavingsJar } from "@/components/savings-jar";
 import { ReceiptReview } from "@/components/receipt-review";
 import { Button, Card, Heading, Icon, Pills, Screen, T, Tile } from "@/components/ui";
 
 const DAY = 86_400_000;
 const TINTS = [colors.butter, colors.mint, colors.pink, colors.sky, colors.lav];
-const COIN = "#f2b63c";
-// the web Jar (dashboard/page.tsx) is an SVG on a 100×120 grid; these Views redraw it at this scale
-const S = 0.72;
 const COMPARE = [
   { value: "with", label: "With deductions" },
   { value: "without", label: "Without" },
 ] as const;
-
-const Jar = ({ fill }: { fill: number }) => {
-  // the pot fills as the financial year goes on
-  const level = Math.round(56 * Math.min(1, Math.max(0.15, fill)));
-  const coin = (left: number, top: number) => (
-    <View style={{ position: "absolute", left: left * S, top: top * S, width: 12 * S, height: 12 * S, borderRadius: 6 * S, backgroundColor: COIN }} />
-  );
-  return (
-    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ width: 100 * S, height: 120 * S }}>
-      <View style={{ position: "absolute", left: 26 * S, top: 4 * S, width: 48 * S, height: 12 * S, borderRadius: 4 * S, backgroundColor: colors.tangerine }} />
-      <View
-        style={{
-          position: "absolute",
-          left: 10 * S,
-          top: 22 * S,
-          width: 80 * S,
-          height: 94 * S,
-          borderWidth: 3 * S,
-          borderColor: "#ffffff",
-          borderTopLeftRadius: 8 * S,
-          borderTopRightRadius: 8 * S,
-          borderBottomLeftRadius: 12 * S,
-          borderBottomRightRadius: 12 * S,
-          backgroundColor: "rgba(255,255,255,0.12)",
-          overflow: "hidden",
-        }}
-      >
-        <View style={{ position: "absolute", left: 0, right: 0, bottom: 0, height: level * S, backgroundColor: colors.butter }} />
-        {coin(15, 69)}
-        {coin(41, 63)}
-      </View>
-    </View>
-  );
-};
 
 const greeting = () => {
   const h = new Date().getHours();
@@ -168,7 +132,7 @@ export default function Home() {
                   : "Tax your deductions save you. Add your salary in Settings for a sharper number."}
             </T>
           </View>
-          <Jar fill={yearDone} />
+          <SavingsJar fill={yearDone} />
         </View>
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
@@ -215,7 +179,7 @@ export default function Home() {
 
       {!empty && <Button title="Add a receipt" icon="camera.fill" kind="primary" onPress={() => router.push("/expense")} />}
 
-      <ReceiptReview />
+      <ReceiptReview key={fy} />
 
       <View style={{ gap: 10 }}>
         <T w="heavy" size={20} color={colors.plum} accessibilityRole="header">

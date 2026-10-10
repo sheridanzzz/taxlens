@@ -1,116 +1,104 @@
-import { useEffect, useState } from "react";
-import { AccessibilityInfo, Animated, PanResponder, View } from "react-native";
+import { useRef, useState } from "react";
+import { Animated, PanResponder, View } from "react-native";
 import { router } from "expo-router";
 import type { Expense } from "@shared/types";
 import { EXPENSE_CATEGORIES, isAiScanned } from "@shared/constants";
 import { formatCurrency, isCoveredByFixedRate } from "@shared/tax-calculator";
+import { expenseReviewStatus } from "@shared/receipt-review";
+import { useReducedMotion } from "@/lib/reduced-motion";
 import { useData } from "@/lib/store";
 import { colors } from "@/lib/theme";
 import { Button, Icon, T } from "./ui";
 
-// Port of the web dashboard's swipe review (components/dashboard/receipt-review).
-// Checked scans are remembered on this device by fingerprint, so an edited
-// expense comes back for another look. Personal saves 0% work use, $0 claim.
-const KEY = "ledgr_reviewed_scans";
-const fingerprint = (e: Expense) =>
-  JSON.stringify([e.id, e.date, e.description, e.amount, e.category, e.claimType, e.workUsePercent, e.claimableAmount, e.notes]);
-const readChecked = (): string[] => {
-  try {
-    const value: unknown = JSON.parse(localStorage.getItem(KEY) ?? "[]");
-    return Array.isArray(value) ? value.filter((v): v is string => typeof v === "string") : [];
-  } catch {
-    return [];
-  }
-};
+const fingerprint = (e: Expense) => JSON.stringify([e.id, e.date, e.description, e.amount, e.category,
+  e.claimType, e.workUsePercent, e.claimableAmount, e.notes, e.assetId, e.reviewStatus]);
 
-/** AI scans not yet swiped through on this phone (the Expenses "Not checked" filter, Tax time). */
-export const uncheckedScans = (expenses: Expense[]) => {
-  const checked = new Set(readChecked());
-  return expenses.filter((e) => isAiScanned(e) && !checked.has(fingerprint(e)));
-};
+/** Pending scans share their review status with the web and other devices. */
+export const uncheckedScans = (expenses: Expense[]) =>
+  expenses.filter(e => isAiScanned(e) && expenseReviewStatus(e) === "pending");
 
 type Decision = "personal" | "confirm";
 
 export const ReceiptReview = () => {
-  const { data, save } = useData();
-  const [checked, setChecked] = useState(readChecked);
+  const { data, saveExpense } = useData();
+  const [leaving, setLeaving] = useState<Expense | null>(null);
+  const lock = useRef(false);
   const [history, setHistory] = useState<{ before: Expense; after: Expense; decision: Decision }[]>([]);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [reducedMotion, setReducedMotion] = useState(false);
+  const reducedMotion = useReducedMotion();
   const [x] = useState(() => new Animated.Value(0));
 
-  useEffect(() => {
-    void AccessibilityInfo.isReduceMotionEnabled().then(setReducedMotion);
-  }, []);
-
   const wfhMethod = data.settings.wfhMethod;
-  const queue = data.expenses
-    .filter((e) => isAiScanned(e) && !checked.includes(fingerprint(e)))
+  const queue = uncheckedScans(data.expenses)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const top = queue[0];
+  const top = leaving ?? queue[0];
   const last = history.at(-1);
   const canUndo = !!last && data.expenses.some((e) => fingerprint(e) === fingerprint(last.after));
-  const total = history.length + queue.length;
+  const total = data.expenses.filter(isAiScanned).length;
+  const reviewed = total - queue.length;
 
-  const settle = () => Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
-  const remember = (next: string[]) => {
-    setChecked(next);
-    localStorage.setItem(KEY, JSON.stringify(next));
-  };
+  const settle = () => reducedMotion ? x.setValue(0) : Animated.spring(x, { toValue: 0, useNativeDriver: true }).start();
 
   const decide = async (decision: Decision) => {
-    if (!top || busy) return;
-    if (decision === "personal" && top.claimType === "depreciation") {
-      setError("This receipt has its own asset record. Change its work use under Assets on the web so the depreciation changes too.");
+    if (!top || lock.current) return;
+    if (decision === "confirm" && top.workUsePercent === 0) {
       settle();
+      setMessage("Review work use before confirming this receipt.");
+      router.push({ pathname: "/expense", params: { id: top.id } });
       return;
     }
+    lock.current = true;
     setBusy(true);
+    setLeaving(top);
     setError("");
-    const after = decision === "personal" ? { ...top, workUsePercent: 0, claimableAmount: 0 } : top;
+    const after: Expense = decision === "personal"
+      ? { ...top, workUsePercent: 0, claimableAmount: 0, reviewStatus: "personal" }
+      : { ...top, reviewStatus: "reviewed" };
     try {
-      // wait for the save before the card leaves, so a failure stays actionable
-      if (decision === "personal") await save("expenses", after);
-      await new Promise((done) =>
-        Animated.timing(x, {
-          toValue: reducedMotion ? 0 : decision === "personal" ? -500 : 500,
-          duration: reducedMotion ? 0 : 220,
-          useNativeDriver: true,
-        }).start(done)
-      );
-      setHistory((h) => [...h, { before: top, after, decision }]);
-      remember([...checked, fingerprint(after)]);
+      await saveExpense(after);
+      await new Promise(done => Animated.timing(x, {
+        toValue: reducedMotion ? 0 : decision === "personal" ? -500 : 500,
+        duration: reducedMotion ? 0 : 220, useNativeDriver: true,
+      }).start(done));
+      setHistory(h => [...h, { before: top, after, decision }]);
       setMessage(decision === "personal" ? `${top.description} marked personal. Receipt kept, claim set to $0.` : `${top.description} checked.`);
     } catch {
       setError("Couldn't save this review. Your card is still here, so try again.");
     } finally {
       x.setValue(0);
+      setLeaving(null);
       setBusy(false);
+      lock.current = false;
     }
   };
 
   const undo = async () => {
-    if (!last || !canUndo || busy) return;
+    if (!last || !canUndo || lock.current) return;
+    lock.current = true;
     setBusy(true);
     setError("");
     try {
-      if (last.decision === "personal") await save("expenses", last.before);
-      remember(checked.filter((c) => c !== fingerprint(last.after)));
+      // Legacy scans have no status field. Explicit null clears the decision;
+      // omitting it would ask the server to preserve the current status.
+      await saveExpense({ ...last.before, reviewStatus: last.before.reviewStatus ?? null });
       setHistory((h) => h.slice(0, -1));
       setMessage(`Undone. ${last.before.description} is back for review.`);
     } catch {
       setError("Couldn't undo yet. Try again.");
     } finally {
       setBusy(false);
+      lock.current = false;
     }
   };
 
   // ponytail: rebuilt each render so it always calls the current decide();
   // cheap, and nothing re-renders mid-drag (the drag only moves an Animated value)
+  // PanResponder stores callbacks; the save lock is read only when a gesture fires.
+  // eslint-disable-next-line react-hooks/refs
   const pan = PanResponder.create({
-    onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
+    onMoveShouldSetPanResponder: (_, g) => !busy && Math.abs(g.dx) > 8 && Math.abs(g.dx) > Math.abs(g.dy),
     onPanResponderMove: (_, g) => x.setValue(g.dx),
     onPanResponderRelease: (_, g) => {
       if (Math.abs(g.dx) >= 90 || (Math.abs(g.dx) >= 35 && Math.abs(g.vx) >= 0.65)) {
@@ -141,10 +129,10 @@ export const ReceiptReview = () => {
         <View
           accessibilityRole="progressbar"
           accessibilityLabel="Receipt review progress"
-          accessibilityValue={{ min: 0, max: total, now: history.length }}
+          accessibilityValue={{ min: 0, max: total, now: reviewed }}
           style={{ height: 6, borderRadius: 999, backgroundColor: "rgba(42,21,56,0.1)", overflow: "hidden" }}
         >
-          <View style={{ height: "100%", width: `${(history.length / total) * 100}%`, backgroundColor: colors.plum, borderRadius: 999 }} />
+          <View style={{ height: "100%", width: `${(reviewed / total) * 100}%`, backgroundColor: colors.plum, borderRadius: 999 }} />
         </View>
       )}
 
@@ -202,7 +190,7 @@ export const ReceiptReview = () => {
                 {formatCurrency(shown)}
               </T>
               <T size={14} color={colors.inkSoft}>
-                {top.workUsePercent === 0 ? "Personal · no deduction" : `${top.workUsePercent}% work use · ${formatCurrency(top.amount)} paid`}
+                {expenseReviewStatus(top) === "pending" ? "Pending review · set work use before claiming" : top.workUsePercent === 0 ? "Personal · no deduction" : `${top.workUsePercent}% work use · ${formatCurrency(top.amount)} paid`}
               </T>
               <Animated.View
                 pointerEvents="none"
@@ -256,7 +244,7 @@ export const ReceiptReview = () => {
 
       <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, minHeight: 32 }}>
         <T size={12} color={colors.inkSoft} style={{ flex: 1 }} accessibilityLiveRegion="polite">
-          {busy ? "Saving…" : message || "Review progress is remembered on this phone."}
+          {busy ? "Saving…" : message || "Saved decisions sync with your account."}
         </T>
         {history.length > 0 && (
           <Button title="Undo" icon="arrow.uturn.backward" kind="soft" disabled={busy || !canUndo} onPress={() => void undo()} style={{ minHeight: 38 }} />

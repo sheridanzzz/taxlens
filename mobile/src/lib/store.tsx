@@ -52,20 +52,9 @@ const useStoreValue = () => {
 
   const refresh = useCallback(async () => {
     try {
-      const settings = await api<UserSettings>("/api/mobile/settings");
-      fy.current = settings.financialYear;
-      const [expenses, assets, wfhEntries, wfhActualCosts, cgt, rentalProperties, rentalTransactions] =
-        await Promise.all([
-          list<Expense[]>("expenses", fy.current),
-          list<DepreciatingAsset[]>("assets", fy.current),
-          list<WfhEntry[]>("wfh", fy.current),
-          list<WfhActualCost[]>("wfh-costs", fy.current),
-          // never FY-filtered: FIFO matching needs the whole history
-          list<CgtTransaction[]>("cgt"),
-          list<RentalProperty[]>("rental-properties"),
-          list<RentalTransaction[]>("rental-transactions", fy.current),
-        ]);
-      setData({ settings, expenses, assets, wfhEntries, wfhActualCosts, cgt, rentalProperties, rentalTransactions });
+      const account = await api<Data>("/api/mobile/data");
+      fy.current = account.settings.financialYear;
+      setData(account);
       setError("");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't load your data.");
@@ -86,6 +75,8 @@ const useStoreValue = () => {
   }, [signOut]);
 
   useEffect(() => {
+    // Sign-in starts an async request; its completion updates the account state.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (signedIn) void refresh();
   }, [signedIn, refresh]);
 
@@ -112,9 +103,15 @@ const useStoreValue = () => {
     async <K extends keyof Editable>(key: K, row: Editable[K]) => {
       await api(`/api/mobile/${RESOURCE[key]}`, { method: "PUT", body: row });
       await reload(key);
+      if (key === "expenses" && (row as Expense).assetId) await reload("assets");
     },
     [reload]
   );
+
+  const saveExpense = useCallback(async (expense: Expense, linkedAsset?: DepreciatingAsset) => {
+    await api("/api/mobile/expenses", { method: "PUT", body: { ...expense, linkedAsset } });
+    await Promise.all([reload("expenses"), ...(expense.assetId ? [reload("assets")] : [])]);
+  }, [reload]);
 
   /** Several rows, six at a time, one list reload. Stops at the first failed batch; earlier rows stay saved. */
   const saveMany = useCallback(
@@ -133,7 +130,7 @@ const useStoreValue = () => {
   const remove = useCallback(
     async (key: "expenses" | "wfhEntries", id: string) => {
       await api(`/api/mobile/${RESOURCE[key]}?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-      await reload(key);
+      await Promise.all([reload(key), ...(key === "expenses" ? [reload("assets")] : [])]);
     },
     [reload]
   );
@@ -217,6 +214,7 @@ const useStoreValue = () => {
     signOut,
     deleteAccount,
     save,
+    saveExpense,
     saveMany,
     remove,
     saveSettings,

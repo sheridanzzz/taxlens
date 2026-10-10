@@ -47,6 +47,8 @@ next-env.d.ts
 # Browser verification artifacts
 .playwright-cli/
 output/playwright/
+# Local audits, native builds and receipt exports can contain account data.
+/output/
 
 # Generated from the installed PDF.js version
 /public/pdf.worker.min.mjs

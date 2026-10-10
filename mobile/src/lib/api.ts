@@ -22,10 +22,11 @@ export const onTokenExpired = (fn: () => void) => {
 
 export async function api<T = void>(
   path: string,
-  init: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown } = {}
+  init: { method?: "GET" | "POST" | "PUT" | "DELETE"; body?: unknown; signal?: AbortSignal } = {}
 ): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     method: init.method ?? "GET",
+    signal: init.signal,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),

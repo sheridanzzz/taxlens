@@ -10,6 +10,7 @@ import { taxTimeFor, withTaxTime } from "@shared/tax-time";
 import { useData } from "@/lib/store";
 import { API_URL } from "@/lib/api";
 import { allowNotifications, readPrefs, savePrefs, USUAL_DAY_HOURS, type ReminderPrefs } from "@/lib/reminders";
+import { shareOriginalReceipts } from "@/lib/receipts";
 import { shareReceiptPack } from "@/lib/receipt-pack";
 import { colors } from "@/lib/theme";
 import { Button, Card, Choice, Field, Heading, Icon, Label, Screen, T } from "@/components/ui";
@@ -47,7 +48,7 @@ const Row = ({ icon, label, onPress, busy }: { icon: SFSymbol; label: string; on
   >
     <Icon name={icon} size={18} />
     <T w="bold" style={{ flex: 1 }}>
-      {busy ? "Making the PDF…" : label}
+      {busy ? "Preparing receipts…" : label}
     </T>
     <Icon name="chevron.right" size={13} color={colors.inkSoft} />
   </Pressable>
@@ -71,6 +72,12 @@ export default function Settings() {
   const [reminderMessage, setReminderMessage] = useState("");
   const [packing, setPacking] = useState(false);
   const [draft, setDraft] = useState(data.settings);
+  const [storedOccupation, setStoredOccupation] = useState(data.settings.occupation);
+  // The email-receipt screen can save the occupation while this tab stays mounted.
+  if (storedOccupation !== data.settings.occupation) {
+    setStoredOccupation(data.settings.occupation);
+    if (draft.occupation === storedOccupation) setDraft({ ...draft, occupation: data.settings.occupation });
+  }
   const [income, setIncome] = useState(data.settings.annualIncome ? String(data.settings.annualIncome) : "");
   const storedWithheld = (fy: FinancialYear) => {
     const v = taxTimeFor(data.settings, fy).taxWithheld;
@@ -126,10 +133,13 @@ export default function Settings() {
     }
   };
 
-  const handlePack = async () => {
+  const handlePack = async (originals = false) => {
     setPacking(true);
     try {
-      await shareReceiptPack(data, summary);
+      if (originals) {
+        const missing = await shareOriginalReceipts(data.settings.financialYear);
+        if (missing) Alert.alert("Missing receipts", `${missing} entries have no original receipt stored.`);
+      } else await shareReceiptPack(data, summary);
     } catch (e) {
       Alert.alert("Couldn't make the receipt pack", e instanceof Error ? e.message : "Try again.");
     } finally {
@@ -247,6 +257,7 @@ export default function Settings() {
           Records
         </T>
         <Row icon="doc.on.doc.fill" label={`Receipt pack for FY ${data.settings.financialYear} (PDF)`} busy={packing} onPress={() => void handlePack()} />
+        <Row icon="square.and.arrow.up" label="Original receipts (ZIP)" busy={packing} onPress={() => void handlePack(true)} />
         <Row icon="envelope.fill" label="Email receipts from Airtail" onPress={() => router.push("/airtail")} />
       </Card>
 

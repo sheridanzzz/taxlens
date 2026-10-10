@@ -1,6 +1,20 @@
 import { File, Paths } from "expo-file-system";
 import * as Sharing from "expo-sharing";
 import { api } from "./api";
+import type { EmailEvidence } from "@shared/receipt-evidence";
+import type { FinancialYear } from "@shared/types";
+
+export type StoredEvidence = { dataUrl: string | null; email: EmailEvidence | null; previewError?: string };
+export const fetchReceiptEvidence = (expenseId: string) =>
+  api<StoredEvidence>(`/api/mobile/receipt-evidence?id=${encodeURIComponent(expenseId)}`);
+
+export const shareOriginalReceipts = async (fy: FinancialYear) => {
+  const archive = await api<{ base64: string; missing: number }>(`/api/mobile/receipt-archive?fy=${fy}`);
+  const file = new File(Paths.cache, `Ledgr original receipts FY ${fy}.zip`);
+  file.write(archive.base64, { encoding: "base64" });
+  await Sharing.shareAsync(file.uri, { mimeType: "application/zip", UTI: "public.zip-archive", dialogTitle: `Original receipts FY ${fy}` });
+  return archive.missing;
+};
 
 /** One expense's stored receipt (photo, PDF or original email) as a data URL; null if none. */
 export const fetchReceipt = (expenseId: string) =>
@@ -32,7 +46,9 @@ const safeName = (name: string) => name.replace(/[^\w .-]+/g, "").trim().slice(0
 export const shareDataUrl = async (dataUrl: string, name: string) => {
   const parsed = parseDataUrl(dataUrl);
   if (!parsed) throw new Error("This receipt couldn't be read.");
-  const file = new File(Paths.cache, `${safeName(name)}.${EXT[parsed.mime] ?? "bin"}`);
+  const extension = EXT[parsed.mime] ?? "bin";
+  const basename = safeName(name);
+  const file = new File(Paths.cache, basename.toLowerCase().endsWith(`.${extension}`) ? basename : `${basename}.${extension}`);
   file.write(parsed.base64, { encoding: "base64" });
   await Sharing.shareAsync(file.uri, {
     mimeType: parsed.mime,

@@ -19,7 +19,7 @@ function load(file) {
   runInThisContext(`(function(require,module,exports){${source}\n})`, { filename: file })(require, compiledModule, compiledModule.exports);
   return compiledModule.exports;
 }
-const { readEmailEvidence, makeReceiptPackHtml, makeReceiptArchive, receiptBytes } = load('src/lib/receipt-evidence.ts');
+const { readEmailEvidence, makeReceiptPackHtml, makeReceiptFiguresHtml, makeReceiptArchive, receiptBytes } = load('src/lib/receipt-evidence.ts');
 const { expenseReviewStatus } = load('src/lib/receipt-review.ts');
 const pdf = Buffer.from('%PDF-1.4\nSynthetic original invoice\n');
 const original = `From: seller@example.test\r\nSubject: Chair invoice\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary="invoice"\r\n\r\n--invoice\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nChair AUD 600.00\r\n--invoice\r\nContent-Type: application/pdf\r\nContent-Disposition: attachment; filename="chair.pdf"\r\nContent-Transfer-Encoding: base64\r\n\r\n${pdf.toString('base64')}\r\n--invoice--\r\n`;
@@ -43,6 +43,11 @@ assert.ok(html.includes('Download all original receipts (ZIP)'));
 assert.ok(!html.includes('<img src="data:message/rfc822'));
 assert.ok(!html.includes('<script>bad()'));
 assert.ok(html.includes('&lt;script&gt;bad()&lt;/script&gt;'));
+const printed = await makeReceiptFiguresHtml([e], false);
+assert.ok(printed.includes('Chair AUD 600.00'));
+assert.ok(printed.includes('Original attachment: chair.pdf'));
+assert.ok(!printed.includes('href=') && !printed.includes('data:'));
+assert.ok(!printed.includes('<script>bad()'));
 const files = unzipSync(makeReceiptArchive([e, missing], '2025-26'));
 assert.deepEqual(Buffer.from(files['receipts/2026-06-01-test-id.eml']), Buffer.from(bundle));
 const manifest = JSON.parse(Buffer.from(files['manifest.json']).toString());

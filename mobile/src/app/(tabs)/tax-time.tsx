@@ -10,6 +10,7 @@ import { useData } from "@/lib/store";
 import { airtailStatus } from "@/lib/airtail";
 import { BILLS, checklist, type CheckItem } from "@/lib/checklist";
 import { openWeb, plural } from "@/lib/expenses";
+import { shareOriginalReceipts } from "@/lib/receipts";
 import { shareReceiptPack } from "@/lib/receipt-pack";
 import { colors } from "@/lib/theme";
 import { Button, Card, Heading, Icon, Screen, T } from "@/components/ui";
@@ -225,6 +226,7 @@ export default function TaxTime() {
       <View style={{ gap: 8 }}>
         <Button title="Enter into myTax" icon="arrow.right.circle.fill" kind="primary" onPress={() => router.push("/lodge")} />
         <Button title="Receipt pack (PDF)" icon="doc.on.doc.fill" kind="soft" busy={busy === "pack"} onPress={() => void run("pack", () => shareReceiptPack(data, summary))} />
+        <Button title="Original receipts (ZIP)" icon="square.and.arrow.up" kind="soft" disabled={!!busy} busy={busy === "originals"} onPress={() => void run("originals", async () => { const missing = await shareOriginalReceipts(fy); if (missing) Alert.alert("Missing receipts", `${missing} entries have no original receipt stored.`); })} />
       </View>
       <T size={12} color={colors.inkSoft} style={{ textAlign: "center" }}>
         Lodge in myTax through myGov by 31 October, or ask a registered tax agent.

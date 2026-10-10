@@ -8,7 +8,7 @@ import { formatCurrency, isCoveredByFixedRate } from "@shared/tax-calculator";
 import { taxTimeFor } from "@shared/tax-time";
 import { BILLS } from "./checklist";
 import { claimNote, myTaxRows, needsReceipt } from "./expenses";
-import { fetchReceipt, parseDataUrl, receiptKind } from "./receipts";
+import { api } from "./api";
 import type { Data } from "./store";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
@@ -29,6 +29,9 @@ const CSS = `
   .muted { color: #665a6e; }
   .receipt { page-break-inside: avoid; margin-bottom: 16px; }
   .receipt img { max-width: 100%; max-height: 820px; }
+  figure { margin: 16px 0; page-break-before: always; }
+  pre { white-space: pre-wrap; overflow-wrap: anywhere; font: 11px/1.5 -apple-system, Helvetica, sans-serif; }
+  figure img { max-width: 100%; max-height: 820px; }
 `;
 
 /** Every record for the settings FY in one PDF, opened in the share sheet (Files, Mail, AirDrop). */
@@ -40,19 +43,9 @@ export const shareReceiptPack = async (data: Data, summary: TaxSummary) => {
   const rows = myTaxRows(data, summary);
   const filled = new Set(record.filledDays ?? []);
 
-  // ponytail: receipts are fetched one by one and inlined, so a very large year
-  // (hundreds of photos) makes a big HTML string; page it into several PDFs if that bites
-  const receipts: string[] = [];
-  for (const e of sorted.filter((x) => x.hasReceipt || x.receiptDataUrl)) {
-    const url = e.receiptDataUrl ?? (await fetchReceipt(e.id).catch(() => null));
-    const parsed = url ? parseDataUrl(url) : null;
-    const title = `<p><b>${esc(e.description)}</b> · ${esc(longDate(e.date))} · ${esc(formatCurrency(e.amount))}</p>`;
-    receipts.push(
-      parsed?.mime.startsWith("image/")
-        ? `<div class="receipt">${title}<img src="${esc(url ?? "")}" /></div>`
-        : `<div class="receipt">${title}<p class="muted">${parsed ? `${receiptKind(parsed.mime)} receipt` : "Receipt"} stored in Ledgr${parsed?.mime === "message/rfc822" ? ` (the original email; ${esc(e.notes?.match(/^From: (.*)$/m)?.[1] ?? "sender not recorded")})` : ""}. Open it from the expense in the app.</p></div>`
-    );
-  }
+  // Parse original emails on the server, using the same safe renderer as the web.
+  // A failed fetch aborts export so missing evidence isn't silently reported as present.
+  const receipts = await api<{ html: string; missing: string[] }>(`/api/mobile/receipt-pack?fy=${fy}`);
 
   const missing = sorted.filter(needsReceipt);
   const claimed = (e: Expense) => (isCoveredByFixedRate(e, settings.wfhMethod) ? 0 : e.claimableAmount);
@@ -62,7 +55,7 @@ export const shareReceiptPack = async (data: Data, summary: TaxSummary) => {
     <h1>Receipt pack · FY ${fy}</h1>
     <p class="muted">${esc(settings.occupation || "Employee")} · made with Ledgr on ${esc(longDate(new Date().toISOString().slice(0, 10)))}. Estimates based on ATO rules, not tax advice.</p>
     ${table(["myTax label", "Amount"], [...rows.map((r) => [r.item, formatCurrency(r.amount)]), ["Total deductions", formatCurrency(rows.reduce((s, r) => s + r.amount, 0))]])}
-    <p>${expenses.length} expenses · ${missing.length} without a receipt · ${hours.toLocaleString("en-AU")} hours worked from home · ${assets.length} depreciating assets</p>
+    <p>${expenses.length} expenses · ${receipts.missing.length} without stored evidence · ${hours.toLocaleString("en-AU")} hours worked from home · ${assets.length} depreciating assets</p>
 
     <h2>Expenses</h2>
     ${table(
@@ -101,7 +94,8 @@ export const shareReceiptPack = async (data: Data, summary: TaxSummary) => {
     ) : "<p>No depreciating assets.</p>"}
 
     <h2>Receipts</h2>
-    ${receipts.join("") || "<p>No receipts stored.</p>"}
+    <p>The original emails, attachments and PDFs are available from Original receipts (ZIP) in the app.</p>
+    ${receipts.html || "<p>No receipts stored.</p>"}
   </body></html>`;
 
   const { uri } = await Print.printToFileAsync({ html, margins: { left: 36, right: 36, top: 36, bottom: 36 } });

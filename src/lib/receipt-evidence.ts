@@ -63,30 +63,38 @@ export function makeReceiptArchive(expenses: Expense[], fy: string): Uint8Array 
   return zipSync(files, { level: 0 });
 }
 
-export async function makeReceiptPackHtml(expenses: Expense[], fy: string, archiveUrl: string) {
+export async function makeReceiptFiguresHtml(expenses: Expense[], downloadLinks = true) {
   const included = expenses.filter(e => e.receiptDataUrl);
-  const missing = expenses.filter(e => !e.receiptDataUrl);
   const figures: string[] = [];
   for (const e of included) {
     const url = e.receiptDataUrl!;
-    let content = `<a href="${escapeReceiptHtml(url)}" download="receipt-${escapeReceiptHtml(e.id)}.${receiptExtension(url)}">Download original receipt</a>`;
+    let content = downloadLinks ? `<a href="${escapeReceiptHtml(url)}" download="receipt-${escapeReceiptHtml(e.id)}.${receiptExtension(url)}">Download original receipt</a>` : "";
     if (receiptMime(url).startsWith("image/")) content += `<p><img src="${escapeReceiptHtml(url)}" alt="Receipt"></p>`;
     if (receiptMime(url) === "application/pdf") content += `<p>Original PDF included in the archive. Open the PDF to view every page.</p>`;
     if (receiptMime(url) === "message/rfc822") {
       try {
         const email = await readEmailEvidence(url);
         content += email.messages.map(m => `<h3>${escapeReceiptHtml(m.subject)}</h3><p class="meta">${escapeReceiptHtml(m.from)} · ${escapeReceiptHtml(m.date)}</p><pre>${escapeReceiptHtml(m.text)}</pre>`).join("");
-        content += email.attachments.map(a => `<p><a href="${escapeReceiptHtml(a.dataUrl)}" download="${escapeReceiptHtml(a.name)}">${escapeReceiptHtml(a.name)}</a></p>`).join("");
+        content += email.attachments.map(a => downloadLinks
+          ? `<p><a href="${escapeReceiptHtml(a.dataUrl)}" download="${escapeReceiptHtml(a.name)}">${escapeReceiptHtml(a.name)}</a></p>`
+          : `<p>Original attachment: ${escapeReceiptHtml(a.name)} (included in the email archive)</p>`).join("");
       } catch {
         content += `<p>Email preview unavailable. The complete original email and its attachments are included in the archive.</p>`;
       }
     }
     figures.push(`<figure><figcaption><strong>${escapeReceiptHtml(e.description)}</strong> — ${escapeReceiptHtml(e.date)} · $${e.amount.toFixed(2)} · ${escapeReceiptHtml(EXPENSE_CATEGORIES[e.category]?.label ?? e.category)} · ${e.workUsePercent}% work use</figcaption>${content}</figure>`);
   }
+  return figures.join("");
+}
+
+export async function makeReceiptPackHtml(expenses: Expense[], fy: string, archiveUrl: string) {
+  const included = expenses.filter(e => e.receiptDataUrl);
+  const missing = expenses.filter(e => !e.receiptDataUrl);
+  const figures = await makeReceiptFiguresHtml(expenses);
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Ledgr receipt pack — FY ${escapeReceiptHtml(fy)}</title><style>
 body{font-family:system-ui,sans-serif;max-width:900px;margin:2rem auto;padding:0 1rem;color:#21152c}h1{font-size:1.5rem}h3{font-size:1rem}.meta{color:#666;font-size:.85rem}figure{margin:2rem 0;border-top:1px solid #ddd;padding-top:1rem}figcaption{margin-bottom:1rem}img{max-width:100%;max-height:480px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 system-ui}a{overflow-wrap:anywhere}li{margin:.7rem 0}@media print{.actions{display:none}figure{break-before:page}}
 </style></head><body><h1>Receipt pack — FY ${escapeReceiptHtml(fy)}</h1><p class="meta">${included.length} originals included · ${missing.length} entries without stored evidence</p>
 <div class="actions"><button onclick="window.print()">Print / Save as PDF</button> · <a href="${escapeReceiptHtml(archiveUrl)}" download="ledgr-receipts-FY${escapeReceiptHtml(fy)}.zip">Download all original receipts (ZIP)</a></div>
 <p>Email previews are readable below. The ZIP preserves original emails, their attachments and PDFs. Review work use and deductibility before lodging.</p>
-${figures.join("")}${missing.length ? `<h2>Missing evidence</h2><ul>${missing.map(e => `<li>${escapeReceiptHtml(e.date)} · ${escapeReceiptHtml(e.description)} · $${e.amount.toFixed(2)}</li>`).join("")}</ul>` : ""}</body></html>`;
+${figures}${missing.length ? `<h2>Missing evidence</h2><ul>${missing.map(e => `<li>${escapeReceiptHtml(e.date)} · ${escapeReceiptHtml(e.description)} · $${e.amount.toFixed(2)}</li>`).join("")}</ul>` : ""}</body></html>`;
 }

@@ -2,39 +2,44 @@ import { useEffect, useState } from "react";
 import { ActivityIndicator, Image, ScrollView, View, useWindowDimensions } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useData } from "@/lib/store";
-import { fetchReceipt, parseDataUrl, receiptKind, shareDataUrl } from "@/lib/receipts";
+import { fetchReceiptEvidence, parseDataUrl, receiptKind, shareDataUrl, type StoredEvidence } from "@/lib/receipts";
 import { colors } from "@/lib/theme";
 import { Button, Card, Heading, Screen, T } from "@/components/ui";
 
-/** A stored receipt: photos inline with pinch-zoom; PDFs and emails through the share sheet. */
 export default function ReceiptScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
+  return <StoredReceipt key={id} id={id} />;
+}
+
+function StoredReceipt({ id }: { id: string }) {
   const { data } = useData();
   const { width } = useWindowDimensions();
   const expense = data.expenses.find((e) => e.id === id);
   const [receipt, setReceipt] = useState<string | null | undefined>(undefined);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [evidence, setEvidence] = useState<StoredEvidence | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let live = true;
-    fetchReceipt(id)
-      .then((r) => live && setReceipt(r))
+    fetchReceiptEvidence(id)
+      .then((r) => { if (live) { setEvidence(r); setReceipt(r.dataUrl); } })
       .catch((e) => live && setError(e instanceof Error ? e.message : "Couldn't load the receipt."));
     return () => {
       live = false;
     };
-  }, [id]);
+  }, [id, attempt]);
 
   const parsed = receipt ? parseDataUrl(receipt) : null;
   const title = expense?.description ?? "Receipt";
 
-  const handleShare = async () => {
-    if (!receipt) return;
+  const handleShare = async (url = receipt, name = title) => {
+    if (!url || busy) return;
     setBusy(true);
     setError("");
     try {
-      await shareDataUrl(receipt, title);
+      await shareDataUrl(url, name);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn't open the receipt.");
     } finally {
@@ -71,12 +76,28 @@ export default function ReceiptScreen() {
           </T>
         </Card>
       )}
+      {evidence?.email?.messages.map((message, i) => (
+        <Card key={i}>
+          <T w="bold" size={16}>{message.subject}</T>
+          <T size={12} color={colors.inkSoft}>{message.from}{message.date ? ` · ${message.date}` : ""}</T>
+          <T selectable>{message.text || "No plain-text message content."}</T>
+        </Card>
+      ))}
+      {!!evidence?.email?.attachments.length && <Card>
+        <T w="bold" size={16}>Original attachments</T>
+        {evidence.email.attachments.map((attachment, i) => <View key={i} style={{ gap: 8 }}>
+          {attachment.mimeType.startsWith("image/") && <Image source={{ uri: attachment.dataUrl }} accessibilityLabel={attachment.name} resizeMode="contain" style={{ width: width - 64, height: 200 }} />}
+          <Button title={attachment.name} icon="square.and.arrow.up" kind="soft" disabled={busy} onPress={() => void handleShare(attachment.dataUrl, attachment.name)} />
+        </View>)}
+      </Card>}
+      {!!evidence?.previewError && <T color={colors.inkSoft}>{evidence.previewError}</T>}
       {!!error && (
         <T color={colors.negative} accessibilityRole="alert">
           {error}
         </T>
       )}
       <View style={{ gap: 8 }}>
+        {!!error && <Button title="Retry receipt" kind="soft" disabled={busy} onPress={() => { setReceipt(undefined); setEvidence(null); setError(""); setAttempt(n => n + 1); }} />}
         {!!parsed && <Button title={parsed.mime.startsWith("image/") ? "Share or save" : "Open"} icon="square.and.arrow.up" kind="primary" busy={busy} onPress={() => void handleShare()} />}
         <Button title="Close" kind="soft" onPress={() => router.back()} />
       </View>

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
-import { ActivityIndicator, Pressable, View } from "react-native";
+import { useEffect, useRef, useState } from "react";
+import { ActivityIndicator, Keyboard, Pressable, View } from "react-native";
 import { router } from "expo-router";
 import type { ReceiptEvidence } from "@shared/airtail-receipt";
 import { buildAirtailImport } from "@shared/airtail-receipt";
 import { formatCurrency } from "@shared/tax-calculator";
+import { ruleSuggestion, SHORTLIST_LABELS } from "@shared/receipt-shortlist";
 import { useData } from "@/lib/store";
 import {
   airtailEvidence,
@@ -14,15 +15,21 @@ import {
   matchFor,
   type AirtailStatus,
   type ListedReceipt,
+  type ReceiptPage,
 } from "@/lib/airtail";
 import { openWeb, shortDate } from "@/lib/expenses";
 import { colors } from "@/lib/theme";
-import { Button, Card, Field, Heading, Screen, T } from "@/components/ui";
+import { Button, Card, Field, Heading, Pills, Screen, T } from "@/components/ui";
 
 const amountText = (r: ListedReceipt) => (r.currency === "AUD" ? formatCurrency(r.amount) : `${r.amount.toFixed(2)} ${r.currency}`);
 
 export default function Airtail() {
-  const { data, save } = useData();
+  const { data } = useData();
+  return <AirtailReceipts key={data.settings.financialYear} />;
+}
+
+function AirtailReceipts() {
+  const { data, save, saveSettings } = useData();
   const fy = data.settings.financialYear;
   const [status, setStatus] = useState<AirtailStatus | null>(null);
   const [receipts, setReceipts] = useState<ListedReceipt[]>([]);
@@ -31,55 +38,127 @@ export default function Airtail() {
   const [selected, setSelected] = useState<ListedReceipt | null>(null);
   const [evidence, setEvidence] = useState<ReceiptEvidence | null>(null);
   const [paidAud, setPaidAud] = useState("");
-  const [busy, setBusy] = useState("");
+  const [busy, setBusy] = useState("initial");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [receiptFilter, setReceiptFilter] = useState<"possible" | "personal" | "all">("possible");
+  const [shortlist, setShortlist] = useState({ mode: "rules", occupation: "" });
+  const [pageResult, setPageResult] = useState<{ added: number; possible: number; total: number } | null>(null);
+  const [paginationError, setPaginationError] = useState("");
+  const [editingOccupation, setEditingOccupation] = useState(false);
+  const [occupation, setOccupation] = useState("");
+  const active = useRef(true);
+  const generation = useRef(0);
+  const lock = useRef(false);
+  const controller = useRef<AbortController | null>(null);
+  const profileChanged = loaded && shortlist.occupation.trim() !== data.settings.occupation.trim();
+  const suggestionFor = (receipt: ListedReceipt) => receipt.suggestion || ruleSuggestion(receipt, data.settings);
+  const personalCount = receipts.filter(receipt => suggestionFor(receipt).bucket === "likely_personal").length;
+  const possibleCount = receipts.length - personalCount;
+  const visibleReceipts = receipts.filter(receipt => receiptFilter === "all" || (receiptFilter === "personal" ? suggestionFor(receipt).bucket === "likely_personal" : suggestionFor(receipt).bucket !== "likely_personal"));
 
-  const run = async (name: string, action: () => Promise<void>) => {
+  const applyPage = (page: ReceiptPage, more = false) => {
+    const seen = new Set(more ? receipts.map(receipt => receipt.id) : []);
+    const added = page.receipts.filter(receipt => {
+      if (seen.has(receipt.id)) return false;
+      seen.add(receipt.id); return true;
+    });
+    const combined = more ? [...receipts, ...added] : added;
+    setReceipts(combined);
+    setCursor(page.nextCursor ?? null);
+    setShortlist(page.shortlist ?? { mode: "rules", occupation: data.settings.occupation });
+    setLoaded(true);
+    if (more) setPageResult({ added: added.length, possible: added.filter(receipt => suggestionFor(receipt).bucket !== "likely_personal").length, total: combined.length });
+  };
+
+  const run = async (name: string, action: (signal: AbortSignal, current: number) => Promise<void>) => {
+    if (lock.current) return;
+    lock.current = true;
+    const current = generation.current;
+    const abort = new AbortController();
+    controller.current = abort;
     setBusy(name);
     setError("");
+    setPaginationError("");
     setMessage("");
     try {
-      await action();
+      await action(abort.signal, current);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't reach Airtail. Try again.");
+      if (active.current && !abort.signal.aborted && current === generation.current) {
+        const detail = e instanceof Error ? e.message : "Couldn't reach Airtail. Try again.";
+        if (name === "more") setPaginationError(detail);
+        else setError(detail);
+      }
     } finally {
-      setBusy("");
+      if (active.current && current === generation.current) { lock.current = false; setBusy(""); }
     }
   };
 
-  const handleLoadMore = () =>
-    void run("list", async () => {
-      const page = await airtailReceipts(fy, cursor);
-      setReceipts((old) => [...old, ...page.receipts.filter((r) => !old.some((o) => o.id === r.id))]);
-      setCursor(page.nextCursor ?? null);
+  const handleLoadMore = () => {
+    if (!cursor || profileChanged) return;
+    void run("more", async (signal, current) => {
+      setPageResult(null);
+      const page = await airtailReceipts(fy, cursor, signal);
+      if (active.current && current === generation.current) applyPage(page, true);
     });
+  };
+
+  const handleRefresh = () => void run("refresh", async (signal, current) => {
+    const status = await airtailStatus(signal);
+    if (!active.current || current !== generation.current) return;
+    setStatus(status);
+    if (!status.connected || status.expired || !status.configured) return;
+    const page = await airtailReceipts(fy, null, signal);
+    if (!active.current || current !== generation.current) return;
+    setPageResult(null); setSelected(null); setEvidence(null);
+    applyPage(page);
+  });
+
+  const handleOccupation = () => void run("occupation", async (_signal, current) => {
+    if (!occupation.trim()) throw new Error("Enter your occupation before saving.");
+    await saveSettings({ ...data.settings, occupation: occupation.trim() });
+    if (!active.current || current !== generation.current) return;
+    Keyboard.dismiss(); setEditingOccupation(false);
+    setMessage("Occupation saved. Refresh receipts to update your shortlist.");
+  });
 
   useEffect(() => {
+    active.current = true;
+    const current = ++generation.current;
     let live = true;
-    airtailStatus()
+    const abort = new AbortController();
+    controller.current = abort;
+    lock.current = true;
+    airtailStatus(abort.signal)
       .then(async (s) => {
         if (!live) return;
         setStatus(s);
         if (!s.connected || s.expired) return;
-        const page = await airtailReceipts(fy);
+        const page = await airtailReceipts(fy, null, abort.signal);
         if (!live) return;
         setReceipts(page.receipts);
         setCursor(page.nextCursor ?? null);
+        setShortlist(page.shortlist ?? { mode: "rules", occupation: data.settings.occupation });
         setLoaded(true);
       })
-      .catch((e) => live && setError(e instanceof Error ? e.message : "Couldn't reach Airtail."));
+      .catch((e) => { if (live && !abort.signal.aborted) { setError(e instanceof Error ? e.message : "Couldn't reach Airtail."); setLoaded(true); } })
+      .finally(() => { if (live && current === generation.current) { lock.current = false; setBusy(""); } });
     return () => {
       live = false;
+      active.current = false;
+      abort.abort(); controller.current?.abort();
     };
+    // A saved occupation requires an explicit refresh; keep the current pages until then.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fy]);
 
   const handleSelect = (r: ListedReceipt) =>
-    void run("evidence", async () => {
+    void run("evidence", async (signal, current) => {
       setSelected(r);
       setEvidence(null);
       setPaidAud("");
-      setEvidence(await airtailEvidence(r.id));
+      const evidence = await airtailEvidence(r.id, signal);
+      if (active.current && current === generation.current) setEvidence(evidence);
     });
 
   const prepared = () => {
@@ -98,7 +177,7 @@ export default function Airtail() {
   };
 
   const handleAttach = (expenseId: string) =>
-    void run("attach", async () => {
+    void run("attach", async (_signal, current) => {
       const target = data.expenses.find((e) => e.id === expenseId);
       if (!target) throw new Error("That expense is no longer here.");
       const imported = prepared();
@@ -107,6 +186,7 @@ export default function Airtail() {
         receiptDataUrl: imported.receiptDataUrl,
         notes: [target.notes, imported.notes].filter(Boolean).join("\n\n"),
       });
+      if (!active.current || current !== generation.current) return;
       setMessage(`Email attached to ${target.description}.`);
       setSelected(null);
       setEvidence(null);
@@ -130,9 +210,7 @@ export default function Airtail() {
       <Screen>
         {header}
         {error ? (
-          <T color={colors.negative} accessibilityRole="alert">
-            {error}
-          </T>
+          <><T color={colors.negative} accessibilityRole="alert">{error}</T><Button title="Retry connection" busy={busy === "refresh"} onPress={handleRefresh} /></>
         ) : (
           <ActivityIndicator color={colors.plum} accessibilityLabel="Checking your Airtail connection" />
         )}
@@ -152,6 +230,7 @@ export default function Airtail() {
             Connecting a Gmail or Yahoo inbox happens on the Ledgr website. Once it&apos;s connected, the receipts it finds show up here.
           </T>
           <Button title="Connect on the web" icon="arrow.up.right" kind="plum" onPress={() => openWeb("/settings?airtail=setup")} />
+          <Button title="Check connection" kind="soft" busy={busy === "refresh"} disabled={!!busy} onPress={handleRefresh} />
         </Card>
       </Screen>
     );
@@ -168,6 +247,25 @@ export default function Airtail() {
           Connected as {status.accountEmail}
         </T>
       )}
+      <Button title={busy === "refresh" ? "Refreshing receipts…" : "Refresh receipts"} kind="soft" busy={busy === "refresh"} disabled={!!busy} onPress={handleRefresh} />
+      {loaded && receipts.length > 0 && <Card tint={colors.lav}>
+        <T w="heavy" size={18}>{shortlist.mode === "ai" ? "AI-assisted shortlist" : "Smart shortlist"}{shortlist.occupation ? ` · ${shortlist.occupation}` : ""}</T>
+        <T size={13} color={colors.inkSoft}>Possible work expenses and items needing details are shown first. Personal purchases stay in All receipts. Confirm the work connection and work use before saving.</T>
+        {shortlist.mode === "rules" && <T size={13} color={colors.inkSoft}>Sorted using receipt rules.</T>}
+        {!editingOccupation && <Button title={data.settings.occupation.trim() ? "Edit occupation" : "Add occupation"} kind="soft" disabled={!!busy} onPress={() => { setOccupation(data.settings.occupation); setEditingOccupation(true); setError(""); }} />}
+        {editingOccupation && <View style={{ gap: 10 }}>
+          <Field label="Occupation" value={occupation} onChangeText={setOccupation} autoCapitalize="words" autoFocus editable={!busy} placeholder="Your job title" returnKeyType="done" onSubmitEditing={handleOccupation} />
+          <Button title="Save occupation" busy={busy === "occupation"} disabled={!!busy} onPress={handleOccupation} />
+          <Button title="Cancel" kind="soft" disabled={!!busy} onPress={() => { Keyboard.dismiss(); setEditingOccupation(false); setError(""); }} />
+        </View>}
+        {profileChanged && <T size={13} accessibilityLiveRegion="polite">Your occupation changed. Refresh receipts to update this shortlist.</T>}
+        <Pills label="Filter email receipts" value={receiptFilter} onChange={value => { setReceiptFilter(value); setSelected(null); setEvidence(null); }} options={[
+          { value: "possible", label: `Possible work (${possibleCount})` },
+          { value: "personal", label: `Likely personal (${personalCount})` },
+          { value: "all", label: `All receipts (${receipts.length})` },
+        ]} />
+        <T size={13} color={colors.inkSoft}>{receipts.length} receipts checked{cursor ? " so far. Load more to check the rest of the year." : "."}</T>
+      </Card>}
 
       {selected && (
         <Card tint={colors.lav} style={{ gap: 10 }}>
@@ -236,16 +334,20 @@ export default function Airtail() {
           <ActivityIndicator color={colors.plum} accessibilityLabel="Loading receipts" style={{ paddingVertical: 14 }} />
         ) : receipts.length === 0 ? (
           <T color={colors.inkSoft} style={{ paddingVertical: 14 }}>
-            Airtail hasn&apos;t found any receipts for FY {fy}.
+            {error ? "Receipts could not be loaded. Try Refresh receipts." : `Airtail hasn't found any receipts for FY ${fy}.`}
           </T>
+        ) : visibleReceipts.length === 0 ? (
+          <T color={colors.inkSoft} style={{ paddingVertical: 14 }}>No {receiptFilter === "personal" ? "likely personal purchases" : "possible work expenses"} in the receipts checked so far. View All receipts{cursor ? " or load more." : "."}</T>
         ) : (
-          receipts.map((r, i) => {
+          visibleReceipts.map((r, i) => {
             const saved = isSaved(r, data.expenses);
             const matched = !saved && matchFor(r, data.expenses);
             return (
               <Pressable
                 key={r.id}
                 accessibilityRole="button"
+                accessibilityState={{ disabled: !!busy }}
+                disabled={!!busy}
                 accessibilityLabel={`${r.vendor}, ${amountText(r)}, ${shortDate(r.date)}${saved ? ", already in Ledgr" : matched ? `, matches ${matched.description}` : ""}`}
                 onPress={() => handleSelect(r)}
                 style={({ pressed }) => ({ flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 12, borderTopWidth: i ? 1 : 0, borderColor: colors.border, opacity: pressed ? 0.6 : 1 })}
@@ -257,6 +359,8 @@ export default function Airtail() {
                   <T size={13} color={colors.inkSoft} numberOfLines={1}>
                     {shortDate(r.date)} · {r.subject}
                   </T>
+                  <T size={12} w="bold" style={{ marginTop: 5 }}>{SHORTLIST_LABELS[suggestionFor(r).bucket]}</T>
+                  <T size={12} color={colors.inkSoft}>{suggestionFor(r).reason}</T>
                 </View>
                 {(saved || matched) && (
                   <View style={{ borderRadius: 999, backgroundColor: saved ? colors.mint : colors.butter, paddingHorizontal: 8, paddingVertical: 3 }}>
@@ -273,7 +377,12 @@ export default function Airtail() {
           })
         )}
       </Card>
-      {cursor && <Button title="Load more" kind="soft" busy={busy === "list"} onPress={handleLoadMore} />}
+      {!!paginationError && <T color={colors.negative} accessibilityRole="alert">{paginationError} Your loaded receipts are kept. Try loading more again.</T>}
+      {pageResult && <View style={{ gap: 10 }}>
+        <T size={14} accessibilityLiveRegion="polite">Checked {pageResult.added} more {pageResult.added === 1 ? "receipt" : "receipts"}: {pageResult.possible} possible work {pageResult.possible === 1 ? "expense" : "expenses"} and {pageResult.added - pageResult.possible} likely personal. {pageResult.total} checked in total.{pageResult.possible === 0 && receiptFilter === "possible" ? " No additional possible work expenses in this batch." : ""}</T>
+        {receiptFilter !== "all" && <Button title={`View all ${pageResult.total} receipts`} kind="soft" onPress={() => setReceiptFilter("all")} />}
+      </View>}
+      {cursor && <Button title={busy === "more" ? "Loading more receipts…" : "Load more receipts"} kind="soft" busy={busy === "more"} disabled={!!busy || profileChanged} onPress={handleLoadMore} />}
     </Screen>
   );
 }
