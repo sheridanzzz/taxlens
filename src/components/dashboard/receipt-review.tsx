@@ -50,6 +50,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
   const [history, setHistory] = useState<Review[]>([]);
   const [editing, setEditing] = useState<Expense | null>(null);
   const [busy, setBusy] = useState(false);
+  const [leaving, setLeaving] = useState<Expense | null>(null);
   const lock = useRef(false);
   const coolingDown = useRef(false);
   const sectionRef = useRef<HTMLElement>(null);
@@ -62,7 +63,9 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
   const confirmOpacity = useTransform(x, [15, 90], [0, 1]);
   const queue = state.expenses.filter((e) => isAiScanned(e) && e.reviewStatus !== "reviewed" && e.reviewStatus !== "personal" && !checked.includes(fingerprint(e)))
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  const top = queue[0];
+  // A persisted decision leaves the queue immediately. Keep its own card on
+  // screen until its exit finishes, so the next receipt never animates away.
+  const top = leaving ?? queue[0];
   const last = history.at(-1);
   const canUndo = last && state.expenses.some((e) => fingerprint(e) === fingerprint(last.after));
   const count = history.length + queue.length;
@@ -97,6 +100,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
     window.setTimeout(() => { coolingDown.current = false; }, 300);
     lock.current = true;
     setBusy(true);
+    setLeaving(top);
     setError("");
     const after: Expense = decision === "personal" ? { ...top, workUsePercent: 0, claimableAmount: 0, reviewStatus: "personal" } : { ...top, reviewStatus: "reviewed" };
     try {
@@ -115,6 +119,7 @@ export function ReceiptReview({ accountId }: { accountId: string }) {
       setError("Couldn’t save this review. Your card is still here — please try again.");
       void animate(x, 0, { duration: reducedMotion ? 0 : 0.18 });
     } finally {
+      setLeaving(null);
       lock.current = false;
       setBusy(false);
     }
