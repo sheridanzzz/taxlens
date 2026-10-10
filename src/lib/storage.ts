@@ -2,6 +2,7 @@ import { isSupabaseConfigured, isNeonConfigured } from "./env";
 import * as local from "./storage-local";
 import * as neonActions from "./storage-actions";
 import type {
+  TaxAccountData,
   Expense,
   DepreciatingAsset,
   WfhEntry,
@@ -18,6 +19,17 @@ import { packTaxOptions, unpackTaxOptions } from "./tax-time";
 import { validateExpense, validateAsset, validateSettings, validateWfhEntry, validateWfhActualCost, validateCgtTransaction, validateRentalProperty, validateRentalTransaction, validateBackup } from "./validation";
 
 const isNeonBackend = () => isNeonConfigured() && !isSupabaseConfigured();
+
+export const getAccountData = async (): Promise<TaxAccountData> => {
+  if (isNeonBackend()) return neonActions.neonGetAccountData();
+  const settings = await getSettings();
+  const fy = settings.financialYear;
+  const [expenses, assets, wfhEntries, wfhActualCosts, cgtTransactions, rentalProperties, rentalTransactions] = await Promise.all([
+    getExpenses(fy), getAssets(fy), getWfhEntries(fy), getWfhActualCosts(fy),
+    getCgtTransactions(), getRentalProperties(), getRentalTransactions(fy),
+  ]);
+  return { settings, expenses, assets, wfhEntries, wfhActualCosts, cgtTransactions, rentalProperties, rentalTransactions };
+};
 
 // ── Lazy Supabase import (only when configured) ───────────────────
 

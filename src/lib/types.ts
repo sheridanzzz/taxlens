@@ -6,6 +6,17 @@ export type DepreciationMethod = "diminishing" | "prime_cost";
 
 export type WfhMethod = "fixed_rate" | "actual_cost";
 
+export interface TaxAccountData {
+  settings: UserSettings;
+  expenses: Expense[];
+  assets: DepreciatingAsset[];
+  wfhEntries: WfhEntry[];
+  wfhActualCosts: WfhActualCost[];
+  cgtTransactions: CgtTransaction[];
+  rentalProperties: RentalProperty[];
+  rentalTransactions: RentalTransaction[];
+}
+
 export type ExpenseCategory =
   | "computer_equipment"
   | "software_subscriptions"

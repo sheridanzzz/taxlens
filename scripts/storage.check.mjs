@@ -149,6 +149,30 @@ await check('Migration links unambiguous legacy evidence and leaves ambiguous re
   await sql`delete from expenses where id in (${id(33)},${id(34)})`;
   await sql`delete from assets where id in (${id(30)},${id(31)},${id(32)})`;
 });
+await check('Account bundle authenticates once, returns only its owner, omits receipt payloads and propagates read failures', async () => {
+  let authenticatedId = user, authCalls = 0;
+  overrides['@/lib/auth'] = { auth: async () => { authCalls++; return authenticatedId ? { user: { id: authenticatedId } } : null; } };
+  overrides['@/lib/storage-neon'] = neon;
+  const actions = load('src/lib/storage-actions.ts');
+  const own = { ...expense, id: id(92), claimType: 'full', assetId: undefined };
+  const foreign = { ...own, id: id(93), description: 'Other account private receipt' };
+  const settings = { ...local.getSettings(), financialYear: '2025-26' };
+  await neon.saveSettings(user, settings); await neon.saveSettings(other, settings);
+  await neon.saveExpense(user, own); await neon.saveExpense(other, foreign);
+  const bundle = await actions.neonGetAccountData();
+  assert.equal(authCalls, 1); assert.equal(bundle.settings.financialYear, '2025-26');
+  assert.deepEqual(bundle.expenses.map(e => e.id), [own.id]);
+  assert.equal(bundle.expenses[0].receiptDataUrl, undefined); assert.equal(bundle.expenses[0].hasReceipt, true);
+  authenticatedId = other;
+  assert.deepEqual((await actions.neonGetAccountData()).expenses.map(e => e.id), [foreign.id]);
+  authenticatedId = null; await assert.rejects(actions.neonGetAccountData(), /Not authenticated/);
+  authenticatedId = user; const query = sql.query;
+  sql.query = async () => { throw Error('Injected bundle read failure'); };
+  try { await assert.rejects(actions.neonGetAccountData(), /Injected bundle read failure/); }
+  finally { sql.query = query; }
+  await neon.deleteExpense(user, own.id); await neon.deleteExpense(other, foreign.id);
+  await sql`delete from user_settings where user_id in (${user},${other})`;
+});
 await check('Review decisions persist, undo restores pending, legacy saves preserve decisions and batch receipts enforce ownership', async () => {
   const pending = { ...expense, id: id(80), assetId: undefined, claimType: 'full', workUsePercent: 0, reviewStatus: 'pending', notes: 'AI scan: fixture' };
   local.saveExpense(pending);

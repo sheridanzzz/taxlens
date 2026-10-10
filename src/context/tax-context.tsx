@@ -151,46 +151,16 @@ export const TaxProvider = ({ children }: { children: ReactNode }) => {
   const generation = useRef(0);
   const claimsRequest = useRef(0);
 
+  const userId = user?.id;
   const loadAll = useCallback(async () => {
-    if (cloudEnabled && !user) return;
+    if (cloudEnabled && !userId) return;
     const request = ++generation.current;
-    const settings = await storage.getSettings();
-    const fy = settings.financialYear;
-    const [
-      expenses,
-      assets,
-      wfhEntries,
-      wfhActualCosts,
-      cgtTransactions,
-      rentalProperties,
-      rentalTransactions,
-    ] =
-      await Promise.all([
-        storage.getExpenses(fy),
-        storage.getAssets(fy),
-        storage.getWfhEntries(fy),
-        storage.getWfhActualCosts(fy),
-        storage.getCgtTransactions(),
-        storage.getRentalProperties(),
-        storage.getRentalTransactions(fy),
-      ]);
+    const payload = await storage.getAccountData();
     if (request !== generation.current) return;
     setLoadError("");
-    activeFy.current = fy;
-    dispatch({
-      type: "LOAD_ALL",
-      payload: {
-        settings,
-        expenses,
-        assets,
-        wfhEntries,
-        wfhActualCosts,
-        cgtTransactions,
-        rentalProperties,
-        rentalTransactions,
-      },
-    });
-  }, [user, cloudEnabled]);
+    activeFy.current = payload.settings.financialYear;
+    dispatch({ type: "LOAD_ALL", payload });
+  }, [userId, cloudEnabled]);
 
   useEffect(() => {
     dispatch({ type: "RESET" });

@@ -3,6 +3,7 @@
 import { auth } from "@/lib/auth";
 import * as neonDb from "@/lib/storage-neon";
 import type {
+  TaxAccountData,
   Expense,
   DepreciatingAsset,
   WfhEntry,
@@ -18,6 +19,21 @@ const getUserId = async (): Promise<string> => {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Not authenticated");
   return session.user.id;
+};
+
+// Client server actions are dispatched sequentially. Authenticate once and
+// gather independent reads here so startup needs a single browser request.
+export const neonGetAccountData = async (): Promise<TaxAccountData> => {
+  const userId = await getUserId();
+  const settings = await neonDb.getSettings(userId);
+  const fy = settings.financialYear;
+  const [expenses, assets, wfhEntries, wfhActualCosts, cgtTransactions, rentalProperties, rentalTransactions] = await Promise.all([
+    neonDb.getExpenses(userId, fy), neonDb.getAssets(userId, fy),
+    neonDb.getWfhEntries(userId, fy), neonDb.getWfhActualCosts(userId, fy),
+    neonDb.getCgtTransactions(userId), neonDb.getRentalProperties(userId),
+    neonDb.getRentalTransactions(userId, fy),
+  ]);
+  return { settings, expenses, assets, wfhEntries, wfhActualCosts, cgtTransactions, rentalProperties, rentalTransactions };
 };
 
 export const neonGetExpenses = async (fy?: FinancialYear): Promise<Expense[]> => {
