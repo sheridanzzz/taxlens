@@ -3,7 +3,7 @@ import { Pressable, View } from "react-native";
 import { router } from "expo-router";
 import { WFH_FIXED_RATE_PER_HOUR } from "@shared/constants";
 import { formatCurrency, isCoveredByFixedRate } from "@shared/tax-calculator";
-import { refundEstimate, taxTimeFor } from "@shared/tax-time";
+import { refundEstimate, taxTimeFor, wfhSavingsPreview } from "@shared/tax-time";
 import { useData } from "@/lib/store";
 import { claimNote, myTaxCode, myTaxName, myTaxRows, needsReceipt, openWeb, plural, shortDate } from "@/lib/expenses";
 import { colors } from "@/lib/theme";
@@ -41,8 +41,11 @@ export default function Home() {
   const fy = settings.financialYear;
 
   const { taxWithheld } = taxTimeFor(settings);
-  const refund = taxWithheld === undefined ? null : refundEstimate(summary, taxWithheld)[compare === "with" ? "withDeductions" : "withoutDeductions"];
-  const taxBill = compare === "with" ? summary.taxPayable : summary.taxPayableWithoutDeductions;
+  const preview = wfhSavingsPreview(settings, summary);
+  const headline = preview ?? summary;
+  const provisional = !!preview && (taxWithheld === undefined || compare === "with");
+  const refund = taxWithheld === undefined ? null : refundEstimate(headline, taxWithheld)[compare === "with" ? "withDeductions" : "withoutDeductions"];
+  const taxBill = compare === "with" ? headline.taxPayable : summary.taxPayableWithoutDeductions;
 
   // same year-progress maths as the web dashboard
   const startYear = parseInt(fy.slice(0, 4), 10);
@@ -113,7 +116,7 @@ export default function Home() {
         <View style={{ flexDirection: "row", alignItems: "flex-start", gap: 12 }}>
           <View style={{ flex: 1 }}>
             <T w="bold" size={15} color={colors.butter}>
-              {refund === null ? "Estimated tax savings" : refund >= 0 ? "Estimated refund" : "Estimated amount owing"} · FY {fy}
+              {provisional ? "Provisional" : "Estimated"} {refund === null ? "tax savings" : refund >= 0 ? "refund" : "amount owing"} · FY {fy}
             </T>
             <T
               w="black"
@@ -123,18 +126,23 @@ export default function Home() {
               numberOfLines={1}
               style={{ letterSpacing: -1.5, fontVariant: ["tabular-nums"] }}
             >
-              {formatCurrency(refund === null ? summary.estimatedTaxSaved : Math.abs(refund))}
+              {formatCurrency(refund === null ? headline.estimatedTaxSaved : Math.abs(refund))}
             </T>
             <T w="medium" size={15} color={colors.lav}>
               {refund !== null
                 ? `${formatCurrency(taxWithheld ?? 0)} withheld − ${formatCurrency(taxBill)} estimated tax`
                 : settings.annualIncome > 0
-                  ? `Tax your deductions save you on a ${formatCurrency(settings.annualIncome)} salary.`
+                  ? `Tax your ${preview ? "saved claims and WFH estimate could save" : "deductions save"} you on a ${formatCurrency(settings.annualIncome)} salary.`
                   : "Tax your deductions save you. Add your salary in Settings for a sharper number."}
             </T>
           </View>
           <SavingsJar fill={yearDone} />
         </View>
+        {provisional && (
+          <T w="bold" size={13} color={colors.butter}>
+            Includes inferred WFH hours, before leave and holiday adjustments. Excluded from saved claims and tax exports.
+          </T>
+        )}
         <View style={{ gap: 6 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
             <T w="bold" size={12} color={colors.lav}>
@@ -158,15 +166,16 @@ export default function Home() {
         </View>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {weekClaimed > 0 && <Chip text={`+${formatCurrency(weekClaimed)} this week`} tint={colors.mint} color={colors.plum} />}
-          <Chip text={`${formatCurrency(summary.totalDeductions)} in deductions`} />
-          <Chip text={`Taxable income ${formatCurrency(summary.taxableIncome)}`} />
+          <Chip text={`${formatCurrency(headline.totalDeductions)} ${preview ? "estimated deductions" : "in deductions"}`} />
+          {preview && <Chip text={`${formatCurrency(summary.totalDeductions)} saved claims`} />}
+          <Chip text={`${preview ? "Provisional taxable income" : "Taxable income"} ${formatCurrency(headline.taxableIncome)}`} />
         </View>
         {refund !== null && (
           <View style={{ gap: 6 }}>
             <Pills label="Compare the estimate" options={[...COMPARE]} value={compare} onChange={setCompare} dark />
-            {compare === "with" && summary.estimatedTaxSaved > 0 && (
+            {compare === "with" && headline.estimatedTaxSaved > 0 && (
               <T w="medium" size={13} color={colors.lav}>
-                Your claims are worth {formatCurrency(summary.estimatedTaxSaved)} of that.
+                {preview ? "Saved claims and the WFH estimate account for" : "Your claims are worth"} {formatCurrency(headline.estimatedTaxSaved)} of that.
               </T>
             )}
           </View>

@@ -21,6 +21,7 @@ import { getMyTaxRows } from "@/lib/mytax";
 import { WFH_FIXED_RATE_PER_HOUR } from "@/lib/constants";
 import { fadeInUp } from "@/lib/animations";
 import { expenseReviewStatus } from "@/lib/receipt-review";
+import { wfhSavingsPreview } from "@/lib/tax-time";
 import type { Expense, WfhMethod } from "@/lib/types";
 
 const DAY = 86_400_000;
@@ -89,6 +90,8 @@ const DashboardPage = () => {
   }
 
   const fy = state.settings.financialYear;
+  const preview = wfhSavingsPreview(state.settings, summary);
+  const headline = preview ?? summary;
   const startYear = parseInt(fy.slice(0, 4), 10);
   const fyStart = new Date(startYear, 6, 1).getTime();
   const fyEnd = new Date(startYear + 1, 5, 30, 23, 59).getTime();
@@ -162,16 +165,21 @@ const DashboardPage = () => {
         <section className="flex flex-col justify-between gap-6 rounded-[32px] min-w-0 bg-plum p-6 text-white sm:p-8">
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
-              <div className="text-[15px] font-bold text-butter">Estimated tax savings · FY {fy}</div>
+              <div className="text-[15px] font-bold text-butter">{preview ? "Provisional tax savings" : "Estimated tax savings"} · FY {fy}</div>
               <div className="mt-2 truncate font-serif text-5xl font-black tabular sm:text-6xl md:text-7xl">
-                {formatCurrency(summary.estimatedTaxSaved)}
+                {formatCurrency(headline.estimatedTaxSaved)}
               </div>
               <p className="mt-2 max-w-sm text-[15px] font-medium text-lav">
-                Tax your deductions save you
+                {preview ? "Tax your saved claims and WFH estimate could save you" : "Tax your deductions save you"}
                 {state.settings.annualIncome > 0
                   ? ` on a ${formatCurrency(state.settings.annualIncome)} salary.`
                   : ". Add your salary in Settings for a sharper number."}
               </p>
+              {preview && (
+                <p className="mt-3 max-w-sm text-sm font-semibold text-butter">
+                  Includes inferred WFH hours, before leave and holiday adjustments. Excluded from saved claims and tax exports.
+                </p>
+              )}
               <p className="mt-3 max-w-sm text-xs leading-relaxed text-lav/80">
                 Your final refund also depends on tax withheld and other income.
               </p>
@@ -199,10 +207,15 @@ const DashboardPage = () => {
               </span>
             )}
             <span className="rounded-full bg-plum-2 px-3 py-1 text-sm font-bold text-lav">
-              {formatCurrency(summary.totalDeductions)} in deductions
+              {formatCurrency(headline.totalDeductions)} {preview ? "estimated deductions" : "in deductions"}
             </span>
+            {preview && (
+              <span className="rounded-full bg-plum-2 px-3 py-1 text-sm font-bold text-lav">
+                {formatCurrency(summary.totalDeductions)} saved claims
+              </span>
+            )}
             <span className="rounded-full bg-plum-2 px-3 py-1 text-sm font-bold text-lav">
-              Taxable income {formatCurrency(summary.taxableIncome)}
+              {preview ? "Provisional taxable income" : "Taxable income"} {formatCurrency(headline.taxableIncome)}
             </span>
           </div>
         </section>

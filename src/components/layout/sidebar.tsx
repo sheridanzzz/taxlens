@@ -21,6 +21,7 @@ import { useTax } from "@/context/tax-context";
 import { useAuth } from "@/context/auth-context";
 import { useLaunchers } from "./app-shell";
 import { formatCurrency } from "@/lib/tax-calculator";
+import { wfhSavingsPreview } from "@/lib/tax-time";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from "@/components/ui/sheet";
@@ -60,6 +61,7 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
   const { state, summary } = useTax();
   const { cloudEnabled, user, signOut } = useAuth();
   const { openScanner } = useLaunchers();
+  const preview = wfhSavingsPreview(state.settings, summary);
 
   const isActive = (href: string) =>
     href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(href);
@@ -138,11 +140,12 @@ export const Sidebar = ({ open, onClose }: SidebarProps) => {
           )}
           <div className="rounded-[22px] bg-plum p-4 text-white">
             <div className="text-[13px] font-bold text-butter">
-              Est. tax savings · FY {state.settings.financialYear}
+              {preview ? "Provisional savings" : "Est. tax savings"} · FY {state.settings.financialYear}
             </div>
             <div className="mt-1 font-serif text-3xl font-black tabular">
-              {formatCurrency(summary.estimatedTaxSaved)}
+              {formatCurrency((preview ?? summary).estimatedTaxSaved)}
             </div>
+            {preview && <div className="mt-1 text-xs font-medium text-lav">Includes inferred WFH · {formatCurrency(summary.totalDeductions)} saved claims</div>}
             <div className="mt-1 text-xs font-medium text-lav">
               {cloudEnabled && user
                 ? "Synced to your account"

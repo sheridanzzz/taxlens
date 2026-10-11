@@ -10,7 +10,7 @@ import type {
   WfhMethod,
 } from "./types";
 import { FY_DATE_RANGES, WFH_FIXED_RATE_PER_HOUR } from "./constants";
-import { ASSET_TYPE_TO_CATEGORY, isCoveredByFixedRate } from "./tax-calculator";
+import { ASSET_TYPE_TO_CATEGORY, calculateTaxPayable, isCoveredByFixedRate } from "./tax-calculator";
 import { applyCarClaimCaps } from "./expense-claims";
 import { calculateCurrentYearDepreciation } from "./depreciation";
 import { MYTAX_WFH, myTaxItemFor } from "./mytax";
@@ -50,6 +50,31 @@ export const wfhPlanningEstimate = (s: UserSettings, fy: FinancialYear = s.finan
       hoursPerDay <= 0 || hoursPerDay > 24 || weeks <= 0 || weeks > 53) return null;
   const hours = round2(homeDaysPerFortnight * hoursPerDay * weeks / 2);
   return { ...pattern, hours, deduction: round2(hours * WFH_FIXED_RATE_PER_HOUR) };
+};
+
+/** Display only: replace the logged WFH component with the annual planning
+ * estimate when it is larger. Never add the full estimate to hours already
+ * claimed, mutate the saved summary, or use this preview for lodging/export. */
+export const wfhSavingsPreview = (s: UserSettings, saved: TaxSummary) => {
+  const estimate = wfhPlanningEstimate(s);
+  if (s.wfhMethod !== "fixed_rate" || !estimate || estimate.deduction <= saved.totalWfhDeduction) return null;
+  const additionalWfhDeduction = round2(estimate.deduction - saved.totalWfhDeduction);
+  const totalDeductions = round2(saved.totalDeductions + additionalWfhDeduction);
+  const taxableIncome = Math.max(0, round2(saved.taxableIncome - additionalWfhDeduction));
+  const taxPayable = calculateTaxPayable(taxableIncome, s.financialYear, s.taxResidentStatus, {
+    ...s.taxOptions,
+    hasHelpDebt: s.hasHelpDebt,
+    hasPrivateHospitalCover: s.hasPrivateHospitalCover,
+    netRentalLoss: Math.max(0, saved.rentalDeductions - saved.rentalIncome),
+  });
+  return {
+    additionalWfhDeduction,
+    totalDeductions,
+    taxableIncome,
+    taxPayable,
+    taxPayableWithoutDeductions: saved.taxPayableWithoutDeductions,
+    estimatedTaxSaved: round2(saved.taxPayableWithoutDeductions - taxPayable),
+  };
 };
 
 /** Tax withheld minus the estimated bill: positive is a refund, negative is owing. */

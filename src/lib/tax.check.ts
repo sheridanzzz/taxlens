@@ -33,6 +33,7 @@ import {
   weekStatuses,
   withTaxTime,
   wfhPlanningEstimate,
+  wfhSavingsPreview,
 } from "./tax-time";
 import {
   CAR_KM_CAP,
@@ -671,8 +672,45 @@ const planningSummary = calculateTaxSummary([], [], [], [], planningSettings.ann
   planningSettings.financialYear, planningSettings.wfhMethod, planningSettings.taxResidentStatus,
   planningSettings.taxOptions);
 assert.equal(planningSummary.totalWfhDeduction, 0, "a usual pattern is not an actual hours claim");
-assert.equal(planningSummary.estimatedTaxSaved, 0, "planning hours do not inflate the tax-saving headline");
+assert.equal(planningSummary.estimatedTaxSaved, 0, "planning hours do not inflate the saved tax summary");
 assert.deepEqual(getMyTaxRows([], planningSummary.totalWfhDeduction), [], "the estimate is excluded from myTax exports");
+const previewSettings = { ...planningSettings, annualIncome: 150000 };
+const savedPreviewSummary = calculateTaxSummary([], [], [], [], 150000, "2025-26", "fixed_rate",
+  "resident", { hasHelpDebt: false, hasPrivateHospitalCover: false });
+const savedSnapshot = structuredClone(savedPreviewSummary);
+const preview = wfhSavingsPreview(previewSettings, savedPreviewSummary)!;
+assert.equal(preview.totalDeductions, 1019.2);
+assert.equal(preview.taxableIncome, 148980.8);
+assert.equal(preview.estimatedTaxSaved, 410.23, "preview includes income tax, Medicare and the stored surcharge setting");
+assert.deepEqual(savedPreviewSummary, savedSnapshot, "a display preview never mutates the saved claim summary");
+assert.deepEqual(getMyTaxRows([], savedPreviewSummary.totalWfhDeduction), [], "previewing does not add an export row");
+const partialDiary = [{ id: "preview-hours", date: "2025-07-01", hours: 100, notes: "", financialYear: "2025-26" as const, createdAt: "2025-07-01" }];
+const partiallyLogged = calculateTaxSummary([], [], partialDiary, [], 150000, "2025-26", "fixed_rate");
+const partialPreview = wfhSavingsPreview(previewSettings, partiallyLogged)!;
+assert.equal(partialPreview.additionalWfhDeduction, 949.2);
+assert.equal(partialPreview.totalDeductions, 1019.2, "annual inferred hours replace the logged component rather than being added twice");
+assert.equal(partialPreview.estimatedTaxSaved, preview.estimatedTaxSaved);
+assert.equal(wfhSavingsPreview(previewSettings, { ...partiallyLogged, totalWfhDeduction: 1100 }), null,
+  "an annual estimate cannot reduce a larger actual claim");
+assert.equal(wfhSavingsPreview({ ...previewSettings, wfhMethod: "actual_cost" }, savedPreviewSummary), null,
+  "fixed-rate planning does not inflate actual-cost claims");
+assert.equal(wfhSavingsPreview({ ...previewSettings, financialYear: "2024-25" }, savedPreviewSummary), null,
+  "a preview cannot use a different year's pattern");
+const coveredSettings = { ...previewSettings, hasPrivateHospitalCover: true };
+const coveredSummary = calculateTaxSummary([], [], [], [], 150000, "2025-26", "fixed_rate", "resident", { hasPrivateHospitalCover: true });
+assert.equal(wfhSavingsPreview(coveredSettings, coveredSummary)?.estimatedTaxSaved, 397.49,
+  "hospital cover removes the surcharge from the savings preview");
+const helpSettings = { ...coveredSettings, hasHelpDebt: true, taxOptions: {} };
+const helpSummary = calculateTaxSummary([], [], [], [], 150000, "2025-26", "fixed_rate", "resident",
+  { hasPrivateHospitalCover: true, hasHelpDebt: true });
+assert.equal(wfhSavingsPreview(helpSettings, helpSummary)?.estimatedTaxSaved, 570.75,
+  "preview retains HELP repayment settings");
+const noIncome = calculateTaxSummary([], [], [], [], 0, "2025-26", "fixed_rate");
+assert.equal(wfhSavingsPreview({ ...previewSettings, annualIncome: 0 }, noIncome)?.estimatedTaxSaved, 0,
+  "a deduction does not fabricate a refund without income");
+assert.equal(refundEstimate(preview, 50000).withDeductions, Math.round((50000 - preview.taxPayable) * 100) / 100);
+assert.equal(refundEstimate(preview, 50000).withoutDeductions, refundEstimate(savedPreviewSummary, 50000).withoutDeductions,
+  "the without-deductions comparison ignores planning hours");
 for (const patch of [{ homeDaysPerFortnight: 11 }, { hoursPerDay: NaN }, { weeks: 54 }, { source: "verified" }, { recordedOn: "unknown" }]) {
   assert.throws(() => validateSettings(withTaxTime(lodgingSettings, "2025-26", {
     wfhEstimate: { ...planningSettings.taxTime!["2025-26"]!.wfhEstimate!, ...patch } as never,
