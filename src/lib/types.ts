@@ -162,7 +162,18 @@ export interface UserSettings {
 
 export type RunningCostBill = "electricity" | "phone" | "internet";
 
+/** Planning only. A usual pattern is not evidence of actual dated WFH hours. */
+export interface WfhEstimate {
+  homeDaysPerFortnight: number;
+  hoursPerDay: number;
+  weeks: number;
+  source: "usual_pattern";
+  recordedOn: string;
+}
+
 export interface TaxTimeRecord {
+  /** Kept outside wfhEntries so it never contributes to claims or lodgement exports. */
+  wfhEstimate?: WfhEstimate;
   /** Total tax withheld, from the income statement. */
   taxWithheld?: number;
   /** One bill held for each running cost the 70c rate covers. */

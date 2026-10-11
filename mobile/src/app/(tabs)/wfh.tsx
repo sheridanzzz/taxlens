@@ -7,6 +7,7 @@ import { calculateWfhDeductionFixedRate, formatCurrency } from "@shared/tax-calc
 import { useData } from "@/lib/store";
 import { colors } from "@/lib/theme";
 import { Button, Card, Heading, Icon, Screen, T } from "@/components/ui";
+import { WfhEstimate } from "@/components/wfh-estimate";
 
 const WEEKDAYS = ["M", "T", "W", "T", "F", "S", "S"];
 const DEFAULT_HOURS = 8;
@@ -142,6 +143,7 @@ export default function Wfh() {
         )}
       </Card>
 
+      <WfhEstimate />
       {!started ? (
         <Card>
           <T>FY {fy} hasn&apos;t started yet. Switch years in Settings to log hours.</T>

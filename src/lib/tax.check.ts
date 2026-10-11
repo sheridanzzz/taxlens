@@ -32,6 +32,7 @@ import {
   usualWeek,
   weekStatuses,
   withTaxTime,
+  wfhPlanningEstimate,
 } from "./tax-time";
 import {
   CAR_KM_CAP,
@@ -655,6 +656,28 @@ assert.deepEqual(cleaned.taxTime, { "2025-26": { taxWithheld: 1, awayWeeks: ["20
 assert.throws(() => validateSettings({ ...lodgingSettings, taxTime: { "1999-00": {} } as never }), "unknown FY");
 assert.throws(() => validateSettings({ ...lodgingSettings, taxTime: { "2025-26": { awayWeeks: ["soon"] } } }), "not a date");
 assert.throws(() => validateSettings({ ...lodgingSettings, taxTime: { "2025-26": { taxWithheld: -1 } } }), "negative withholding");
+
+const planningSettings = validateSettings(withTaxTime(lodgingSettings, "2025-26", {
+  wfhEstimate: { homeDaysPerFortnight: 7, hoursPerDay: 8, weeks: 52, source: "usual_pattern", recordedOn: "2026-10-11" },
+}));
+assert.deepEqual(unpackTaxOptions(packTaxOptions(planningSettings)).taxTime, planningSettings.taxTime,
+  "an estimate survives settings validation and persistence");
+assert.equal(wfhPlanningEstimate(planningSettings)?.hours, 1456);
+assert.equal(wfhPlanningEstimate(planningSettings)?.deduction, 1019.2);
+assert.equal(wfhPlanningEstimate(planningSettings, "2024-25"), null, "the estimate stays in its FY");
+assert.equal(planningSettings.taxTime?.["2025-26"]?.taxWithheld, 18000, "saving the estimate retains withholding");
+assert.equal(planningSettings.taxTime?.["2025-26"]?.bills?.phone, true, "saving the estimate retains evidence checks");
+const planningSummary = calculateTaxSummary([], [], [], [], planningSettings.annualIncome,
+  planningSettings.financialYear, planningSettings.wfhMethod, planningSettings.taxResidentStatus,
+  planningSettings.taxOptions);
+assert.equal(planningSummary.totalWfhDeduction, 0, "a usual pattern is not an actual hours claim");
+assert.equal(planningSummary.estimatedTaxSaved, 0, "planning hours do not inflate the tax-saving headline");
+assert.deepEqual(getMyTaxRows([], planningSummary.totalWfhDeduction), [], "the estimate is excluded from myTax exports");
+for (const patch of [{ homeDaysPerFortnight: 11 }, { hoursPerDay: NaN }, { weeks: 54 }, { source: "verified" }, { recordedOn: "unknown" }]) {
+  assert.throws(() => validateSettings(withTaxTime(lodgingSettings, "2025-26", {
+    wfhEstimate: { ...planningSettings.taxTime!["2025-26"]!.wfhEstimate!, ...patch } as never,
+  })), "invalid or falsely verified planning data is rejected");
+}
 
 // Lodge mode's "What's in it" must add up to the total it shows for each myTax label
 const lodgeExpenses = [course, internet, { ...course, id: "c2", description: "Textbook", amount: 80, claimableAmount: 80 }];

@@ -158,6 +158,13 @@ await check('Account bundle authenticates once, returns only its owner, omits re
   const foreign = { ...own, id: id(93), description: 'Other account private receipt' };
   const settings = { ...local.getSettings(), financialYear: '2025-26' };
   await neon.saveSettings(user, settings); await neon.saveSettings(other, settings);
+  const wfhEstimate = { homeDaysPerFortnight: 7, hoursPerDay: 8, weeks: 52, source: 'usual_pattern', recordedOn: '2026-10-11' };
+  await neon.saveSettings(user, { ...settings, taxTime: { '2025-26': { wfhEstimate, taxWithheld: 12345 } } });
+  const planning = await neon.getSettings(user);
+  assert.deepEqual(planning.taxTime['2025-26'].wfhEstimate, wfhEstimate);
+  assert.equal(planning.taxTime['2025-26'].taxWithheld, 12345);
+  assert.equal((await neon.getWfhEntries(user, '2025-26')).length, 0, 'planning does not create actual WFH days');
+  assert.equal((await neon.getSettings(other)).taxTime?.['2025-26']?.wfhEstimate, undefined, 'other account has no estimate');
   await neon.saveExpense(user, own); await neon.saveExpense(other, foreign);
   const bundle = await actions.neonGetAccountData();
   assert.equal(authCalls, 1); assert.equal(bundle.settings.financialYear, '2025-26');

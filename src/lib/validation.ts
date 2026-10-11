@@ -68,6 +68,14 @@ const validateTaxTime = (value: unknown): UserSettings["taxTime"] => {
     if (!FY_DATE_RANGES[fy as FinancialYear] || !r || typeof r !== "object") throw new Error("Invalid tax time details.");
     if (r.taxWithheld !== undefined) number(r.taxWithheld, 0, 10_000_000);
     if (r.lodgedAt !== undefined && !isoDate(r.lodgedAt)) throw new Error("Invalid lodgement date.");
+    let wfhEstimate: TaxTimeRecord["wfhEstimate"];
+    if (r.wfhEstimate !== undefined) {
+      const p = r.wfhEstimate;
+      if (!p || p.source !== "usual_pattern" || !isoDate(p.recordedOn)) throw new Error("Invalid WFH estimate.");
+      number(p.homeDaysPerFortnight, 0.01, 10); number(p.hoursPerDay, 0.01, 24); number(p.weeks, 0.01, 53);
+      wfhEstimate = { homeDaysPerFortnight: p.homeDaysPerFortnight, hoursPerDay: p.hoursPerDay,
+        weeks: p.weeks, source: p.source, recordedOn: p.recordedOn };
+    }
     const bills = r.bills === undefined ? undefined : Object.fromEntries(
       (["electricity", "phone", "internet"] as const).filter((k) => r.bills?.[k] !== undefined).map((k) => {
         if (typeof r.bills?.[k] !== "boolean") throw new Error("Invalid tax time details.");
@@ -75,6 +83,7 @@ const validateTaxTime = (value: unknown): UserSettings["taxTime"] => {
       })
     );
     out[fy as FinancialYear] = {
+      ...(wfhEstimate ? { wfhEstimate } : {}),
       taxWithheld: r.taxWithheld,
       bills,
       awayWeeks: list(r.awayWeeks, 60, isoDate),

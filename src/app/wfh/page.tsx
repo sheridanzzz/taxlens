@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { Section, Kpi, Card } from "@/components/ledgr/primitives";
 import { WfhCalendar } from "@/components/wfh/wfh-calendar";
 import { WfhCalculator } from "@/components/wfh/wfh-calculator";
+import { WfhEstimate } from "@/components/wfh/wfh-estimate";
 import { useTax } from "@/context/tax-context";
 import {
   formatCurrency,
@@ -116,6 +117,7 @@ const WfhPage = () => {
       transition={fadeInUp.transition}
     >
       <Section eyebrow="70c for every hour" title="Hours at home" />
+      <WfhEstimate />
 
       <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi

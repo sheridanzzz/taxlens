@@ -8,6 +8,7 @@ import { useData } from "@/lib/store";
 import { claimNote, myTaxCode, myTaxName, myTaxRows, needsReceipt, openWeb, plural, shortDate } from "@/lib/expenses";
 import { colors } from "@/lib/theme";
 import { SavingsJar } from "@/components/savings-jar";
+import { WfhEstimate } from "@/components/wfh-estimate";
 import { ReceiptReview } from "@/components/receipt-review";
 import { Button, Card, Heading, Icon, Pills, Screen, T, Tile } from "@/components/ui";
 
@@ -178,6 +179,7 @@ export default function Home() {
       </Card>
 
       {!empty && <Button title="Add a receipt" icon="camera.fill" kind="primary" onPress={() => router.push("/expense")} />}
+      <WfhEstimate />
 
       <ReceiptReview key={fy} />
 

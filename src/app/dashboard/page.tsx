@@ -13,6 +13,7 @@ import { Onboarding } from "@/components/onboarding";
 import { GettingStarted } from "@/components/dashboard/getting-started";
 import { ReceiptReview } from "@/components/dashboard/receipt-review";
 import { SavingsJar } from "@/components/dashboard/savings-jar";
+import { WfhEstimate } from "@/components/wfh/wfh-estimate";
 import { useAuth } from "@/context/auth-context";
 import { useTax } from "@/context/tax-context";
 import { formatCurrency, getCategoryBreakdown, isCoveredByFixedRate } from "@/lib/tax-calculator";
@@ -210,6 +211,7 @@ const DashboardPage = () => {
       </div>
 
       {/* this week, at a glance */}
+      <WfhEstimate />
       <h2 className="mb-3 text-xl font-extrabold text-plum">This week</h2>
       <div className="mb-8 grid grid-cols-1 gap-3 md:grid-cols-3">
         <WeekCard

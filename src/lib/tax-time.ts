@@ -41,6 +41,17 @@ export const lodgingYear = (today: string): FinancialYear | null =>
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+export const wfhPlanningEstimate = (s: UserSettings, fy: FinancialYear = s.financialYear) => {
+  const pattern = taxTimeFor(s, fy).wfhEstimate;
+  if (!pattern) return null;
+  const { homeDaysPerFortnight, hoursPerDay, weeks } = pattern;
+  if (![homeDaysPerFortnight, hoursPerDay, weeks].every(Number.isFinite) ||
+      homeDaysPerFortnight <= 0 || homeDaysPerFortnight > 10 ||
+      hoursPerDay <= 0 || hoursPerDay > 24 || weeks <= 0 || weeks > 53) return null;
+  const hours = round2(homeDaysPerFortnight * hoursPerDay * weeks / 2);
+  return { ...pattern, hours, deduction: round2(hours * WFH_FIXED_RATE_PER_HOUR) };
+};
+
 /** Tax withheld minus the estimated bill: positive is a refund, negative is owing. */
 export const refundEstimate = (summary: Pick<TaxSummary, "taxPayable" | "taxPayableWithoutDeductions">, taxWithheld: number) => ({
   withDeductions: round2(taxWithheld - summary.taxPayable),
